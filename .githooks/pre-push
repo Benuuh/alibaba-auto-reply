@@ -18,7 +18,12 @@ while read local_ref local_sha remote_ref remote_sha; do
       range="$local_sha"
     fi
   else
-    range="$remote_sha..$local_sha"
+    # 远端历史对象本地存在 → 常规增量 range;不存在(force 覆盖/分叉历史)→ 单提交模式全量扫 local_sha(sanitize 以 diff-tree 回退)
+    if git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+      range="$remote_sha..$local_sha"
+    else
+      range="$local_sha"
+    fi
   fi
   powershell -NoProfile -ExecutionPolicy Bypass -File "$HOOK_DIR/sanitize_check.ps1" -Mode push -From "$(echo "$range" | cut -d. -f1)" -To "$(echo "$range" | sed 's/.*\.\.//')"
   status=$?
