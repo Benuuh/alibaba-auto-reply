@@ -1,0 +1,41 @@
+﻿{
+  "wecom_base_url": "http://127.0.0.1:19886",
+  "consumer": "control-agent",
+  "owner_userid": "",
+
+  "projects": {
+    "alibaba-auto-reply": "../alibaba-auto-reply-main",
+    "wecom-connector": "../wecom-connector",
+    "control-agent": "."
+  },
+
+  "whitelist_files": ["reply_rules.json", "reply_agent_prompt.md", "config.json"],
+
+  "executor": {
+    "type": "dsh",
+    "command": "dsh --profile headless {prompt}",
+    "timeout_sec": 300,
+    "workdir": "../.."
+  },
+
+  "use_llm_classify": false,
+  "classify_endpoint": "https://api.deepseek.com/chat/completions",
+  "classify_model": "deepseek-chat",
+  "classify_timeout_ms": 20000,
+  "classify_key_file": "../alibaba-auto-reply-main/credentials.md",
+
+  "alibaba_data_dir": "../alibaba-auto-reply-main/data",
+
+  "skills_dir": "../../skills-main/skills/engineering",
+
+  "poll_interval_ms": 5000,
+  "throttle_sec": 60,
+  "confirm_ttl_sec": 300,
+  "reply_max_chars": 4000,
+
+  "data_dir": "data",
+  "logs_dir": "logs",
+  "history_max": 1000,
+  "log_max_bytes": 5242880,
+  "log_keep": 10
+}

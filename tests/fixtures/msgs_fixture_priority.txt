@@ -1,0 +1,2 @@
+# BUYER: fixture_priority
+[BUYER] Total quantity: 200 units, Number of cartons: 2, by sea

@@ -1,0 +1,10 @@
+#!/bin/sh
+# pre-commit - 提交前敏感信息防线:阻断凭据/真实路径/PII/运行时文件入库
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOOK_DIR/sanitize_check.ps1" -Mode staged
+status=$?
+if [ $status -ne 0 ]; then
+  echo "pre-commit: SANITIZE-BLOCKED - 提交已取消,请移除敏感内容后重试"
+  exit 1
+fi
+exit 0

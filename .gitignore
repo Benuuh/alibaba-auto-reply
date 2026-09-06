@@ -1,0 +1,80 @@
+# ===== 凭据（绝不上传） =====
+credentials.md
+
+# ===== Chrome 登录态 =====
+chrome-profile/
+
+# ===== 运行日志（logs\） =====
+logs/
+
+# ===== 买家消息快照（data\，含对话 PII） =====
+data/
+
+# ===== 报告（reports\，含买家名/对话摘要） =====
+reports/
+
+# ===== 代码快照备份 =====
+backups/
+
+# ===== 运行时状态（scripts\） =====
+scripts/state.json
+scripts/state.json.bak
+scripts/nudge_state.json
+scripts/nudge_state.json.bak
+scripts/summary_last.json
+scripts/monitor.pid
+scripts/watchdog.pid
+
+# ===== 日志/临时/备份文件（任意位置） =====
+*.log
+*.bak
+*.pre
+*.pid
+msgs_*
+*_out.log
+*_err.log
+
+# ===== 测试夹具（虚构买家数据，需入库） =====
+!tests/fixtures/
+!tests/fixtures/msgs_*
+
+# ===== 系统文件 =====
+Thumbs.db
+.DS_Store
+
+# ===== Node 依赖（wecom_bot） =====
+node_modules/
+
+# ===== 报价提醒状态(含买家名 PII) =====
+scripts/remind_state.json
+
+# ===== 本地真实配置备份(不入库) =====
+*.local
+
+# ===== 同步时间戳(运行产物) =====
+scripts/last_sync.json
+
+# ===== 2026-09-07 本地发布补充 =====
+# specs(含 PII 历史 REPORT)与本地工作流文档不入库
+/specs/
+/README_本地重建.md
+# 根游离文件(来历不明,疑似误复制)
+/package-lock.json
+# 真实配置不入库(模板见 scripts\config.json.example)
+/scripts/config.json
+/tools/control-agent/config.json
+/tools/wecom-connector/config.json
+# 组件运行期
+/tools/control-agent/data/
+/tools/control-agent/logs/
+/tools/wecom-connector/data/
+/tools/wecom-connector/logs/
+/tools/*/node_modules/
+# 组件内部交付文档(含本机凭据配置说明,不入库)
+/tools/control-agent/REPORT_交付报告.md
+/tools/control-agent/REPORT_改造v0.4.md
+# 遗留退役 bot 目录(已归档;保险排除)
+/scripts/wecom/
+# 重建备份区与 token
+/_rebuild_backup_*/
+/.git_token

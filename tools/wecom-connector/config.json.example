@@ -1,0 +1,8 @@
+{
+  "host": "127.0.0.1",
+  "port": 19886,
+  "data_dir": "data",
+  "receiver_file": "data/wecom_receiver.json",
+  "bot_id": "WX_BOT_ID占位-请替换",
+  "bot_secret": "WX_BOT_SECRET占位-请替换"
+}

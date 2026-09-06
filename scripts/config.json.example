@@ -1,0 +1,17 @@
+{
+    "deploy_root": "C:\\path\\to\\alibaba-auto-reply",
+    "scripts_dir": "C:\\path\\to\\alibaba-auto-reply\\scripts",
+    "reports_dir": "C:\\path\\to\\alibaba-auto-reply\\reports",
+    "logs_dir": "C:\\path\\to\\alibaba-auto-reply\\logs",
+    "data_dir": "C:\\path\\to\\alibaba-auto-reply\\data",
+    "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "chrome_profile": "C:\\path\\to\\alibaba-auto-reply\\chrome-profile",
+    "credentials_file": "C:\\path\\to\\alibaba-auto-reply\\credentials.md",
+    "llm_config_file": "C:\\path\\to\\alibaba-auto-reply\\llm_config.json",
+    "cdp_script": "C:\\path\\to\\alibaba-auto-reply\\scripts\\cdp.ps1",
+    "monitor_script": "C:\\path\\to\\alibaba-auto-reply\\scripts\\monitor.ps1",
+    "chrome_ensure_script": "C:\\path\\to\\alibaba-auto-reply\\scripts\\chrome_ensure.ps1",
+    "reload_idle_min": 3,
+    "restart_storm_count": 4,
+    "restart_storm_window_min": 10
+}

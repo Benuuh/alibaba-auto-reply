@@ -1,0 +1,3 @@
+﻿# BUYER: fixture_unitweight
+[BUYER] Weight per Box: 5kg, box x 50, by sea to Miami FL
+[BUYER] 每箱重 6公斤 @@TS:2026-08-25 09:00

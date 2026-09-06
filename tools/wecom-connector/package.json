@@ -1,0 +1,17 @@
+{
+  "name": "wecom-connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reusable WeCom smart bot connector: WebSocket long connection + local HTTP bridge with multi-consumer cursors",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@wecom/aibot-node-sdk": "^1.0.7"
+  }
+}

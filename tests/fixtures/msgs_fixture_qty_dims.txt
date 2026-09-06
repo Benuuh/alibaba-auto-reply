@@ -1,0 +1,3 @@
+﻿# BUYER: fixture_qty_dims
+[BUYER] Box Weight: 11 KG 12999 Murphy Rd Suite N5 ZIP Code: 77477 Shipping: Sea ?? to USA Total Boxes: 20 ?? Box Dimensions: 40 × 50 × 50 CM
+[BUYER] 20 boxes confirm @@TS:2026-08-24 14:01

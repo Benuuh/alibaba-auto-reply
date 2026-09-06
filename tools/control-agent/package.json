@@ -1,0 +1,14 @@
+{
+  "name": "control-agent",
+  "version": "0.2.0",
+  "private": true,
+  "description": "WeCom remote vibe-coding control bridge: forwards natural-language commands from WeCom to opencode core and replies with results",
+  "main": "agent_bridge.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node agent_bridge.js",
+    "test": "node --test tests/*.test.js"
+  }
+}
