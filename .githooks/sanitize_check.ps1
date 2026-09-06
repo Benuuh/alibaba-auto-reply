@@ -74,6 +74,11 @@ if ($Mode -eq "staged") {
     $range = "$From..$To"
     if (-not $From -or -not $To) { $range = "HEAD" }
     $names = @(& $git diff --name-only --diff-filter=ACMRT $range 2>$null)
+    # 2026-09-07: 单提交/新分支(force 覆盖)时 range 退化为无效或空——回退 diff-tree 全量列该提交文件
+    if ($names.Count -eq 0) {
+        $target = if ($To) { $To } else { "HEAD" }
+        $names = @(& $git diff-tree --no-commit-id --name-only -r --diff-filter=ACMRT $target 2>$null)
+    }
     foreach ($n in $names) {
         if (-not $n) { continue }
         $files += [pscustomobject]@{ Name = $n; Path = "" }
