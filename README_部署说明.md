@@ -36,7 +36,7 @@
 │       ├── config.json     ← 由 config.json.example 复制（owner_userid 留空=首条消息自动锁定）
 │       └── data\ / logs\ / tests\    ← 游标/待确认/历史 / 日志 / 46 例测试
 ├── logs\                   ← 运行日志（monitor.log 5MB 轮转留 20 份 / watchdog.log / out / err）
-├── data\                   ← 买家消息快照 msgs_*.txt（保留 200 份，含对话 PII 勿外发）
+├── data\                   ← 买家消息快照 msgs_*.txt（保留 200 份，含对话 PII 勿外发）；manual_override.json=人工接管白名单（企微"白名单"指令维护，热生效≤10s）
 ├── reports\                ← 质量/总结/周报 md
 ├── backups\                ← 代码快照 zip（保留 20 份，不含凭据；含 2026-09-07 企微升级任务 XML 备份）
 └── docs\CHANGELOG.md       ← 版本变更记录
@@ -165,6 +165,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 - 登录页滑块验证码无法自动通过：刷新页面通常可消除，不要反复点提交
 - 监控为单实例：多实例会操作同一页面互相干扰
 - 修改 `reply_rules.json` / `reply_agent_prompt.md` 后立即生效，无需重启
+- **人工接管白名单**：企微向机器人发「白名单 添加 <客户名>」→ 该买家不再自动回复（只读快照 + [NEW-INQUIRY] 提醒；报价/唤醒免打扰）；「白名单 删除」即恢复；名单存 `data\manual_override.json`（损坏/缺失=空名单，热生效≤10s，无需重启 monitor）
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
 - 变更记录（详见 docs\CHANGELOG.md）：

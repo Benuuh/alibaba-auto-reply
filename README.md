@@ -23,6 +23,7 @@
 | 🧩 **组件可复用** | `wecom-connector`（HTTP 桥）与 `control-agent`（远程控制桥）独立成目录、独立测试，可被任意项目/agent 复用 |
 | 🛡️ **安全设计** | 凭据唯一文件（`credentials.md`）、日志/快照/报告目录隔离、`status.ps1` 内置敏感审计、`pre-commit/pre-push` 敏感扫描、买家 PII 仅存本机 |
 | 🔍 **买家档案** | 自动抓取买家国家/注册时间，注入 LLM 上下文个性化回复 |
+| 🔕 **人工接管白名单** | 企微发"白名单 添加 <客户名>"即不再自动回复该客户：只读留快照+新消息提醒，报价/唤醒免打扰，移出即恢复，≤10s 生效 |
 
 ## 🏗️ 架构
 
@@ -144,6 +145,22 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 > 旧 `AlibabaAutoReplyWeComCmd` 计划任务已于 2026-09-07 停用删除（XML 备份在 `backups\`），**请勿重建**；`scripts\wecom_command.ps1` 停用留档，不参与运行。
 
+## 📵 人工接管白名单（不自动回复客户）
+
+对个别买家（如已转人工跟进、线下报价中的客户），在企微向机器人发指令即可让系统停止自动回复该买家，由你人工接管：
+
+| 企微指令（owner 专属，即时回执） | 效果 |
+|---|---|
+| `白名单 添加 John Smith` | 该买家不再自动回复（≤10s 生效） |
+| `白名单 列表` | 查看当前名单 |
+| `白名单 删除 John Smith` | 移出名单，恢复自动回复 |
+
+- **行为**：名单买家的新消息不触发任何自动回复（LLM/规则/图片模板/QUICK 全部跳过、不发送）；只读留痕——保存会话快照 `data\msgs_*.txt` 与买家档案，并照常经 [NEW-INQUIRY] 企微提醒你人工接管（24h 节流不变）
+- **免打扰联动**：报价提醒（quote）与沉睡唤醒（nudge）对名单买家一律跳过
+- **可逆**：豁免期间不写"已回复"去重状态，移出名单后自动恢复正常（先回复最新一条）
+- **名单存储**：`data\manual_override.json`（JSON 数组；本机 PII 不入库；由企微指令维护，损坏/缺失视为空名单）
+- **匹配规则**：按买家会话显示名匹配，大小写、多余空格、下划线均容错（如 `ABC_Trading` 与 `ABC Trading` 视为同一买家）
+
 ## 🛡️ 安全
 
 - **敏感信息铁律**：账号/密码/API key/机器人凭据只存在于 `credentials.md`，任何其他文件（配置/日志/报告/备份/仓库）不得出现；`status.ps1` 每次运行自动审计，`.githooks`（pre-commit/pre-push）自动扫描拦截
@@ -186,6 +203,7 @@ alibaba-auto-reply/
 │   └── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试）
 ├── tests\                    ← 主仓库回归测试（36 用例，fixtures 为虚构数据）
 ├── logs\  data\  reports\  backups\   ← 运行时数据（均不入库）
+│   └── data\manual_override.json      ← 人工接管白名单（企微"白名单"指令维护，本机 PII）
 └── chrome-profile\           ← Chrome 登录态（独立 profile，勿删除）
 ```
 

@@ -1,7 +1,8 @@
 ﻿# lib/quote.ps1 - 报价提醒核心逻辑
-# Get-QuoteReadyBuyers: 扫描快照,返回数据齐全(重量+尺寸+地址 3 项)的买家列表
-# Send-QuoteReminders: 推送提醒 + 去重(24h 节流,内容 hash 变化可再提醒)
-# 依赖: config.ps1, lib\goods.ps1, lib\wecom.ps1, lib\log.ps1
+# Get-QuoteReadyBuyers: 扫描快照,返回数据齐全(重量+尺寸+地址 3 项)的买家列表(人工接管白名单买家除外)
+# Send-QuoteReminders: 推送提醒 + 去重(24h 节流,内容 hash 变化可再提醒);名单买家跳过
+# 依赖: config.ps1, lib\goods.ps1, lib\wecom.ps1, lib\log.ps1, lib\no_reply.ps1
+. (Join-Path $PSScriptRoot "no_reply.ps1")
 function Get-QuoteReadyBuyers([string]$snapDir = "") {
     if (-not $snapDir) { $snapDir = Get-SkillPath "data" }
     if (-not (Test-Path $snapDir)) { return @() }
@@ -11,6 +12,7 @@ function Get-QuoteReadyBuyers([string]$snapDir = "") {
         $head = Get-Content $_.FullName -Encoding UTF8 -TotalCount 1 -ErrorAction SilentlyContinue
         if ($head -match '^# BUYER: (.+)$') {
             $buyer = $Matches[1].Trim()
+            if (Test-NoReplyBuyer $buyer) { return }
             $key = $buyer.ToLowerInvariant()
             if ($seen.ContainsKey($key)) { return }
             $seen[$key] = $true
@@ -41,6 +43,10 @@ function Send-QuoteReminders([string]$OnlyBuyer = "", [string]$stateFile = "", [
     if ($OnlyBuyer) { $ready = @($ready | Where-Object { $_.buyer -eq $OnlyBuyer }) }
     $sent = 0
     foreach ($b in $ready) {
+        if (Test-NoReplyBuyer $b.buyer) {
+            if ($logFile) { Write-SkillLog "QUOTE-REMIND: skip manual-override buyer $($b.buyer)" $logFile }
+            continue
+        }
         $skey = $b.buyer.Trim().ToLowerInvariant()
         # 提取具体详情(货物品名/件数/单件重量/单件尺寸/收货地址/运输方案)用于提醒展示
         $gd = Get-GoodsDetails $b.buyer $snapDir

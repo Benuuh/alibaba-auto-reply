@@ -18,6 +18,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\goods.ps1")
 . (Join-Path $PSScriptRoot "lib\wecom.ps1")
 . (Join-Path $PSScriptRoot "lib\quote.ps1")
+. (Join-Path $PSScriptRoot "lib\no_reply.ps1")
 $script:skillCfg = Get-SkillConfig
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:cdpScript = Get-SkillPath "cdp"
@@ -512,6 +513,7 @@ function Start-Monitor {
     $script:failAlertAt = @{}
     $openCooldown = @{}
     $skipCooldown = @{}
+    $script:noReplyPreview = @{}
     # P2.2 reload 按需化:OneTalk 长连接会失效,但无需每 2 分钟无条件刷新。
     # 仅当 (a)列表抓取失败连续 2 次(emptyStreak, 上方处理), 或 (b)空闲超过 reload_idle_min(默认10分钟),
     # 或 (c)持续忙处理超过 30 分钟 时才 reload。列表有新会话/预览变化视为活跃,重置 idle 计时。
@@ -547,6 +549,27 @@ function Start-Monitor {
                     # A1: new inquiry alert (24h throttle)
                     if (-not $state -or -not $state.replied -or ($state.replied.PSObject.Properties.Name -notcontains $skey)) {
                         Send-NewInquiryAlert $key $item.preview
+                    }
+                    # A5 人工接管白名单(NO-REPLY):名单买家不自动回复(LLM/规则/图片模板/QUICK 全跳过,不发送);
+                    # 只读留痕(买家档案+msgs 快照)且不写 replied 去重状态 → 移出名单后自动恢复正常;
+                    # 新消息仍由上方 A1 提醒主人(24h 节流);预览不变时后续轮免打扰跳过
+                    if (Test-NoReplyBuyer $key) {
+                        if ($script:noReplyPreview.ContainsKey($key) -and $script:noReplyPreview[$key] -eq $item.preview) {
+                            Write-Log "TEMP-SKIP $($key): manual-override whitelist (preview unchanged, no auto reply)"
+                            continue
+                        }
+                        $nrConvo = Open-ConvoAndGetMessages $key
+                        if ($nrConvo -is [string]) {
+                            Write-Log "NO-REPLY-SNAP-FAIL $($key): $nrConvo"
+                            continue
+                        }
+                        if ($nrConvo.profile) { Save-BuyerProfile $skey $nrConvo.profile }
+                        $nrLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
+                        Add-Content -Path $nrLog -Value ("# BUYER: " + $key) -Encoding UTF8
+                        Add-Content -Path $nrLog -Value $nrConvo.msgs -Encoding UTF8
+                        $script:noReplyPreview[$key] = $item.preview
+                        Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
+                        continue
                     }
                     # dedup 跳过会话进冷却（3→6→12→15 分钟递增），预览变化（买家新消息）立即打破冷却
                     if ($skipCooldown.ContainsKey($key)) {

@@ -16,6 +16,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\send.ps1")
 . (Join-Path $PSScriptRoot "lib\llm.ps1")
 . (Join-Path $PSScriptRoot "lib\lock.ps1")
+. (Join-Path $PSScriptRoot "lib\no_reply.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:logFileDir = Get-SkillPath "logs"
 $script:dataDir = Get-SkillPath "data"
@@ -78,6 +79,11 @@ if (-not $state -or -not $state.nudged) { $state = [pscustomobject]@{ nudged = @
 $deadline = (Get-Date).AddDays(-$DaysSilent)
 $candidates = @()
 foreach ($name in $buyers.Keys) {
+    # 人工接管白名单买家:跳过唤醒,免打扰
+    if (Test-NoReplyBuyer $name) {
+        Write-Log "NUDGE-SKIP ${name}: manual-override whitelist (no auto reply)"
+        continue
+    }
     $info = $buyers[$name]
     $skey = $name.Trim().ToLowerInvariant()
     # 已有唤醒记录 → 跳过
