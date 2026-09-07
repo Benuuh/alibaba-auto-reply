@@ -78,3 +78,8 @@ scripts/last_sync.json
 # 重建备份区与 token
 /_rebuild_backup_*/
 /.git_token
+
+# ===== 本地会话产物与归档（不入库） =====
+/.opencode/
+/alibaba/
+/skills-main/
