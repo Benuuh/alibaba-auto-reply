@@ -18,14 +18,14 @@
                             "Recipient\u0027s detailed address"
                         ],
     "banned_phrases":  [
-                            "manager",
-                            "senior manager",
-                            "boss",
-                            "supervisor",
-                            "上级",
-                            "经理",
-                            "主管"
-                        ],
+                           "manager",
+                           "senior manager",
+                           "boss",
+                           "supervisor",
+                           "上级",
+                           "经理",
+                           "主管"
+                       ],
     "reply_rules":  {
                         "always":  [
                                        "Use American English",
@@ -48,12 +48,18 @@
                                       "Never send a reply that only acknowledges the delay without providing a concrete next step or timeline when the buyer is frustrated.",
                                       "Never send a reply that only asks for more details when the buyer has explicitly requested a price or quote.",
                                       "Never leave a buyer\u0027s message unanswered with an empty reply; always provide at least a brief acknowledgment or next step.",
-                                      "Never imply that pricing or lead times require confirmation from a manager, boss or supervisor. Always use a direct commitment with a concrete follow-up (\"I'll finalize your exact quote and get back to you shortly\").",
+                                      "Never imply that pricing or lead times require confirmation from a manager, boss or supervisor. Always use a direct commitment with a concrete follow-up (\"I\u0027ll finalize your exact quote and get back to you shortly\").",
                                       "Never repeat the same response verbatim when the buyer resends the same message; always provide new information or a concrete action.",
                                       "Never send a reply that only acknowledges the buyer\u0027s message without providing a concrete next step or timeline when the buyer is waiting for a quote or update.",
                                       "Never use a generic closing or sign-off (e.g., \u0027Best regards\u0027) when the buyer is frustrated or waiting for a resolution; keep the reply focused on the action.",
-                                      "Never imply that pricing or lead times require confirmation from a manager, boss or supervisor. Always use a direct commitment with a concrete follow-up (\"I'll finalize your exact quote and get back to you shortly\").",
-                                      "Never ignore or fail to address a buyer\u0027s repeated message about pricing concerns; provide a concrete answer or action plan instead of a generic acknowledgment."
+                                      "Never ignore or fail to address a buyer\u0027s repeated message about pricing concerns; provide a concrete answer or action plan instead of a generic acknowledgment.",
+                                      "Never reply with only \u0027I\u0027ll confirm with my senior manager\u0027 or similar deferral when the buyer asks about price changes or extra charges; provide a direct answer or concrete next step.",
+                                      "Never leave a buyer\u0027s repeated pricing concern unaddressed with a vague promise; always give a specific timeline or a clear action plan.",
+                                      "Never respond to a delivery/logistics problem with a bare statement of capability without addressing the buyer\u0027s specific request for verification or scheduling.",
+                                      "Never repeat the same transit-time statement verbatim when the buyer asks for a door-to-door delivery confirmation; provide a direct confirmation or a specific follow-up action.",
+                                      "Never reply to a delivery-time confirmation request with only a transit-time statement; directly confirm the door-to-door ETA or state the verification step and timeline.",
+                                      "Never respond to a buyer\u0027s offer/counteroffer with a bare refusal or a generic acknowledgment; address the specific terms and give a concrete next step or counter.",
+                                      "Never answer a logistics capability complaint with a bare capability claim; verify the specific delivery/scheduling request and provide a concrete action or timeline."
                                   ],
                         "urgency":  [
 

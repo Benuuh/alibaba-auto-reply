@@ -105,13 +105,19 @@ if (Test-Path $repDir) {
 # --- 7. 计划任务 ---
 Section "计划任务"
 foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "AlibabaAutoReplyOptimize", "AlibabaAutoReplyWeekly")) {
-    $q = (schtasks /Query /TN $tn /FO LIST 2>$null) -join "`n"
-    $mNext = [regex]::Match($q, 'Next Run Time:\s*([^\r\n]+)')
-    $mSt = [regex]::Match($q, 'Status:\s*([^\r\n]+)')
-    $next = if ($mNext.Success) { $mNext.Groups[1].Value.Trim() } else { "未知" }
-    $st = if ($mSt.Success) { $mSt.Groups[1].Value.Trim() } else { "未知" }
-    $ok = ($st -match 'Ready')
-    StatusLine $tn $ok "状态=$st, 下次=$next"
+    $task = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+    if ($task) {
+        $st = $task.State.ToString()
+        $next = "未排程"
+        try {
+            $info = $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
+            if ($info -and $info.NextRunTime -and $info.NextRunTime -ne [datetime]::MaxValue) { $next = $info.NextRunTime.ToString("yyyy-MM-dd HH:mm") }
+        } catch { }
+        $ok = ($st -eq 'Ready')
+        StatusLine $tn $ok "状态=$st, 下次=$next"
+    } else {
+        StatusLine $tn $false "状态=任务不存在"
+    }
 }
 
 # --- 8. 镜像同步 ---
