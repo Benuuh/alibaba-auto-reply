@@ -5,6 +5,8 @@
 param(
     [switch]$DryRun,
     [int]$MaxRules = 5,
+    [int]$ConsolidateThresholdChars = 14000,
+    [int]$ConsolidateBlockThreshold = 4,
     [string]$LogDir = ""
 )
 
@@ -98,10 +100,11 @@ if ($never.Count -gt 0) {
         $k = $c.Trim().ToLowerInvariant()
         if ($k.Length -gt 0 -and -not $seen.ContainsKey($k)) { $seen[$k] = $true; $dedup += $c }
     }
-    # 总量上限:超限截断并告警(规则膨胀会拖慢/稀释 LLM 注意力)
+    # 总量上限:超限丢弃最旧,保留最新 40 条(新建议优先;旧规则已被更新的规则覆盖)
     if ($dedup.Count -gt 40) {
-        Write-Log "AUTOOPT: never rules exceed cap 40 (actual $($dedup.Count)), truncating"
-        $dedup = $dedup[0..39]
+        $dropped = $dedup.Count - 40
+        Write-Log "AUTOOPT: never rules exceed cap 40 (actual $($dedup.Count)), dropping oldest $dropped (keep newest 40)"
+        $dedup = $dedup[($dedup.Count - 40)..($dedup.Count - 1)]
     }
     $rules.reply_rules.never = $dedup
     $rules | ConvertTo-Json -Depth 6 | Set-Content -Path $rulesFile -Encoding UTF8
@@ -113,6 +116,20 @@ if ($redlines.Count -gt 0) {
     foreach ($r in $redlines) { $addLines += "- $r" }
     Add-Content -Path $promptFile -Value ($addLines -join "`n") -Encoding UTF8
     Write-Log "AUTOOPT: +$($redlines.Count) redlines into reply_agent_prompt.md (backup saved)"
+
+    # 阈值触发合并:字符数超限或自动块数超限 -> 同进程调用 consolidate_prompt.ps1(幂等)
+    $promptNow = Get-Content $promptFile -Raw -Encoding UTF8
+    $blockCount = @(Select-String -Path $promptFile -Pattern '^# 自动优化追加的质量红线').Count
+    if ($promptNow.Length -gt $ConsolidateThresholdChars -or $blockCount -gt $ConsolidateBlockThreshold) {
+        Write-Log "CONSOLIDATE: trigger (chars $($promptNow.Length)/$ConsolidateThresholdChars, blocks $blockCount/$ConsolidateBlockThreshold) - running consolidate_prompt.ps1"
+        $consolidateScript = Join-Path $LogDir "consolidate_prompt.ps1"
+        if (Test-Path $consolidateScript) {
+            $consOut = @(& $consolidateScript 2>&1)
+            Write-Log "CONSOLIDATE: $($consOut -join ' | ')"
+        } else {
+            Write-Log "CONSOLIDATE: consolidate_prompt.ps1 not found, skipped"
+        }
+    }
 }
 Write-Log "AUTOOPT: applied from $($report[0].Name) (never+$($never.Count), redlines+$($redlines.Count))"
 Write-Output "AUTOOPT-APPLIED: never+$($never.Count) redlines+$($redlines.Count)"
