@@ -7,7 +7,7 @@
 ```
 <部署根>\alibaba-auto-reply\
 ├── credentials.md          ← 敏感信息唯一文件（账号/密码/API key/Bot 凭据，不入库不入备份）
-├── llm_config.json         ← LLM 非敏感配置（model/temperature/max_tokens/timeout_sec/endpoint）
+├── llm_config.json         ← LLM 非敏感配置（model=deepseek-v4-flash / temperature / max_tokens / timeout_sec / endpoint / thinking:disabled）
 ├── SKILL.md / README.md / README_部署说明.md ← 技能说明与文档（opencode 技能镜像同步对象）
 ├── chrome-profile\         ← Chrome 登录态（含登录态，勿删除）
 ├── scripts\                ← 代码 + 状态 + 规则（常驻目录）
@@ -26,9 +26,10 @@
 │   ├── weekly_report.ps1 / nudge.ps1 / quote_remind.ps1 ← 周报+唤醒 / 报价提醒 CLI
 │   ├── dashboard.ps1       ← 数据看板（手动工具，按需运行）
 │   ├── state.json(+bak)    ← 已回复去重状态（双写）
-│   └── lib\                ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply）
+│   └── lib\                ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push）
 ├── tools\
 │   ├── wecom-connector\    ← 企微 HTTP 桥（Node 常驻 127.0.0.1:19886；bin\wecom-connector.ps1 启停）
+│   ├── doc-reader\         ← 买家文档解析（PDF 文本/扫描渲染、xlsx/csv/docx → 文本或 PNG；node --test）
 │   │   ├── config.json     ← 由 config.json.example 复制（host/port/data_dir/receiver_file/log_dir，无凭据）
 │   │   ├── client\wecom-client.ps1   ← PowerShell 客户端库（Conn-* 系列，零依赖可复用）
 │   │   └── data\ / logs\ / tests\    ← 游标与接收方缓存 / 日志 / 63 例测试
@@ -171,6 +172,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
 - 变更记录（详见 docs\CHANGELOG.md）：
+  - 2026-09-12（3）：报告企微推送（`lib\report_push.ps1`，quality/weekly 生成后自动推摘要，`report_push_enabled` 开关 + 去重）+ 模型切换 `deepseek-v4-flash`（`thinking:disabled`）+ 附件识别（`lib\vision.ps1`/`lib\doc.ps1` + `tools\doc-reader` 组件；monitor 图片多模态/文档解析/机会性提取 → `data\vision_extract\`；goods 合并 sidecar）
   - 2026-09-12（2）：control-agent 保活并入 watchdog（五重守护，agent_start.ps1，启动失败 5 分钟冷却）+ 停用标记机制（bin stop/start 自动维护）+ 注册 `AlibabaAutoReplyWatchdog` 登录自启任务（+30s/Hidden/不限时）+ status 纳入 control-agent 与第 5 项任务
   - 2026-09-12：精简与优化轮——退役/休眠脚本归档至 `backups\精简优化_20260912\`（manifest 可回溯）；cdp.ps1 删死分支（仅保留 navigate/eval）；CDP 端口收敛到 `config.json` 的 `cdp_port`（默认 9222）；巨型函数拆分（Generate-Reply / Start-Monitor）；prompt 红线合并归档 + auto_optimize 阈值自动合并与 never 保留最新 40 条；SKILL/README 瘦身；镜像默认改为 opencode 技能目录
   - 2026-09-07：企微通道升级 v2——wecom-connector（HTTP 桥 19886）+ control-agent（自然语言远程控制，取代旧 6 命令体系）；`AlibabaAutoReplyWeComCmd` 计划任务停用删除；watchdog 企微保活改 wecom_start.ps1 v2

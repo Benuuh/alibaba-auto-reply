@@ -2,6 +2,21 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-12 - 报告企微推送 + 附件识别与模型切换
+
+### 报告推送（A 包）
+- 新增 `scripts\lib\report_push.ps1`：质量/周报生成后自动推企微摘要（统计+重点项+文件名，≤800 字符）；同报告去重（`data\report_push_state.json`，上限 100）；`report_push_enabled` 开关；失败只记日志
+- 挂接：`analyze_replies.ps1`（quality）/ `weekly_report.ps1`（weekly，nudge 前），全程 try/catch 不影响任务退出码
+- 测试 `tests\report_push.tests.ps1`（解析器 33 断言）+ 两份 fixture
+
+### 附件识别与模型切换（B 包）
+- 模型切换：`llm_config.json` → `deepseek-v4-flash` + `thinking:{type:disabled}`（默认思考模式会耗尽 max_tokens 导致空回复，实测确认后关闭；文本延迟 ~1.5s）
+- 新增 `scripts\lib\vision.ps1`（图片下载/多模态构造/提取解析/sidecar）与 `scripts\lib\doc.ps1`（CDP 页面上下文 fetch 优先 → PS 兜底 → 临时文件 → doc-reader）
+- 新增组件 `tools\doc-reader`：PDF（文本层/扫描渲染）/xlsx/csv/docx → 文本或 PNG；PDF 引擎用 `@hyzyla/pdfium`（WASM；pdfjs+native canvas 实测原生崩溃）
+- monitor 集成：JS 收集 `@@IMG`/`@@FILE` 标记（图片 ≤3、文件卡片兜底特征）→ PS 剥离后入快照/算 hash（格式不变）→ 图片多模态回复 / 文档解析回复 → 与回复解耦的提取调用（JSON → `data\vision_extract\<buyer>.json`，source=image/document）→ 失败回退 IMG_TEMPLATE / 普通文本流程
+- `lib\goods.ps1`：Get-GoodsDataStatus / Get-GoodsDetails 合并 sidecar（weight/dims/cartons）
+- 测试 `tests\vision.tests.ps1`（43 断言：data URL/多模态构造/提取解析/标记剥离 hash 稳定/sidecar/goods 合并）
+
 ## 2026-09-12 - control-agent 保活与整栈自启
 
 - watchdog 升级五重守护：新增 control-agent 保活块（每 30s 幂等调用 `scripts\agent_start.ps1`；启动失败 5 分钟冷却；ALREADY-RUNNING/DISABLED 静默）

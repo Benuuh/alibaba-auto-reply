@@ -18,7 +18,8 @@
 | 📦 **信息收集** | 自动追问缺失货物信息（总重/尺寸/图片/收货地址），同字段最多追问 2 次，买家承诺提供后不再追问 |
 | 📱 **企业微信报价提醒** | 官方智能机器人长连接由独立组件 `wecom-connector`（本地 HTTP 桥 127.0.0.1:19886）承载；数据齐全（重量+尺寸+地址）实时推送（24h 节流） |
 | 🎛️ **自然语言远程控制** | 企微发任意自然语言指令，`control-agent` 经 owner 校验 + 确认闸门后派发外部执行 agent 执行并回发结果 |
-| 📊 **质量闭环** | 每日质量报告 → 规则自动提炼（40 条上限 + 阈值自动合并）→ 周报（含国别分布）+ 沉睡买家唤醒 |
+| 📊 **质量闭环** | 每日质量报告 → 规则自动提炼（40 条上限 + 阈值自动合并）→ 周报（含国别分布）+ 沉睡买家唤醒；**质量报告/周报生成后自动推企微摘要**（统计+重点项+文件名，可开关） |
+| 🖼️ **附件识别** | 买家图片/文档（PDF/Excel/CSV/Word）自动识别：图片走视觉多模态、文档解析文本或渲染扫描件；明确可见的重量/尺寸/箱数/单号机会性提取入货物档案（带来源标记，不臆造） |
 | 📈 **数据看板** | `dashboard.ps1` 手动生成无 PII 的 HTML 聚合看板（回复量/LLM 成功率/来源分布） |
 | 🧩 **组件可复用** | `wecom-connector`（HTTP 桥）与 `control-agent`（远程控制桥）独立成目录、独立测试 |
 | 🛡️ **安全设计** | 凭据唯一文件（`credentials.md`）、目录隔离、`status.ps1` 敏感审计、`pre-commit/pre-push` 扫描、PII 仅存本机 |
@@ -78,10 +79,10 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 | 文件 | 作用 |
 |---|---|
-| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port`；经 `scripts\config.ps1` 统一读取 |
+| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）；经 `scripts\config.ps1` 统一读取 |
 | `scripts\reply_rules.json` | 语料库：品牌/价格准则/收集字段/模板/规则（编辑后立即生效） |
 | `scripts\reply_agent_prompt.md` | LLM 提示词：意图识别 + 质量红线（编辑后立即生效） |
-| `llm_config.json` | LLM 非敏感配置（model/temperature/max_tokens/timeout/endpoint，**不存 key**） |
+| `llm_config.json` | LLM 非敏感配置（model=`deepseek-v4-flash` / temperature / max_tokens / timeout / endpoint / `thinking:disabled`，**不存 key**） |
 | `tools\wecom-connector\config.json` | HTTP 桥 host/port/数据目录（凭据走环境变量注入） |
 | `tools\control-agent\config.json` | owner/projects/executor/节流等（`owner_userid` 留空首条消息自动锁定） |
 
@@ -143,11 +144,12 @@ alibaba-auto-reply/
 │   ├── weekly_report.ps1 / nudge.ps1 / quote_remind.ps1 ← 周报/唤醒/报价提醒
 │   ├── dashboard.ps1         ← 数据看板（手动工具）
 │   ├── state.json(+bak)      ← 已回复去重状态
-│   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply）
+│   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push）
 ├── tools\                    ← 独立可复用组件（各自 npm 依赖与测试）
 │   ├── wecom-connector\      ← 企微 HTTP 桥（Node，63 例测试）
+│   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
 │   └── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试）
-├── tests\                    ← 主仓库回归测试（3 文件 140 断言，fixtures 虚构数据）
+├── tests\                    ← 主仓库回归测试（5 文件 216 断言，fixtures 虚构数据）
 ├── logs\  data\  reports\  backups\   ← 运行时数据（均不入库）
 └── chrome-profile\           ← Chrome 登录态（独立 profile，勿删除）
 ```
@@ -155,12 +157,13 @@ alibaba-auto-reply/
 ## 🧪 开发与运维
 
 ```powershell
-# 主仓库回归测试（3 文件 140 断言：goods 27 + no_reply 29 + reply_engine 84）
+# 主仓库回归测试（5 文件 216 断言：goods 27 + no_reply 29 + reply_engine 84 + report_push 33 + vision 43）
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
 
 # tools 组件测试
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\wecom-connector\tests\run_tests.ps1   # 63 例
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\tests\run_tests.ps1     # 46 例
+node --test tools\doc-reader\tests\read.test.js                                                 # 7 例
 
 # 代码快照 / 镜像同步 / 健康检查
 powershell -ExecutionPolicy Bypass -NoProfile -File scripts\backup.ps1 -Snapshot
