@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "config.ps1")
 $workRoot = Get-SkillPath ""
-if (-not $MirrorRoot) { $MirrorRoot = Join-Path $env:USERPROFILE ".dsh\skills\alibaba-auto-reply" }
+if (-not $MirrorRoot) { $MirrorRoot = Join-Path $env:USERPROFILE ".config\opencode\skills\alibaba-auto-reply" }
 if (-not (Test-Path $MirrorRoot)) { Write-Output "SYNC-FAIL: mirror root not found: $MirrorRoot"; exit 1 }
 
 $exclRegex = '\.(log|bak|pre|pid|tmp)$|^msgs_|^state\.json|^nudge_state|^summary_last\.json|^remind_state|^last_sync|^verify_.*\.ps1$|^apply_.*\.ps1$'
