@@ -179,7 +179,41 @@ Assert-True "ban-clean-managerial" ($null -eq (Test-BannedText "managerial tasks
 Assert-True "ban-customlist"       ($null -eq (Test-BannedText "with my manager" @("boss","supervisor")))
 Assert-Eq   "ban-customlist-hit"   (Test-BannedText "ok boss" @("boss")) "boss"
 
+# ===== 责任/费用红线（2026-09-10 事故整改）=====
+# 38. 责任索赔消息（钱+责任双重信号）-> 核实话术分支；不得揽责/承诺金额
+$r = Generate-Reply $testRules "buyer1" "someone needs to be responsible for this cost, I paid `$3500 for crane rental because of the customs delay" @()
+Assert-Contains "A-claim-verified" $r "checking with the team"
+Assert-NotContains "A-claim-no-resp" $r "responsible for this cost"
+Assert-NotContains "A-claim-no-onus" $r "on us"
+Assert-NotContains "A-claim-no-oop" $r "out of pocket"
+Assert-NotContains "A-claim-nomanager" $r "manager"
+# 39. 纯催单（含 delayed）不得进入索赔分支
+$r = Generate-Reply $testRules "buyer1" "any update on my shipment, it's delayed" @()
+Assert-Contains "A-status-delay" $r "warehouse"
+Assert-NotContains "A-status-notclaim" $r "Regarding the costs"
+# 40. 纯报价请求不得进入索赔分支
+$r = Generate-Reply $testRules "buyer1" "how much for shipping to NY" @()
+Assert-Contains "A-quote2" $r "weight"
+Assert-NotContains "A-quote2-notclaim" $r "checking with the team"
+# 41. 西语索赔变体
+$r = Generate-Reply $testRules "buyer1" "quién es responsable de este costo" @()
+Assert-Contains "A-claim-es" $r "sorry"
+Assert-NotContains "A-claim-es-noresp" $r "responsible for this cost"
+# 42. Test-FinancialCommitment: 责任/费用承诺句命中
+Assert-True "fin-hit-take-resp"  ($null -ne (Test-FinancialCommitment "we'll take responsibility for this cost and make it right"))
+Assert-True "fin-hit-onus"       ($null -ne (Test-FinancialCommitment "this is on us, not you"))
+Assert-True "fin-hit-thats-onus" ($null -ne (Test-FinancialCommitment "that's on us"))
+Assert-True "fin-hit-oop"        ($null -ne (Test-FinancialCommitment "you shouldn't be out of pocket for that `$3500"))
+Assert-True "fin-hit-cover"      ($null -ne (Test-FinancialCommitment "we'll cover the `$3500 crane rental"))
+Assert-True "fin-hit-incident"   ($null -ne (Test-FinancialCommitment "We take responsibility for this cost and will make it right"))
+# 43. Test-FinancialCommitment: 正当业务表述不误伤（responsible/cover 单用、报价语境）
+Assert-True "fin-clean-template" ($null -eq (Test-FinancialCommitment "we will be responsible for delivering the package to your designated address as agreed upon"))
+Assert-True "fin-clean-deliver"  ($null -eq (Test-FinancialCommitment "we are responsible for delivering to your address as agreed"))
+Assert-True "fin-clean-quote"    ($null -eq (Test-FinancialCommitment "I'll finalize your quote and get back to you shortly"))
+Assert-True "fin-clean-service"  ($null -eq (Test-FinancialCommitment "we cover the full route with door-to-door service"))
+
 Write-Output ""
 Write-Output ("RESULT: pass={0} fail={1}" -f $script:pass, $script:fail)
 if ($script:fail -gt 0) { Write-Output ("FAILED CASES: " + ($script:fails -join ", ")); exit 1 }
 Write-Output "ALL PASS"
+

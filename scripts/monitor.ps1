@@ -30,8 +30,8 @@ $script:dataDir = Get-SkillPath "data"
 $logFile = Join-Path $script:logFileDir "monitor.log"
 $stateFile = Join-Path $LogDir "state.json"
 
-# 发送前拦截安全兜底句（spec 禁词拦截 Phase 4）：命中禁词且重写仍越线/引擎路径命中时整体替换；纯 ASCII，非空保证
-$script:banSafeFallback = "Thanks for your patience! I'll finalize your quote and get back to you shortly."
+# 发送前拦截安全兜底句（spec 禁词拦截 Phase 4 + 2026-09-10 责任承诺拦截）：命中禁词/责任承诺且重写仍越线/引擎路径命中时整体替换；争议与通用场景安全，纯 ASCII，非空保证
+$script:banSafeFallback = "Thanks for your patience - I've noted this and I'm checking with the team. I'll get back to you with a clear update shortly."
 
 function Write-Log([string]$msg) { Write-SkillLog $msg $logFile }
 
@@ -257,12 +257,15 @@ function Get-RulesRaw {
 }
 
 # LLM 生成回复：DeepSeek (OpenAI 兼容) API。失败返回 $null（由调用方回退规则引擎）
-function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest, [string[]]$context, [switch]$BanRetry) {
+function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest, [string[]]$context, [switch]$BanRetry, [switch]$CommitRetry) {
     $cfg = Get-LLMConfig
     if (-not $cfg) { return $null }
     $rulesRaw = Get-RulesRaw
     $systemPrompt = (Get-ReplyPrompt) + "`n`n=== 语料库 reply_rules.json ===`n" + $rulesRaw
-    if ($BanRetry) {
+    if ($CommitRetry) {
+        # 发送前责任承诺拦截重写（仅 LLM 路径 1 次）：系统提示词追加重写要求（默认不带，避免长系统提示）
+        $systemPrompt += "`n`n[重写要求] 上一稿含对买家的责任/费用承诺，已弃用；重写：禁止承认或暗示责任在我司（禁用 on us / we take responsibility for this cost / it's our fault / you shouldn't be out of pocket 等归因句式），禁止承诺支付/报销/退款/赔偿任何金额（禁用 we'll pay / cover / reimburse / refund / compensate / make it right 等承诺句式）。正确写法：真诚致歉共情（I'm really sorry for the trouble this has caused）→ 说明正在核实实际原因与最新进度 → 给具体回访时限（today / tomorrow morning）→ 费用赔偿类诉求答复 I'll have that reviewed carefully and get back to you with a clear answer；不得出现 manager/boss/supervisor/经理/上级 等请示措辞。"
+    } elseif ($BanRetry) {
         # 发送前拦截重写（仅 LLM 路径 1 次）：系统提示词追加重写要求（默认不带，避免长系统提示）
         $systemPrompt += "`n`n[重写要求] 上一稿含被禁措辞，已弃用；重写：不得出现任何需上级确认的表述（manager/boss/supervisor/经理/上级/请示），一律改用正面承诺：正在核算并给出明确跟进时限（如 I'll finalize your exact quote and get back to you shortly.）。"
     }
@@ -714,6 +717,31 @@ function Start-Monitor {
                                         }
                                     } else {
                                         Write-Log "BANLIST-BLOCK $($key) src=RULE word=$($banHit) action=FALLBACK summary=$($sum)"
+                                        $reply = $script:banSafeFallback
+                                    }
+                                }
+                                # === 发送前责任承诺双检（2026-09-10 事故整改）：句级检测责任/费用承诺；命中→LLM 重写一次→仍命中→安全兜底句（与 BANLIST 同构，日志前缀 COMMIT-BLOCK） ===
+                                $finHit = Test-FinancialCommitment $reply
+                                if ($finHit) {
+                                    $sum3 = $reply.Trim()
+                                    if ($sum3.Length -gt 60) { $sum3 = $sum3.Substring(0, 60) + "..." }
+                                    if ($src -eq 'LLM') {
+                                        Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=REWRITE summary=$($sum3)"
+                                        $retry2 = Generate-Reply-LLM $rules $key $latestClean $lines -CommitRetry
+                                        if ($retry2 -and $retry2.Trim().Length -gt 0) {
+                                            $retryHit2 = Test-FinancialCommitment $retry2
+                                            if ($retryHit2) {
+                                                $sum4 = $retry2.Trim()
+                                                if ($sum4.Length -gt 60) { $sum4 = $sum4.Substring(0, 60) + "..." }
+                                                Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($retryHit2) action=FALLBACK summary=$($sum4)"
+                                                $reply = $script:banSafeFallback
+                                            } else { $reply = $retry2 }
+                                        } else {
+                                            Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=FALLBACK summary="
+                                            $reply = $script:banSafeFallback
+                                        }
+                                    } else {
+                                        Write-Log "COMMIT-BLOCK $($key) src=RULE pat=$($finHit) action=FALLBACK summary=$($sum3)"
                                         $reply = $script:banSafeFallback
                                     }
                                 }

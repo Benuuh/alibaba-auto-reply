@@ -108,13 +108,17 @@ powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\cont
 - control-agent 保活暂未并入 watchdog（遗留项，用其 `bin\control-agent.ps1` 手动管理）
 - 无凭据时 HTTP 桥也可启动（`connected=false`，/send 返回 503），便于联调
 
-### Phase F：计划任务（4 个，均指向 scripts\ 下脚本）
+### Phase F：计划任务（5 个，均指向 scripts\ 下脚本）
 | 任务名 | 脚本 | 周期 |
 |---|---|---|
 | `AlibabaAutoReplySummary` | summarize.ps1 | 每 4 小时 |
 | `AlibabaAutoReplyQuality` | analyze_replies.ps1 | 每日 05:00 |
 | `AlibabaAutoReplyOptimize` | auto_optimize.ps1 | 每日 05:30 |
 | `AlibabaAutoReplyWeekly` | weekly_report.ps1（含 nudge 唤醒） | 每周一 08:00 |
+| `AlibabaAutoReplyWatchdog` | watchdog.ps1 | 用户登录时（+30s 延迟，Hidden） |
+
+- watchdog 自启任务 = 整套常驻的恢复入口：watchdog 启动后自动拉起 monitor / Chrome 自愈 / 企微保活；任务幂等（watchdog.pid 单实例检测），与手动启动的实例并存无害，重复触发直接退出
+- watchdog 自身的守护即本任务（2026-09-10 注册，解决 Windows Update/手动重启后常驻进程无人拉起问题）；未启用无人登录（ONSTART/自动登录）场景，注销重登录或重启即生效
 
 注册示例（管理员）：`schtasks /Create /TN AlibabaAutoReplyQuality /TR "powershell.exe -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\analyze_replies.ps1" /SC DAILY /ST 05:00 /F`（Summary 用 `/SC HOURLY` 或等距任务）。
 - 旧任务 `AlibabaAutoReplyWeComCmd` 已于 2026-09-07 企微通道升级时停用并删除（XML 备份：`backups\wecom_upgrade_20260907\`），**请勿重建**；企微远程控制由 control-agent 提供

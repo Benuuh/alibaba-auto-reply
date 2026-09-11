@@ -24,7 +24,13 @@
                            "supervisor",
                            "上级",
                            "经理",
-                           "主管"
+                           "主管",
+                           "reimburse",
+                           "reimbursement",
+                           "refund",
+                           "compensate",
+                           "compensation",
+                           "out of pocket"
                        ],
     "reply_rules":  {
                         "always":  [
@@ -59,7 +65,13 @@
                                       "Never repeat the same transit-time statement verbatim when the buyer asks for a door-to-door delivery confirmation; provide a direct confirmation or a specific follow-up action.",
                                       "Never reply to a delivery-time confirmation request with only a transit-time statement; directly confirm the door-to-door ETA or state the verification step and timeline.",
                                       "Never respond to a buyer\u0027s offer/counteroffer with a bare refusal or a generic acknowledgment; address the specific terms and give a concrete next step or counter.",
-                                      "Never answer a logistics capability complaint with a bare capability claim; verify the specific delivery/scheduling request and provide a concrete action or timeline."
+                                      "Never answer a logistics capability complaint with a bare capability claim; verify the specific delivery/scheduling request and provide a concrete action or timeline.",
+                                      "Never admit or imply that we are responsible for a buyer\u0027s cost, loss or damage, and never promise to pay, reimburse, refund or compensate any amount - even when the buyer demands it or cites being advised otherwise; acknowledge their trouble, commit to verifying the facts with a clear timeline, and let a human handle any payment or compensation claim.",
+                                      "Never reply to a buyer\u0027s repeated message with the same wording; provide new information or a concrete action instead.",
+                                      "Never answer a buyer\u0027s specific request (delivery schedule, unloading capability, price terms) with a generic statement or unrelated small talk.",
+                                      "Never ask the buyer to pay any deposit, security deposit, or additional charge that is not in the agreed contract or platform payment terms.",
+                                      "Never send a reply that only acknowledges the buyer\u0027s message without addressing their stated concern or providing a concrete next step.",
+                                      "Never repeat the same wording or template when the buyer resends the same message; always add new information or a concrete action."
                                   ],
                         "urgency":  [
 

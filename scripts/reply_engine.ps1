@@ -279,7 +279,20 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
         $tpl = $templates.ask_address
         if ($tpl) { return (Resolve-Template $tpl $vars) }
     }
-    # 12. 查件/催进度（售后）：不做编造，给出明确的跟进承诺时限（在询价之前：where is my cargo 不应收到询价模板）
+    # 12. 延误/费用/责任索赔（2026-09-10 事故整改）：买家主张或暗示我方承担费用/损失/赔偿 → 致歉共情+核实+时限，不揽责不承诺金额。
+    #     聚焦"钱+责任"双重信号与明确索赔词，先于查件/询价分支命中；纯催单/纯询价不得进入（由测试保障）。
+    #     此分支只是规则引擎兜底话术；真实运行时 LLM 回复另有发送前责任承诺双检拦截（Test-FinancialCommitment）。
+    $claimPat = '(responsible|responsibility|liab\w*|fault|blame|responsab\w*|culpa).{0,60}(cost|fee|expense|rental|charge|pay|compensat|damage|loss|costo|gastos)|(cost|fee|expense|rental|charge|costo|gastos).{0,60}(responsible|liab\w*|you pay|we pay|cover|owe|refund|reimburse|compensat)|reimburse|refund|compensat|crane\s*(rental|cost|fee)|demurrage|detention|storage\s*fee|someone\s+needs\s+to|it\s+(isn\x27t|is not)\s+me|shouldn\x27t\s+have\s+to|customs\s+(hold|delay|fee|charge)|(delay|delayed)\s*.{0,40}(cost|fee|expense|rental|pay)'
+    if ($latestLower -match $claimPat) {
+        $cl = @{
+            en = "I'm really sorry for the trouble this has caused - that's not the experience we want for you. I'm checking with the team right now to find out exactly what's happening with the release and delivery schedule, and I'll get back to you today with a clear update. Regarding the costs on your end, I'll have that reviewed properly and come back to you with a straight answer."
+            es = "Siento mucho las molestias causadas; no es la experiencia que queremos para usted. Estoy verificando con el equipo ahora mismo qué está pasando exactamente con la liberación y el cronograma de entrega, y hoy le daré una actualización clara. Sobre los costos de su lado, haré que los revisen debidamente y le daré una respuesta clara y directa."
+            pt = "Sinto muito pelo transtorno causado; não é essa a experiência que queremos para você. Estou verificando com a equipe agora mesmo o que está acontecendo com a liberação e o cronograma de entrega, e volto hoje com uma atualização clara. Sobre os custos do seu lado, farei uma revisão adequada e voltarei com uma resposta clara."
+            fr = "Je suis vraiment désolé pour les désagréments causés ; ce n'est pas l'expérience que nous voulons pour vous. Je vérifie avec l'équipe en ce moment même ce qui se passe avec la libération et le calendrier de livraison, et je reviens vers vous aujourd'hui avec une mise à jour claire. Concernant les coûts de votre côté, je vais faire examiner cela correctement et vous revenir avec une réponse claire."
+        }
+        return $cl[$lang]
+    }
+    # 13. 查件/催进度（售后）：不做编造，给出明确的跟进承诺时限（在询价之前：where is my cargo 不应收到询价模板）
     if ($latestLower -match 'status|tracking|track|where is|where.s|my cargo|my shipment|my package|my parcel|did you check|current update|progress|update on|latest|check on|what.s the (status|update)|how far|how is it going|estado|rastreo|status do|onde esta|où en est|ou en est|suivi|avancement') {
         $st = @{
             en = "Sorry for the wait - let me check with the warehouse right now and I'll get back to you with the latest status today."
@@ -289,7 +302,7 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
         }
         return $st[$lang]
     }
-    # 13. 询价/货物/发货 → 动态追问缺失信息（补充西语/葡语询价词）
+    # 14. 询价/货物/发货 → 动态追问缺失信息（补充西语/葡语询价词）
     if ($latestLower -match 'quote|price|cost|how much|报价|precio|preco|orçamento|orcamento|cotizacion|cuánto cuesta|cuanto cuesta|quanto custa|freight rate|shipping cost|ship|cargo|goods|deliver|enviar|import|运输|发货|flete|mercancia|enviar|encomenda|pedido|mercadería|mercaderia|custo') {
         if ($missing.Count -eq 0) {
             if ($hasWeight) { return "Thanks for all the details! I'll finalize your exact quote and get back to you shortly." }
@@ -304,7 +317,7 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
             return "Hi {name}, could you please provide the weight, packaging dimensions (L*W*H), reference images and the recipient's address so I can quote you accurately?"
         }
     }
-    # 14. 默认兜底：动态追问
+    # 15. 默认兜底：动态追问
     if ($missing.Count -gt 0) {
         if ($meAskCount -ge 2) { return $waitTone[$lang] }
         $tpl = $templates.first_inquiry
@@ -349,5 +362,26 @@ function Test-BannedText([string]$text, $bannedList) {
             if ($text -match $__pat) { return $__ps }
         }
     }
+    return $null
+}
+
+# 责任/金钱承诺检测（纯函数；monitor 发送前拦截与回归测试共用）：命中即可能向买家作出费用/责任承诺,须重写或兜底。
+# 与 Test-BannedText 的差异:句子级正则而非词表,避免 responsible/cover 等词的正当用法误伤（如 process_overview 模板
+# "we will be responsible for delivering the package to your designated address as agreed upon" 属正当业务表述,不得命中）。
+# 返回命中的正则模式或 $null。
+function Test-FinancialCommitment([string]$text) {
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    $s = [string]$text
+    $pats = @(
+        '(?i)(take|taking|accept(ed)?|assume)\s+responsibility\s+for',
+        '(?i)responsib(le|ility)\s+(for|of)\s+(this|the|that|your|all|any)\s+(cost|fee|charge|expense|damage|loss|rental)',
+        '(?i)((this|that|it)(\x27|\u2019)?s|this is|that is)\s+on\s+us',
+        '(?i)((we|i)(\x27|\u2019)?(ll|ve|d)|\bwe( will| would| can| could| should)?)\s+(pay|reimburse|refund|compensate)\s+(you|for|the)',
+        '(?i)((we|i)(\x27|\u2019)?(ll|ve|d)|\bwe( will| would| can| could| should)?)\s+cover\s+(you for |(this|that|the|all|any)\s+(cost|fee|charge|expense|rental|damage|loss|amount|\$\s?\d))',
+        '(?i)\b(reimburse|refund|compensate|compensation|reimbursement)\b',
+        '(?i)out\s+of\s+pocket\s+for',
+        '(?i)owe\s+you'
+    )
+    foreach ($p in $pats) { if ($s -match $p) { return $p } }
     return $null
 }
