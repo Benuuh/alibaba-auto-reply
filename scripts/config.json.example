@@ -12,6 +12,7 @@
     "monitor_script": "C:\\path\\to\\alibaba-auto-reply\\scripts\\monitor.ps1",
     "chrome_ensure_script": "C:\\path\\to\\alibaba-auto-reply\\scripts\\chrome_ensure.ps1",
     "cdp_port": 9222,
+    "report_push_enabled": true,
     "reload_idle_min": 3,
     "restart_storm_count": 4,
     "restart_storm_window_min": 10

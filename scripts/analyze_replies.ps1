@@ -141,6 +141,9 @@ $lines = @(
 $lines -join "`n" | Set-Content -Path $outFile -Encoding UTF8
 Write-Output "quality report: $outFile"
 
+# A 包: 报告生成后自动推企微摘要(失败只记日志, 不影响报告任务退出码)
+try { . (Join-Path $PSScriptRoot "lib\report_push.ps1"); Send-ReportWecomSummary $outFile 'quality' | Out-Null } catch {}
+
 # 负面案例自动入规（可选）
 if ($ApplyNever -and $negCases.Count -gt 0) {
     $rulesFile = Join-Path $LogDir "reply_rules.json"

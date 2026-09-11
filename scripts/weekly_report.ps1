@@ -131,6 +131,9 @@ $outFile = Join-Path $outDir ("weekly_" + (Get-Date -Format "yyyyMMdd") + ".md")
 $sb.ToString() | Set-Content -Path $outFile -Encoding UTF8
 Write-Output "weekly report: $outFile"
 
+# A 包: 报告生成后自动推企微摘要(nudge 段前; 失败只记日志, 不影响任务)
+try { . (Join-Path $PSScriptRoot "lib\report_push.ps1"); Send-ReportWecomSummary $outFile 'weekly' | Out-Null } catch {}
+
 # P2.5 补跑标注:若上次周报已超过 7 天(计划任务错过,如机器关机),当前生成视为补跑
 $lastRep = @(Get-ChildItem $outDir -Filter "weekly_*.md" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 2)
 if ($lastRep.Count -ge 2) {
