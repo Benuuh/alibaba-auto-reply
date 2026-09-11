@@ -37,13 +37,14 @@ if (Test-Path (Join-Path $LogDir "watchdog.pid")) {
 StatusLine "watchdog.ps1" $wtdAlive $(if ($wtdPid) { "PID=$wtdPid" } else { "无 PID 文件" })
 
 # --- 2. CDP / Chrome ---
-Section "Chrome / CDP (9222)"
+$cdpPort = Get-CdpPort
+Section "Chrome / CDP ($cdpPort)"
 $cdpOk = $false; $cdpVer = ""
 try {
-    $r = Invoke-WebRequest -Uri "http://localhost:9222/json/version" -TimeoutSec 3 -UseBasicParsing
+    $r = Invoke-WebRequest -Uri "http://127.0.0.1:$cdpPort/json/version" -TimeoutSec 3 -UseBasicParsing
     if ($r.StatusCode -eq 200) { $cdpOk = $true; $cdpVer = (($r.Content | ConvertFrom-Json).Browser) }
 } catch {}
-StatusLine "CDP 端口 9222" $cdpOk $cdpVer
+StatusLine "CDP 端口 $cdpPort" $cdpOk $cdpVer
 
 # --- 3. monitor.log ---
 Section "monitor.log 摘要"

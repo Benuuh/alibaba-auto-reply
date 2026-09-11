@@ -33,23 +33,3 @@ function Send-WecomMessage([string]$text, [string]$to = "") {
     } catch { return "SEND_ERROR: $($_.Exception.Message)" }
 }
 
-
-# 读取 bot 收到的消息(增量轮询,seq=毫秒时间戳单调递增,跨重启不丢不重)。
-# 返回 items 数组(seq>after 的条目,按 seq 升序);服务不可达/异常返回 $null(不抛错,与 Test-WecomService 风格一致)。
-function Get-WecomMessages([long]$after = 0) {
-    try {
-        # 编码铁律:PS 5.1 Invoke-RestMethod 缺 charset 时按 Latin-1 解码会乱码(中文内容),
-        # 必须 HttpWebRequest + StreamReader(UTF8) 显式解码(同 lib\llm.ps1)
-        $req = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create(("http://127.0.0.1:19886/messages?after=" + $after))
-        $req.Method = "GET"
-        $req.Timeout = 5000
-        $resp = $req.GetResponse()
-        $reader = New-Object System.IO.StreamReader($resp.GetResponseStream(), [System.Text.Encoding]::UTF8)
-        $json = $reader.ReadToEnd()
-        $reader.Dispose()
-        $resp.Dispose()
-        $r = $json | ConvertFrom-Json
-        # PS 5.1 坑:空数组 return 会被展开为无输出(调用方得 $null),逗号前缀强制按数组返回
-        return ,@($r.items)
-    } catch { return $null }
-}

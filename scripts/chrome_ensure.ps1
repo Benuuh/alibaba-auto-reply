@@ -21,6 +21,7 @@ $profileDir = Get-SkillPath "profile"
 if (-not $profileDir) { $profileDir = Join-Path (Split-Path $LogDir -Parent) "chrome-profile" }
 $chromePath = Get-SkillPath "chrome"
 if (-not $chromePath) { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
+$cdpPort = Get-CdpPort
 
 function Write-Log([string]$msg) { Write-SkillLog $msg $logFile }
 
@@ -44,7 +45,7 @@ if (-not (Test-CdpReady)) {
     Start-Sleep -Seconds 3
     if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
     Start-Process -FilePath $chromePath -ArgumentList `
-        "--remote-debugging-port=9222", "--user-data-dir=$profileDir", `
+        "--remote-debugging-port=$cdpPort", "--user-data-dir=$profileDir", `
         "--no-first-run", "--no-default-browser-check", `
         "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", `
         "about:blank"

@@ -19,6 +19,13 @@ function Get-SkillConfig {
     return $script:__skillConfig
 }
 
+# 取 CDP 调试端口:config.json 有值用配置值,否则默认 9222
+function Get-CdpPort {
+    $cfg = Get-SkillConfig
+    if ($cfg.cdp_port) { return [int]$cfg.cdp_port }
+    return 9222
+}
+
 # 取某个具名路径：config.json 有值用配置值，否则按 deploy_root 推导默认值
 function Get-SkillPath([string]$name) {
     $cfg = Get-SkillConfig

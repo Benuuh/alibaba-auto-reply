@@ -2,11 +2,11 @@
     [Parameter(Mandatory=$true)][string]$Action,
     [string]$Url = "",
     [string]$Script = "",
-    [string]$ScriptB64 = "",
-    [string]$File = ""
+    [string]$ScriptB64 = ""
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "config.ps1")
 
 function Send-Json([System.Net.WebSockets.ClientWebSocket]$ws, [string]$json) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
@@ -34,7 +34,8 @@ function Cmd([System.Net.WebSockets.ClientWebSocket]$ws, [int]$id, [string]$meth
 }
 
 function Get-Page {
-    $tabs = (Invoke-WebRequest -Uri "http://localhost:9222/json" -UseBasicParsing).Content | ConvertFrom-Json
+    $port = Get-CdpPort
+    $tabs = (Invoke-WebRequest -Uri "http://127.0.0.1:$port/json" -UseBasicParsing).Content | ConvertFrom-Json
     return ($tabs | Where-Object { $_.type -eq "page" } | Select-Object -First 1)
 }
 
@@ -48,11 +49,6 @@ function Connect-Page([string]$wsUrl) {
 
 try {
 switch ($Action) {
-    "newtab" {
-        $r = Invoke-WebRequest -Uri "http://localhost:9222/json/new?about:blank" -Method Put -UseBasicParsing
-        $tab = $r.Content | ConvertFrom-Json
-        Write-Output $tab.webSocketDebuggerUrl
-    }
     "navigate" {
         $page = Get-Page
         $ws = Connect-Page $page.webSocketDebuggerUrl
@@ -84,29 +80,6 @@ switch ($Action) {
             Write-Output $resp.result.result.value
         } else {
             Write-Output "RESULT TYPE: $($resp.result.result.type)"
-        }
-        $ws.Dispose()
-    }
-    "type" {
-        $page = Get-Page
-        $ws = Connect-Page $page.webSocketDebuggerUrl
-        $escSel = $Script.Replace('\','\\').Replace('"','\"').Replace("`n","\n")
-        $focusJs = '{"expression":"var el=document.querySelector(\\"' + $escSel + '\\");if(el){el.focus();el.select();\\"OK\\"}else null","returnByValue":true}'
-        Cmd $ws 1 "Runtime.evaluate" $focusJs | Out-Null
-        $escText = $Url.Replace('\','\\').Replace('"','\"')
-        $resp = Cmd $ws 2 "Input.insertText" ('{"text":"' + $escText + '"}')
-        if ($resp.error) { Write-Output "TYPE ERROR: $($resp.error.message)" }
-        else { Write-Output "TYPED: $Url" }
-        $ws.Dispose()
-    }
-    "screenshot" {
-        $page = Get-Page
-        $ws = Connect-Page $page.webSocketDebuggerUrl
-        $resp = Cmd $ws 1 "Page.captureScreenshot" '{"format":"png"}'
-        if ($resp.error) { Write-Output "SHOT ERROR: $($resp.error.message)" }
-        else {
-            [System.IO.File]::WriteAllBytes($File, [Convert]::FromBase64String($resp.result.data))
-            Write-Output "Saved: $File"
         }
         $ws.Dispose()
     }

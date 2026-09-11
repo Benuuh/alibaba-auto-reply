@@ -11,7 +11,8 @@ function Invoke-CdpEval([string]$js) {
 
 function Test-CdpReady {
     try {
-        $r = Invoke-WebRequest -Uri "http://localhost:9222/json/version" -TimeoutSec 3 -UseBasicParsing
+        $port = Get-CdpPort
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/json/version" -TimeoutSec 3 -UseBasicParsing
         return ($r.StatusCode -eq 200)
     } catch { return $false }
 }

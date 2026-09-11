@@ -72,8 +72,8 @@ function Get-PromisedFields([string[]]$context) {
     return $promised
 }
 
-# 内置回复引擎：根据完整对话上下文 + 语料库生成回复。不依赖任何外部 LLM 会话。
-function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [string[]]$context) {
+# 构造回复上下文:一次性计算 Generate-Reply 各意图族共享的派生状态(显式返回,避免隐式作用域)
+function New-ReplyContext([object]$rules, [string]$convoName, [string]$latest, [string[]]$context) {
     $vars = @{ name = $convoName; brand_sales = "" }
     if ($rules -and $rules.brand) { $vars.brand_sales = $rules.brand.sales_contact }
     $templates = @{}
@@ -113,6 +113,29 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
         pt = "Sem pressa - quando tiver os dados, me envie e preparo sua cotação."
         fr = "Pas de presse - dès que vous avez les informations, envoyez-les-moi et je prépare votre devis."
     }
+
+    return @{
+        vars = $vars
+        templates = $templates
+        dataCollect = $dataCollect
+        latestLower = $latestLower
+        ctxAll = $ctxAll
+        ctxLower = $ctxLower
+        lang = $lang
+        missing = $missing
+        hasAddr = $hasAddr
+        hasWeight = $hasWeight
+        meAskCount = $meAskCount
+        waitTone = $waitTone
+        context = $context
+    }
+}
+
+# 意图族 A(寒暄/情绪/终止):命中返回文本,未命中返回 $null
+function Resolve-IntentEarly($c) {
+    $latestLower = $c.latestLower
+    $lang = $c.lang
+    $vars = $c.vars
 
     # A0. 买家指责"你们不读/看不懂/没看" → 先道歉并确认信息已收到，不追问（只做推进）
     $cantReadPattern = '(vous (ne )?savez pas lire|vous lisez pas|vous n.avez pas lu|vous ne lisez|can.t you read|dont you read|don.t you read|you (don.t|dont) (even )?(read|listen|understand)|you are not reading|you.re not reading|you arent reading|no entiende|no lees|no entende|você não lê|nao le|no leen|no escuchan|não leram|nao leram|没有看|看不懂|根本不会看|根本不会读|不读|没看|vous savez pas compter|vous ne savez pas compter|dont you see|can.t you see|didnt you read|didn.t you read|did you not read)'
@@ -189,6 +212,18 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
         }
         return $b[$lang]
     }
+    return $null
+}
+
+# 意图族 B(业务咨询):联系方式/计费/流程/时效/电池/砍价/比价/供应商。命中返回文本,未命中返回 $null
+function Resolve-IntentInfo($c) {
+    $latestLower = $c.latestLower
+    $ctxAll = $c.ctxAll
+    $ctxLower = $c.ctxLower
+    $lang = $c.lang
+    $vars = $c.vars
+    $templates = $c.templates
+    $dataCollect = $c.dataCollect
 
     # 1. 客户询问我方联系方式 → 提供（被问到才给）
     if ($latestLower -match 'contact|whatsapp|wechat|phone|number|email|reach you|how to contact|联系方式|telefono|whats') {
@@ -249,6 +284,23 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
         $tpl = $templates.follow_up_details
         if ($tpl) { return (Resolve-Template $tpl $vars) }
     }
+    return $null
+}
+
+# 意图族 C(数据/售后):货物信息/地址/索赔/查件/询价/兜底。始终返回文本
+function Resolve-IntentData($c) {
+    $latestLower = $c.latestLower
+    $ctxLower = $c.ctxLower
+    $lang = $c.lang
+    $vars = $c.vars
+    $templates = $c.templates
+    $missing = $c.missing
+    $hasAddr = $c.hasAddr
+    $hasWeight = $c.hasWeight
+    $meAskCount = $c.meAskCount
+    $waitTone = $c.waitTone
+    $context = $c.context
+
     # 10. 买家主动提供货物信息（含数字/尺寸/地址等）→ 确认并只问缺失项
     if (($ctxLower -match '\d+\s*(kg|kgs|kilo|cm|mm|m\b)') -or ($ctxLower -match '\d+\s*[x×*]\s*\d+') -or ($ctxLower -match 'address|addr|calle|rua|street|endere|direcci|地址|cep|postal')) {
         if ($missing.Count -eq 0) {
@@ -324,6 +376,16 @@ function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [st
         if ($tpl) { return (Resolve-Template $tpl $vars) }
     }
     return "Thanks for your message! Could you share the goods details (weight, dimensions L*W*H, reference images) and the recipient's address? Then I can arrange everything for you."
+}
+
+# 内置回复引擎：根据完整对话上下文 + 语料库生成回复。不依赖任何外部 LLM 会话。
+function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [string[]]$context) {
+    $c = New-ReplyContext $rules $convoName $latest $context
+    $r = Resolve-IntentEarly $c
+    if ($null -ne $r) { return $r }
+    $r = Resolve-IntentInfo $c
+    if ($null -ne $r) { return $r }
+    return (Resolve-IntentData $c)
 }
 
 # state 键标准化：去空白 + 小写，避免大小写/空格差异导致 dedup 失效

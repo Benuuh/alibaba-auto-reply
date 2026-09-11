@@ -459,7 +459,371 @@ function Invoke-PageReload([string]$reason) {
     $script:emptyStreak = 0
 }
 
-function Start-Monitor {
+# P2.4 容量治理：state 记录超阈值(200)且买家 30 天无快照活动 → 清理陈旧记录（单次遍历 msgs 快照建索引）
+function Cleanup-StaleState {
+    try {
+        $st = Get-RepliedState
+        if (-not $st -or -not $st.replied) { return }
+        $names = @($st.replied.PSObject.Properties.Name)
+        if ($names.Count -lt 200) { return }
+        $cutoff = (Get-Date).AddDays(-30)
+        # 单次遍历:一次扫描全部快照首行,建立 买家名 -> 最新快照时间 索引(原实现按买家重复扫描目录)
+        $latestMap = @{}
+        Get-ChildItem (Join-Path $script:dataDir "msgs_*.txt") -ErrorAction SilentlyContinue | ForEach-Object {
+            $first = Get-Content $_.FullName -Encoding UTF8 -TotalCount 1 -ErrorAction SilentlyContinue
+            if ($first -and $first.StartsWith("# BUYER: ")) {
+                $bn = $first.Substring(9)
+                if (-not $latestMap.ContainsKey($bn) -or $latestMap[$bn] -lt $_.LastWriteTime) { $latestMap[$bn] = $_.LastWriteTime }
+            }
+        }
+        $removed = @()
+        foreach ($n in $names) {
+            $latest = $null
+            if ($latestMap.ContainsKey($n)) { $latest = $latestMap[$n] }
+            if (-not $latest -or $latest -lt $cutoff) {
+                $st.replied.PSObject.Properties.Remove($n)
+                $removed += $n
+            }
+        }
+        if ($removed.Count -gt 0) {
+            Set-RepliedState $st
+            Write-Log "STATE-CLEANUP: removed $($removed.Count) stale entries (total was $($names.Count))"
+        }
+    } catch {
+        Write-Log "STATE-CLEANUP: error $($_.Exception.Message)"
+    }
+}
+
+# 会话处理:处理待办板块中的单个会话(提醒/白名单/冷却/打开/去重/生成/双检/发送/状态/提醒推送)。
+# $ctx 为可写上下文引用: state/openCooldown/skipCooldown/noReplyPreview/sendFailCount/failAlertAt/lastActivity
+function Invoke-ConvoItem($ctx, $item) {
+    $key = $item.name.Trim()
+    $skey = Get-StateKey $key
+    Write-Log "PROCESS convo from pending-list: $($key) | $($item.preview)"
+    # A1: new inquiry alert (24h throttle)
+    if (-not $ctx.state -or -not $ctx.state.replied -or ($ctx.state.replied.PSObject.Properties.Name -notcontains $skey)) {
+        Send-NewInquiryAlert $key $item.preview
+    }
+    # A5 人工接管白名单(NO-REPLY):名单买家不自动回复(LLM/规则/图片模板/QUICK 全跳过,不发送);
+    # 只读留痕(买家档案+msgs 快照)且不写 replied 去重状态 → 移出名单后自动恢复正常;
+    # 新消息仍由上方 A1 提醒主人(24h 节流);预览不变时后续轮免打扰跳过
+    if (Test-NoReplyBuyer $key) {
+        if ($ctx.noReplyPreview.ContainsKey($key) -and $ctx.noReplyPreview[$key] -eq $item.preview) {
+            Write-Log "TEMP-SKIP $($key): manual-override whitelist (preview unchanged, no auto reply)"
+            return
+        }
+        $nrConvo = Open-ConvoAndGetMessages $key
+        if ($nrConvo -is [string]) {
+            Write-Log "NO-REPLY-SNAP-FAIL $($key): $nrConvo"
+            return
+        }
+        if ($nrConvo.profile) { Save-BuyerProfile $skey $nrConvo.profile }
+        $nrLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
+        Add-Content -Path $nrLog -Value ("# BUYER: " + $key) -Encoding UTF8
+        Add-Content -Path $nrLog -Value $nrConvo.msgs -Encoding UTF8
+        $ctx.noReplyPreview[$key] = $item.preview
+        Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
+        return
+    }
+    # dedup 跳过会话进冷却（3→6→12→15 分钟递增），预览变化（买家新消息）立即打破冷却
+    if ($ctx.skipCooldown.ContainsKey($key)) {
+        $co = $ctx.skipCooldown[$key]
+        $previewChanged = $co.preview -and ($co.preview -ne $item.preview)
+        if ($previewChanged) {
+            Write-Log "BREAK $($key): preview changed, cooldown lifted"
+            $ctx.skipCooldown.Remove($key)
+        } else {
+            $skipMins = [int]((Get-Date) - $co.time).TotalMinutes
+            # 冷却随重复命中次数递增（3→6→12→15 分钟封顶）：
+            # 已回复且无新消息的会话不必每 3 分钟重新打开一次，减少页面负担
+            $coolMin = [Math]::Min(3 * [Math]::Pow(2, ([int]$co.count - 1)), 15)
+            if ($skipMins -lt $coolMin) {
+                Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m"
+                return
+            } else {
+                $ctx.skipCooldown.Remove($key)
+            }
+        }
+    }
+    # 已打开失败的会话缓存在 blacklist 中，3 分钟内不重复尝试
+    if ($ctx.openCooldown.ContainsKey($key)) {
+        $skipMins = [int]((Get-Date) - $ctx.openCooldown[$key]).TotalMinutes
+        if ($skipMins -lt 3) {
+            Write-Log "TEMP-SKIP $($key): open failed recently (cooldown ${skipMins}m)"
+            return
+        } else {
+            $ctx.openCooldown.Remove($key)
+        }
+    }
+    # P2.1a:打开+校验+抓消息合并为一次 eval(原 Open-Convo + 轮询 + Get-AllMessages 共 5 次调用)
+    $convo = Open-ConvoAndGetMessages $item.name
+    if ($convo -is [string]) {
+        # 打开失败/超时:切回待回复标签重试一次
+        Write-Log "RETRY-OPEN $($key): $convo - switching to pending tab and retry"
+        Switch-ToPendingTab | Out-Null
+        Start-Sleep -Seconds 3
+        $convo = Open-ConvoAndGetMessages $item.name
+    }
+    if ($convo -is [string]) {
+        $listCount = Invoke-CdpEval "document.querySelectorAll('.contact-item-container').length"
+        Write-Log "SKIP $($key): cannot open convo ($convo, list items=$listCount)"
+        $ctx.openCooldown[$key] = Get-Date
+        return
+    }
+    $ctx.openCooldown.Remove($key)
+    $msgs = $convo.msgs
+    # P3.4 保存买家档案(国家/注册时间等,PII 仅存本机 data\buyers\)
+    if ($convo.profile) { Save-BuyerProfile $skey $convo.profile }
+    $msgLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
+    Add-Content -Path $msgLog -Value ("# BUYER: " + $key) -Encoding UTF8
+    Add-Content -Path $msgLog -Value $msgs -Encoding UTF8
+    $lines = @($msgs -split "`n") | Where-Object { $_ -notmatch '在Alibaba|平台聊天和交易|由阿里翻译提供|翻译提示|已读$|反馈$|举报$|自动接待' }
+    $buyerMsgs = @($lines | Where-Object { $_ -match '^\[BUYER\]' })
+    if ($buyerMsgs.Count -gt 0) {
+        $latest = ($buyerMsgs[0] -replace '^\[BUYER\] ','')
+        if ($latest.Trim().Length -eq 0) {
+            Write-Log "SKIP $($key): empty latest message"
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = 1 }
+            return
+        }
+        # 解析消息时间戳（@@TS），并剥掉供 LLM/规则引擎使用；时间戳用于 dedup 区分
+        # "买家重复发送同内容消息"（内容 hash 相同但时间戳不同 → 视为新消息需回复）
+        $ts = ''
+        if ($latest -match '@@TS:(.+)$') { $ts = $Matches[1].Trim() }
+        $latestClean = $latest -replace '@@TS:.*?$','' -replace '\s+$',''
+        $lines = $lines | ForEach-Object { $_ -replace '@@TS:.*?$','' }
+        Write-Log "Latest buyer msg: $latestClean"
+        $hText = Get-StableHash $latestClean
+        # 新格式：文本 hash + 时间戳；无时间戳时回退纯文本 hash（兼容旧 state）
+        $hash = if ($ts) { "$hText|$ts" } else { $hText }
+        $already = $false
+        if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
+            $saved = $ctx.state.replied.$skey
+            if ($ts) {
+                # 带时间戳的新格式：完全匹配才算已回复；旧格式记录视为未回复并升级
+                if ($saved -eq $hash) { $already = $true }
+            } else {
+                if ($saved -eq $hText) { $already = $true }
+            }
+        }
+        if ($already) {
+            Write-Log "SKIP $($key): already replied (dedup)"
+            $prev = $null
+            if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
+            $count = 1
+            if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = $count }
+        } else {
+            $rules = Get-Rules
+            $reply = $null
+            $src = 'RULE'
+            # 1) 所有非图片消息优先走 LLM（含简短确认，LLM 已提速至 ~1.5s，回复更自然）
+            if ($latestClean -ne '[IMG]') {
+                $reply = Generate-Reply-LLM $rules $key $latestClean $lines
+                if ($reply) { Write-Log "Reply source: LLM"; $src = 'LLM' }
+            }
+            # 2) LLM 未配置/失败/超时 → 图片消息 → 多语言引导话术
+            if ($latestClean -eq '[IMG]') {
+                $imgReply = @{
+                    en = "Thanks for the images! To give you an accurate quote, could you also share the goods details in text - total weight (kg), packaging dimensions (L*W*H) and the destination address?"
+                    es = "¡Gracias por las imágenes! Para darle una cotización precisa, ¿podría compartir también el peso total (kg), las dimensiones del embalaje (L*A*H) y la dirección de destino?"
+                    pt = "Obrigado pelas imagens! Para dar uma cotação precisa, poderia compartilhar também o peso total (kg), as dimensões da embalagem (C*L*A) e o endereço de destino?"
+                    fr = "Merci pour les images ! Pour un devis précis, pourriez-vous aussi partager le poids total (kg), les dimensions de l'emballage (L*l*H) et l'adresse de destination ?"
+                }
+                $imgLang = Get-ReplyLang
+                $reply = $imgReply[$imgLang]
+                Write-Log "Reply source: IMG_TEMPLATE"
+            }
+            # 3) LLM 失败时：简短确认走规则引擎 QUICK 快回，其余走完整规则引擎
+            if (-not $reply) {
+                $latestLower = $latestClean.ToLower()
+                $quick = $latestLower -match '^(ok|okay|okey|yes|yeah|yep|yup|sure|fine|perfect|great|nice|good|thanks|thank you|thx|gracias|obrigad|merci|no|non|não|nao)\b' -and $latestLower.Length -lt 30
+                $reply = Generate-Reply $rules $key $latestClean $lines
+                $srcLabel = 'RULE_ENGINE'
+                if ($quick) { $srcLabel = 'QUICK' }
+                Write-Log "Reply source: $srcLabel (LLM failback)"
+            }
+            if ($reply -and $reply.Trim().Length -gt 0) {
+                # === 发送前禁词拦截（spec 禁词拦截 Phase 4）：LLM/引擎双路径均过检；命中→LLM 重写一次→仍命中或引擎命中→安全兜底句 ===
+                $banList = $null
+                if ($rules -and $rules.banned_phrases) { $banList = @($rules.banned_phrases) }
+                $banHit = Test-BannedText $reply $banList
+                if ($banHit) {
+                    $sum = $reply.Trim()
+                    if ($sum.Length -gt 60) { $sum = $sum.Substring(0, 60) + "..." }
+                    if ($src -eq 'LLM') {
+                        Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($banHit) action=REWRITE summary=$($sum)"
+                        $retry = Generate-Reply-LLM $rules $key $latestClean $lines -BanRetry
+                        if ($retry -and $retry.Trim().Length -gt 0) {
+                            $retryHit = Test-BannedText $retry $banList
+                            if ($retryHit) {
+                                $sum2 = $retry.Trim()
+                                if ($sum2.Length -gt 60) { $sum2 = $sum2.Substring(0, 60) + "..." }
+                                Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($retryHit) action=FALLBACK summary=$($sum2)"
+                                $reply = $script:banSafeFallback
+                            } else { $reply = $retry }
+                        } else {
+                            Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($banHit) action=FALLBACK summary="
+                            $reply = $script:banSafeFallback
+                        }
+                    } else {
+                        Write-Log "BANLIST-BLOCK $($key) src=RULE word=$($banHit) action=FALLBACK summary=$($sum)"
+                        $reply = $script:banSafeFallback
+                    }
+                }
+                # === 发送前责任承诺双检（2026-09-10 事故整改）：句级检测责任/费用承诺；命中→LLM 重写一次→仍命中→安全兜底句（与 BANLIST 同构，日志前缀 COMMIT-BLOCK） ===
+                $finHit = Test-FinancialCommitment $reply
+                if ($finHit) {
+                    $sum3 = $reply.Trim()
+                    if ($sum3.Length -gt 60) { $sum3 = $sum3.Substring(0, 60) + "..." }
+                    if ($src -eq 'LLM') {
+                        Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=REWRITE summary=$($sum3)"
+                        $retry2 = Generate-Reply-LLM $rules $key $latestClean $lines -CommitRetry
+                        if ($retry2 -and $retry2.Trim().Length -gt 0) {
+                            $retryHit2 = Test-FinancialCommitment $retry2
+                            if ($retryHit2) {
+                                $sum4 = $retry2.Trim()
+                                if ($sum4.Length -gt 60) { $sum4 = $sum4.Substring(0, 60) + "..." }
+                                Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($retryHit2) action=FALLBACK summary=$($sum4)"
+                                $reply = $script:banSafeFallback
+                            } else { $reply = $retry2 }
+                        } else {
+                            Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=FALLBACK summary="
+                            $reply = $script:banSafeFallback
+                        }
+                    } else {
+                        Write-Log "COMMIT-BLOCK $($key) src=RULE pat=$($finHit) action=FALLBACK summary=$($sum3)"
+                        $reply = $script:banSafeFallback
+                    }
+                }
+                $sendRes = Send-OneTalkMessage $key $reply
+                Write-Log "REPLIED to $($key): $sendRes"
+                Write-Log "Reply text: $($reply)"
+                # 仅发送成功才记录去重；发送失败（ABORT/未发出）不记录，
+                # 否则会话会永久卡在待回复板块且永不重试
+                if ($sendRes -match 'SENT_OK') {
+                    # V12:统一键赋值。注意:首次创建时 replied 是 @{} (IDictionary),
+                    # PSObject.Properties 会枚举出 CLR 内部属性(Count/Keys/Values/IsFixedSize等)污染 state.json,
+                    # 必须按类型分流:IDictionary 用 Keys,反序列化的 PSCustomObject 用 Properties
+                    if (-not $ctx.state -or -not $ctx.state.replied) { $ctx.state = [pscustomobject]@{ replied = @{} } }
+                    $rep = @{}
+                    $__src = $ctx.state.replied
+                    if ($__src -is [System.Collections.IDictionary]) {
+                        foreach ($__k in $__src.Keys) { $rep[$__k] = $__src[$__k] }
+                    } else {
+                        foreach ($__p in $__src.PSObject.Properties) { $rep[$__p.Name] = $__p.Value }
+                    }
+                    $rep[$skey] = $hash
+                    $ctx.state = [pscustomobject]@{ replied = $rep }
+                    Set-RepliedState $ctx.state
+                    # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
+                    try {
+                        $gst = Get-GoodsDataStatus $key $script:dataDir
+                        if ($gst -and $gst.weight -and $gst.dims -and $gst.addr) {
+                            $n = Send-QuoteReminders -OnlyBuyer $key -logFile $logFile
+                            if ($n -gt 0) { Write-Log "QUOTE-REMIND: pushed for $key" }
+                        }
+                    } catch {
+                        Write-Log "QUOTE-REMIND-ERR: $($_.Exception.Message)"
+                    }
+                } else {
+                    # A4: count consecutive send failures, alert after 3 (30m throttle per buyer)
+                    $failCount = 0
+                    if ($ctx.sendFailCount.ContainsKey($key)) { $failCount = $ctx.sendFailCount[$key] }
+                    $failCount++
+                    $ctx.sendFailCount[$key] = $failCount
+                    # 首次失败累计到 3 次立即告警;再次告警需距上次告警超过 30 分钟(节流)
+                    $lastAlert = 0
+                    if ($ctx.failAlertAt.ContainsKey($key)) { $lastAlert = [int]((Get-Date) - $ctx.failAlertAt[$key]).TotalMinutes }
+                    if ($failCount -ge 3 -and (-not $ctx.failAlertAt.ContainsKey($key) -or $lastAlert -gt 30)) {
+                        $ctx.failAlertAt[$key] = Get-Date
+                        $ctx.sendFailCount[$key] = 0
+                        $af = Send-WecomMessage ("[ALERT] send failed x" + $failCount + " for " + $key + ": " + $sendRes)
+                        Write-Log "FAIL-ALERT: $key -> $af (streak=$failCount)"
+                    }
+                    Write-Log "RETRY-QUEUE $($key): send failed ($sendRes), will retry after cooldown"
+                    $ctx.openCooldown[$key] = Get-Date
+                }
+            } else {
+                Write-Log "SKIP $($key): empty reply generated"
+            }
+        }
+    } else {
+        Write-Log "SKIP $($key): no buyer msgs found"
+    }
+}
+
+# 扫描轮:抓列表 → 逐会话处理 → CDP 错误识别/自愈 → 按需 reload 决策。
+# 返回 @{ Action = 'LockBusy' | 'Reloaded' | 'Normal' },调用方据此决定 sleep/continue
+function Invoke-ScanRound($ctx) {
+    # P2.3 写互斥:与其他写者(如 nudge)互斥,避免并发操作同一页面。拿不到锁则本轮跳过。
+    $lockHeld = Get-AppLock 'onetalk-write' 0
+    if (-not $lockHeld) {
+        Write-Log "LOCK-BUSY: onetalk-write held by another process, skipping round"
+        return @{ Action = 'LockBusy' }
+    }
+    $snapRaw = ''
+    $snap = $null
+    try {
+        # 待回复板块 = 待办队列：板块里出现的每个会话都需要处理，回复后自动从板块消失。
+        $snapRaw = Get-Snapshot
+        if ($snapRaw -match '^\[') { $snap = $snapRaw | ConvertFrom-Json }
+        if ($snap -and $snap.Count -gt 0) {
+            $script:emptyStreak = 0
+            $ctx.lastActivity = Get-Date
+            $ctx.state = Get-RepliedState
+            foreach ($item in $snap) {
+                if (-not $item.name) { continue }
+                Invoke-ConvoItem $ctx $item
+            }
+        }
+        Write-Log "Scan cycle done"
+    } catch {
+        Write-Log "Monitor error: $($_.Exception.Message)"
+        # CDP/Chrome 不可达自愈：连续 3 次错误则重启 Chrome 并重新登录
+        Invoke-CdpSelfHeal | Out-Null
+    }
+    # 列表抓取失败（非合法 JSON / 页面未就绪）时连续 3 次强制刷新重连；
+    # 列表为空数组 [] 是正常"无待办"状态，不刷新避免打断连接
+    if ($null -eq $snap -and $snapRaw -notmatch '^\[') {
+        # CDP 掉线识别(修复盲区):Cdp-Eval 把子进程错误当普通输出返回,
+        # 此前 CDP 掉线只走下方"重载循环"而永不触发 chrome_ensure 自愈。
+        # 现在检测到 CDP 错误标记 → 计入 cdpFailStreak,连续 3 次自动自愈;
+        # CDP 已断时重载请求必然也失败,跳过重载直接等待下一轮
+        if ($snapRaw -match 'CDP ERROR|WS CONNECT TIMEOUT|WS RECV TIMEOUT|无法连接到远程服务器|CMD ERROR') {
+            $cdpStreak = $script:cdpFailStreak + 1
+            Write-Log "CDP error detected ($cdpStreak/3): $($snapRaw.Substring(0, [Math]::Min(90, $snapRaw.Length)))"
+            if (Invoke-CdpSelfHeal) { $script:emptyStreak = 0 }
+        } else {
+            $script:emptyStreak++
+            if ($script:emptyStreak -ge 3) {
+                $script:emptyStreak = 0
+                $re = Invoke-CdpEval "location.reload(); 'RELOADED'"
+                Write-Log "List fetch failed x3 - forced page reload ($re), waiting for reconnection"
+                Start-Sleep -Seconds 12
+            }
+        }
+    } else {
+        # 本轮列表抓取正常 → 失败计数清零
+        $script:emptyStreak = 0
+        $script:cdpFailStreak = 0
+    }
+    # P2.2 按需 reload(替代原每 2 分钟无条件刷新):空闲且距上次活动超过阈值才刷新;忙时超过 30 分钟兜底
+    $minsSinceReload = [int]((Get-Date) - $script:lastReload).TotalMinutes
+    $minsSinceActivity = [int]((Get-Date) - $ctx.lastActivity).TotalMinutes
+    if ($minsSinceReload -ge $script:reloadIdleMin -and $snap.Count -eq 0 -and $minsSinceActivity -ge $script:reloadIdleMin) {
+        Invoke-PageReload "Scheduled page reload (${minsSinceReload}m since last, idle ${minsSinceActivity}m)"
+        return @{ Action = 'Reloaded' }
+    } elseif ($minsSinceReload -ge 30) {
+        # 长时间无法空闲（一直在处理会话），强制刷新防止列表失活
+        Invoke-PageReload "Forced page reload (${minsSinceReload}m, busy)"
+        return @{ Action = 'Reloaded' }
+    }
+    return @{ Action = 'Normal' }
+}
+
+# 启动初始化:单实例保护 + PID 文件 + 退出清理 + 迁移/清理 + 脚本级运行态
+function Initialize-MonitorRuntime {
     # 单实例保护：PID 文件记录当前实例，重复启动时直接退出
     $pidFile = Join-Path $LogDir "monitor.pid"
     if (Test-Path $pidFile) {
@@ -479,44 +843,11 @@ function Start-Monitor {
             Remove-Item -Path (Join-Path $LogDir "monitor.pid") -Force -ErrorAction SilentlyContinue
         } | Out-Null
     } catch {}
-    # P2.4 容量治理：state 记录超阈值(200)且买家 30 天无快照活动 → 清理陈旧记录
-    function Cleanup-StaleState {
-        try {
-            $st = Get-RepliedState
-            if (-not $st -or -not $st.replied) { return }
-            $names = @($st.replied.PSObject.Properties.Name)
-            if ($names.Count -lt 200) { return }
-            $cutoff = (Get-Date).AddDays(-30)
-            $removed = @()
-            foreach ($n in $names) {
-                $latest = $null
-                Get-ChildItem (Join-Path $script:dataDir "msgs_*.txt") -ErrorAction SilentlyContinue | Where-Object {
-                    (Get-Content $_.FullName -Encoding UTF8 -TotalCount 1 -ErrorAction SilentlyContinue) -eq ("# BUYER: " + $n)
-                } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object { $latest = $_.LastWriteTime }
-                if (-not $latest -or $latest -lt $cutoff) {
-                    $st.replied.PSObject.Properties.Remove($n)
-                    $removed += $n
-                }
-            }
-            if ($removed.Count -gt 0) {
-                Set-RepliedState $st
-                Write-Log "STATE-CLEANUP: removed $($removed.Count) stale entries (total was $($names.Count))"
-            }
-        } catch {
-            Write-Log "STATE-CLEANUP: error $($_.Exception.Message)"
-        }
-    }
-
     Invoke-LayoutMigration
     Write-Log "=== Monitor started (PID $PID, auto-reply engine built-in) ==="
     Cleanup-LegacyQueues
     Cleanup-StaleState
     $script:emptyStreak = 0
-    $script:sendFailCount = @{}
-    $script:failAlertAt = @{}
-    $openCooldown = @{}
-    $skipCooldown = @{}
-    $script:noReplyPreview = @{}
     # P2.2 reload 按需化:OneTalk 长连接会失效,但无需每 2 分钟无条件刷新。
     # 仅当 (a)列表抓取失败连续 2 次(emptyStreak, 上方处理), 或 (b)空闲超过 reload_idle_min(默认10分钟),
     # 或 (c)持续忙处理超过 30 分钟 时才 reload。列表有新会话/预览变化视为活跃,重置 idle 计时。
@@ -524,324 +855,29 @@ function Start-Monitor {
     if ($script:skillCfg -and $script:skillCfg.reload_idle_min) { $script:reloadIdleMin = [int]$script:skillCfg.reload_idle_min }
     if ($script:reloadIdleMin -lt 3) { $script:reloadIdleMin = 3 }
     $script:lastReload = Get-Date
-    $lastActivity = Get-Date
     # CDP 连续失败计数：达到阈值触发 Chrome 自愈（重启+重登）
     $script:cdpFailStreak = 0
+}
+
+function Start-Monitor {
+    Initialize-MonitorRuntime
+    # 运行态上下文(显式传递,避免隐式作用域):state 去重 + 各类冷却/节流表 + 最近活动时间
+    $ctx = @{
+        state = $null
+        openCooldown = @{}
+        skipCooldown = @{}
+        noReplyPreview = @{}
+        sendFailCount = @{}
+        failAlertAt = @{}
+        lastActivity = Get-Date
+    }
     while ($true) {
-        # P2.3 写互斥:与其他写者(如 nudge)互斥,避免并发操作同一页面。拿不到锁则本轮跳过。
-        $lockHeld = Get-AppLock 'onetalk-write' 0
-        if (-not $lockHeld) {
-            Write-Log "LOCK-BUSY: onetalk-write held by another process, skipping round"
+        $r = Invoke-ScanRound $ctx
+        if ($r.Action -eq 'LockBusy') {
             Start-Sleep -Seconds 5
             continue
         }
-        try {
-            # 待回复板块 = 待办队列：板块里出现的每个会话都需要处理，回复后自动从板块消失。
-            $snapRaw = Get-Snapshot
-            $snap = $null
-            if ($snapRaw -match '^\[') { $snap = $snapRaw | ConvertFrom-Json }
-            if ($snap -and $snap.Count -gt 0) {
-                $script:emptyStreak = 0
-                $lastActivity = Get-Date
-                $state = Get-RepliedState
-                foreach ($item in $snap) {
-                    if (-not $item.name) { continue }
-                    $key = $item.name.Trim()
-                    $skey = Get-StateKey $key
-                    Write-Log "PROCESS convo from pending-list: $($key) | $($item.preview)"
-                    # A1: new inquiry alert (24h throttle)
-                    if (-not $state -or -not $state.replied -or ($state.replied.PSObject.Properties.Name -notcontains $skey)) {
-                        Send-NewInquiryAlert $key $item.preview
-                    }
-                    # A5 人工接管白名单(NO-REPLY):名单买家不自动回复(LLM/规则/图片模板/QUICK 全跳过,不发送);
-                    # 只读留痕(买家档案+msgs 快照)且不写 replied 去重状态 → 移出名单后自动恢复正常;
-                    # 新消息仍由上方 A1 提醒主人(24h 节流);预览不变时后续轮免打扰跳过
-                    if (Test-NoReplyBuyer $key) {
-                        if ($script:noReplyPreview.ContainsKey($key) -and $script:noReplyPreview[$key] -eq $item.preview) {
-                            Write-Log "TEMP-SKIP $($key): manual-override whitelist (preview unchanged, no auto reply)"
-                            continue
-                        }
-                        $nrConvo = Open-ConvoAndGetMessages $key
-                        if ($nrConvo -is [string]) {
-                            Write-Log "NO-REPLY-SNAP-FAIL $($key): $nrConvo"
-                            continue
-                        }
-                        if ($nrConvo.profile) { Save-BuyerProfile $skey $nrConvo.profile }
-                        $nrLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
-                        Add-Content -Path $nrLog -Value ("# BUYER: " + $key) -Encoding UTF8
-                        Add-Content -Path $nrLog -Value $nrConvo.msgs -Encoding UTF8
-                        $script:noReplyPreview[$key] = $item.preview
-                        Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
-                        continue
-                    }
-                    # dedup 跳过会话进冷却（3→6→12→15 分钟递增），预览变化（买家新消息）立即打破冷却
-                    if ($skipCooldown.ContainsKey($key)) {
-                        $co = $skipCooldown[$key]
-                        $previewChanged = $co.preview -and ($co.preview -ne $item.preview)
-                        if ($previewChanged) {
-                            Write-Log "BREAK $($key): preview changed, cooldown lifted"
-                            $skipCooldown.Remove($key)
-                        } else {
-                            $skipMins = [int]((Get-Date) - $co.time).TotalMinutes
-                            # 冷却随重复命中次数递增（3→6→12→15 分钟封顶）：
-                            # 已回复且无新消息的会话不必每 3 分钟重新打开一次，减少页面负担
-                            $coolMin = [Math]::Min(3 * [Math]::Pow(2, ([int]$co.count - 1)), 15)
-                            if ($skipMins -lt $coolMin) {
-                                Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m"
-                                continue
-                            } else {
-                                $skipCooldown.Remove($key)
-                            }
-                        }
-                    }
-                    # 已打开失败的会话缓存在 blacklist 中，3 分钟内不重复尝试
-                    if ($openCooldown.ContainsKey($key)) {
-                        $skipMins = [int]((Get-Date) - $openCooldown[$key]).TotalMinutes
-                        if ($skipMins -lt 3) {
-                            Write-Log "TEMP-SKIP $($key): open failed recently (cooldown ${skipMins}m)"
-                            continue
-                        } else {
-                            $openCooldown.Remove($key)
-                        }
-                    }
-                    # P2.1a:打开+校验+抓消息合并为一次 eval(原 Open-Convo + 轮询 + Get-AllMessages 共 5 次调用)
-                    $convo = Open-ConvoAndGetMessages $item.name
-                    if ($convo -is [string]) {
-                        # 打开失败/超时:切回待回复标签重试一次
-                        Write-Log "RETRY-OPEN $($key): $convo - switching to pending tab and retry"
-                        Switch-ToPendingTab | Out-Null
-                        Start-Sleep -Seconds 3
-                        $convo = Open-ConvoAndGetMessages $item.name
-                    }
-                    if ($convo -is [string]) {
-                        $listCount = Invoke-CdpEval "document.querySelectorAll('.contact-item-container').length"
-                        Write-Log "SKIP $($key): cannot open convo ($convo, list items=$listCount)"
-                        $openCooldown[$key] = Get-Date
-                        continue
-                    }
-                    $openCooldown.Remove($key)
-                    $msgs = $convo.msgs
-                    # P3.4 保存买家档案(国家/注册时间等,PII 仅存本机 data\buyers\)
-                    if ($convo.profile) { Save-BuyerProfile $skey $convo.profile }
-                    $msgLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
-                    Add-Content -Path $msgLog -Value ("# BUYER: " + $key) -Encoding UTF8
-                    Add-Content -Path $msgLog -Value $msgs -Encoding UTF8
-                    $lines = @($msgs -split "`n") | Where-Object { $_ -notmatch '在Alibaba|平台聊天和交易|由阿里翻译提供|翻译提示|已读$|反馈$|举报$|自动接待' }
-                    $buyerMsgs = @($lines | Where-Object { $_ -match '^\[BUYER\]' })
-                    if ($buyerMsgs.Count -gt 0) {
-                        $latest = ($buyerMsgs[0] -replace '^\[BUYER\] ','')
-                        if ($latest.Trim().Length -eq 0) {
-                            Write-Log "SKIP $($key): empty latest message"
-                            $skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = 1 }
-                            continue
-                        }
-                        # 解析消息时间戳（@@TS），并剥掉供 LLM/规则引擎使用；时间戳用于 dedup 区分
-                        # "买家重复发送同内容消息"（内容 hash 相同但时间戳不同 → 视为新消息需回复）
-                        $ts = ''
-                        if ($latest -match '@@TS:(.+)$') { $ts = $Matches[1].Trim() }
-                        $latestClean = $latest -replace '@@TS:.*?$','' -replace '\s+$',''
-                        $lines = $lines | ForEach-Object { $_ -replace '@@TS:.*?$','' }
-                        Write-Log "Latest buyer msg: $latestClean"
-                        $hText = Get-StableHash $latestClean
-                        # 新格式：文本 hash + 时间戳；无时间戳时回退纯文本 hash（兼容旧 state）
-                        $hash = if ($ts) { "$hText|$ts" } else { $hText }
-                        $already = $false
-                        if ($state -and $state.replied -and ($state.replied.PSObject.Properties.Name -contains $skey)) {
-                            $saved = $state.replied.$skey
-                            if ($ts) {
-                                # 带时间戳的新格式：完全匹配才算已回复；旧格式记录视为未回复并升级
-                                if ($saved -eq $hash) { $already = $true }
-                            } else {
-                                if ($saved -eq $hText) { $already = $true }
-                            }
-                        }
-                        if ($already) {
-                            Write-Log "SKIP $($key): already replied (dedup)"
-                            $prev = $null
-                            if ($skipCooldown.ContainsKey($key)) { $prev = $skipCooldown[$key] }
-                            $count = 1
-                            if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
-                            $skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = $count }
-                        } else {
-                            $rules = Get-Rules
-                            $reply = $null
-                            $src = 'RULE'
-                            # 1) 所有非图片消息优先走 LLM（含简短确认，LLM 已提速至 ~1.5s，回复更自然）
-                            if ($latestClean -ne '[IMG]') {
-                                $reply = Generate-Reply-LLM $rules $key $latestClean $lines
-                                if ($reply) { Write-Log "Reply source: LLM"; $src = 'LLM' }
-                            }
-                            # 2) LLM 未配置/失败/超时 → 图片消息 → 多语言引导话术
-                            if ($latestClean -eq '[IMG]') {
-                                $imgReply = @{
-                                    en = "Thanks for the images! To give you an accurate quote, could you also share the goods details in text - total weight (kg), packaging dimensions (L*W*H) and the destination address?"
-                                    es = "¡Gracias por las imágenes! Para darle una cotización precisa, ¿podría compartir también el peso total (kg), las dimensiones del embalaje (L*A*H) y la dirección de destino?"
-                                    pt = "Obrigado pelas imagens! Para dar uma cotação precisa, poderia compartilhar também o peso total (kg), as dimensões da embalagem (C*L*A) e o endereço de destino?"
-                                    fr = "Merci pour les images ! Pour un devis précis, pourriez-vous aussi partager le poids total (kg), les dimensions de l'emballage (L*l*H) et l'adresse de destination ?"
-                                }
-                                $imgLang = Get-ReplyLang
-                                $reply = $imgReply[$imgLang]
-                                Write-Log "Reply source: IMG_TEMPLATE"
-                            }
-                            # 3) LLM 失败时：简短确认走规则引擎 QUICK 快回，其余走完整规则引擎
-                            if (-not $reply) {
-                                $latestLower = $latestClean.ToLower()
-                                $quick = $latestLower -match '^(ok|okay|okey|yes|yeah|yep|yup|sure|fine|perfect|great|nice|good|thanks|thank you|thx|gracias|obrigad|merci|no|non|não|nao)\b' -and $latestLower.Length -lt 30
-                                $reply = Generate-Reply $rules $key $latestClean $lines
-                                $srcLabel = 'RULE_ENGINE'
-                                if ($quick) { $srcLabel = 'QUICK' }
-                                Write-Log "Reply source: $srcLabel (LLM failback)"
-                            }
-                            if ($reply -and $reply.Trim().Length -gt 0) {
-                                # === 发送前禁词拦截（spec 禁词拦截 Phase 4）：LLM/引擎双路径均过检；命中→LLM 重写一次→仍命中或引擎命中→安全兜底句 ===
-                                $banList = $null
-                                if ($rules -and $rules.banned_phrases) { $banList = @($rules.banned_phrases) }
-                                $banHit = Test-BannedText $reply $banList
-                                if ($banHit) {
-                                    $sum = $reply.Trim()
-                                    if ($sum.Length -gt 60) { $sum = $sum.Substring(0, 60) + "..." }
-                                    if ($src -eq 'LLM') {
-                                        Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($banHit) action=REWRITE summary=$($sum)"
-                                        $retry = Generate-Reply-LLM $rules $key $latestClean $lines -BanRetry
-                                        if ($retry -and $retry.Trim().Length -gt 0) {
-                                            $retryHit = Test-BannedText $retry $banList
-                                            if ($retryHit) {
-                                                $sum2 = $retry.Trim()
-                                                if ($sum2.Length -gt 60) { $sum2 = $sum2.Substring(0, 60) + "..." }
-                                                Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($retryHit) action=FALLBACK summary=$($sum2)"
-                                                $reply = $script:banSafeFallback
-                                            } else { $reply = $retry }
-                                        } else {
-                                            Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($banHit) action=FALLBACK summary="
-                                            $reply = $script:banSafeFallback
-                                        }
-                                    } else {
-                                        Write-Log "BANLIST-BLOCK $($key) src=RULE word=$($banHit) action=FALLBACK summary=$($sum)"
-                                        $reply = $script:banSafeFallback
-                                    }
-                                }
-                                # === 发送前责任承诺双检（2026-09-10 事故整改）：句级检测责任/费用承诺；命中→LLM 重写一次→仍命中→安全兜底句（与 BANLIST 同构，日志前缀 COMMIT-BLOCK） ===
-                                $finHit = Test-FinancialCommitment $reply
-                                if ($finHit) {
-                                    $sum3 = $reply.Trim()
-                                    if ($sum3.Length -gt 60) { $sum3 = $sum3.Substring(0, 60) + "..." }
-                                    if ($src -eq 'LLM') {
-                                        Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=REWRITE summary=$($sum3)"
-                                        $retry2 = Generate-Reply-LLM $rules $key $latestClean $lines -CommitRetry
-                                        if ($retry2 -and $retry2.Trim().Length -gt 0) {
-                                            $retryHit2 = Test-FinancialCommitment $retry2
-                                            if ($retryHit2) {
-                                                $sum4 = $retry2.Trim()
-                                                if ($sum4.Length -gt 60) { $sum4 = $sum4.Substring(0, 60) + "..." }
-                                                Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($retryHit2) action=FALLBACK summary=$($sum4)"
-                                                $reply = $script:banSafeFallback
-                                            } else { $reply = $retry2 }
-                                        } else {
-                                            Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=FALLBACK summary="
-                                            $reply = $script:banSafeFallback
-                                        }
-                                    } else {
-                                        Write-Log "COMMIT-BLOCK $($key) src=RULE pat=$($finHit) action=FALLBACK summary=$($sum3)"
-                                        $reply = $script:banSafeFallback
-                                    }
-                                }
-                                $sendRes = Send-OneTalkMessage $key $reply
-                                Write-Log "REPLIED to $($key): $sendRes"
-                                Write-Log "Reply text: $($reply)"
-                                # 仅发送成功才记录去重；发送失败（ABORT/未发出）不记录，
-                                # 否则会话会永久卡在待回复板块且永不重试
-                                if ($sendRes -match 'SENT_OK') {
-                                    # V12:统一键赋值。注意:首次创建时 replied 是 @{} (IDictionary),
-                                    # PSObject.Properties 会枚举出 CLR 内部属性(Count/Keys/Values/IsFixedSize等)污染 state.json,
-                                    # 必须按类型分流:IDictionary 用 Keys,反序列化的 PSCustomObject 用 Properties
-                                    if (-not $state -or -not $state.replied) { $state = [pscustomobject]@{ replied = @{} } }
-                                    $rep = @{}
-                                    $__src = $state.replied
-                                    if ($__src -is [System.Collections.IDictionary]) {
-                                        foreach ($__k in $__src.Keys) { $rep[$__k] = $__src[$__k] }
-                                    } else {
-                                        foreach ($__p in $__src.PSObject.Properties) { $rep[$__p.Name] = $__p.Value }
-                                    }
-                                    $rep[$skey] = $hash
-                                    $state = [pscustomobject]@{ replied = $rep }
-                                    Set-RepliedState $state
-                                    # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
-                                    try {
-                                        $gst = Get-GoodsDataStatus $key $script:dataDir
-                                        if ($gst -and $gst.weight -and $gst.dims -and $gst.addr) {
-                                            $n = Send-QuoteReminders -OnlyBuyer $key -logFile $logFile
-                                            if ($n -gt 0) { Write-Log "QUOTE-REMIND: pushed for $key" }
-                                        }
-                                    } catch {
-                                        Write-Log "QUOTE-REMIND-ERR: $($_.Exception.Message)"
-                                    }
-                                } else {
-                                    # A4: count consecutive send failures, alert after 3 (30m throttle per buyer)
-                                    $failCount = 0
-                                    if ($script:sendFailCount.ContainsKey($key)) { $failCount = $script:sendFailCount[$key] }
-                                    $failCount++
-                                    $script:sendFailCount[$key] = $failCount
-                                    # 首次失败累计到 3 次立即告警;再次告警需距上次告警超过 30 分钟(节流)
-                                    $lastAlert = 0
-                                    if ($script:failAlertAt.ContainsKey($key)) { $lastAlert = [int]((Get-Date) - $script:failAlertAt[$key]).TotalMinutes }
-                                    if ($failCount -ge 3 -and (-not $script:failAlertAt.ContainsKey($key) -or $lastAlert -gt 30)) {
-                                        $script:failAlertAt[$key] = Get-Date
-                                        $script:sendFailCount[$key] = 0
-                                        $af = Send-WecomMessage ("[ALERT] send failed x" + $failCount + " for " + $key + ": " + $sendRes)
-                                        Write-Log "FAIL-ALERT: $key -> $af (streak=$failCount)"
-                                    }
-                                    Write-Log "RETRY-QUEUE $($key): send failed ($sendRes), will retry after cooldown"
-                                    $openCooldown[$key] = Get-Date
-                                }
-                            } else {
-                                Write-Log "SKIP $($key): empty reply generated"
-                            }
-                        }
-                    } else {
-                        Write-Log "SKIP $($key): no buyer msgs found"
-                    }
-                }
-            }
-            Write-Log "Scan cycle done"
-        } catch {
-            Write-Log "Monitor error: $($_.Exception.Message)"
-            # CDP/Chrome 不可达自愈：连续 3 次错误则重启 Chrome 并重新登录
-            Invoke-CdpSelfHeal | Out-Null
-        }
-        # 列表抓取失败（非合法 JSON / 页面未就绪）时连续 3 次强制刷新重连；
-        # 列表为空数组 [] 是正常"无待办"状态，不刷新避免打断连接
-        if ($null -eq $snap -and $snapRaw -notmatch '^\[') {
-            # CDP 掉线识别(修复盲区):Cdp-Eval 把子进程错误当普通输出返回,
-            # 此前 CDP 掉线只走下方"重载循环"而永不触发 chrome_ensure 自愈。
-            # 现在检测到 CDP 错误标记 → 计入 cdpFailStreak,连续 3 次自动自愈;
-            # CDP 已断时重载请求必然也失败,跳过重载直接等待下一轮
-            if ($snapRaw -match 'CDP ERROR|WS CONNECT TIMEOUT|WS RECV TIMEOUT|无法连接到远程服务器|CMD ERROR') {
-                $cdpStreak = $script:cdpFailStreak + 1
-                Write-Log "CDP error detected ($cdpStreak/3): $($snapRaw.Substring(0, [Math]::Min(90, $snapRaw.Length)))"
-                if (Invoke-CdpSelfHeal) { $script:emptyStreak = 0 }
-            } else {
-                $script:emptyStreak++
-                if ($script:emptyStreak -ge 3) {
-                    $script:emptyStreak = 0
-                    $re = Invoke-CdpEval "location.reload(); 'RELOADED'"
-                    Write-Log "List fetch failed x3 - forced page reload ($re), waiting for reconnection"
-                    Start-Sleep -Seconds 12
-                }
-            }
-        } else {
-            # 本轮列表抓取正常 → 失败计数清零
-            $script:emptyStreak = 0
-            $script:cdpFailStreak = 0
-        }
-        # P2.2 按需 reload(替代原每 2 分钟无条件刷新):空闲且距上次活动超过阈值才刷新;忙时超过 30 分钟兜底
-        $minsSinceReload = [int]((Get-Date) - $script:lastReload).TotalMinutes
-        $minsSinceActivity = [int]((Get-Date) - $lastActivity).TotalMinutes
-        if ($minsSinceReload -ge $script:reloadIdleMin -and $snap.Count -eq 0 -and $minsSinceActivity -ge $script:reloadIdleMin) {
-            Invoke-PageReload "Scheduled page reload (${minsSinceReload}m since last, idle ${minsSinceActivity}m)"
-            continue
-        } elseif ($minsSinceReload -ge 30) {
-            # 长时间无法空闲（一直在处理会话），强制刷新防止列表失活
-            Invoke-PageReload "Forced page reload (${minsSinceReload}m, busy)"
+        if ($r.Action -eq 'Reloaded') {
             continue
         }
         Release-AppLock 'onetalk-write'
