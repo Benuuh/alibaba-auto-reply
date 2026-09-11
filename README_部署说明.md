@@ -19,6 +19,7 @@
 │   ├── chrome_ensure.ps1   ← Chrome 自愈（重启+复用登录态+自动登录）
 │   ├── watchdog.ps1        ← 守护（monitor 死亡/僵死重启；CDP 连不可达 10 次自动 chrome_ensure；防风暴）
 │   ├── wecom_start.ps1     ← 企微保活启动器 v2（幂等三段，watchdog 每 30s 调用）
+│   ├── agent_start.ps1     ← control-agent 保活启动器（幂等，停用标记感知，watchdog 每 30s 调用）
 │   ├── status.ps1          ← 一键健康检查（进程/CDP/日志/去重/任务/敏感审计）
 │   ├── backup.ps1 / sync.ps1 / consolidate_prompt.ps1 ← 快照/镜像同步/红线归档
 │   ├── summarize.ps1 / analyze_replies.ps1 / auto_optimize.ps1 ← 计划任务脚本（4h/05:00/05:30）
@@ -104,19 +105,20 @@ powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\cont
 # 4. 保活：watchdog 每 30s 调用 scripts\wecom_start.ps1（幂等三段，无风暴）
 ```
 - 消费方（monitor / quote_remind / nudge 经 `scripts\lib\wecom.ps1`）端点同构，零额外配置
-- control-agent 为可选组件：保活未并入 watchdog（遗留项），启用时用其 `bin\control-agent.ps1` 手动管理
+- control-agent 已由 watchdog 保活（每 30s 幂等调用 `scripts\agent_start.ps1`，启动失败 5 分钟冷却）；手动停用：`bin\control-agent.ps1 -Action stop`（建停用标记 `data\control-agent.disabled`，保活跳过），`-Action start` 删除标记并恢复
 - 无凭据时 HTTP 桥也可启动（`connected=false`，/send 返回 503），便于联调
 
-### Phase F：计划任务（4 个，均指向 scripts\ 下脚本）
+### Phase F：计划任务（5 个，均指向 scripts\ 下脚本）
 | 任务名 | 脚本 | 周期 |
 |---|---|---|
 | `AlibabaAutoReplySummary` | summarize.ps1 | 每 4 小时 |
 | `AlibabaAutoReplyQuality` | analyze_replies.ps1 | 每日 05:00 |
 | `AlibabaAutoReplyOptimize` | auto_optimize.ps1 | 每日 05:30 |
 | `AlibabaAutoReplyWeekly` | weekly_report.ps1（含 nudge 唤醒） | 每周一 08:00 |
+| `AlibabaAutoReplyWatchdog` | watchdog.ps1（整栈自启，ExecutionTimeLimit=PT0S） | 登录时 +30s（Hidden） |
 
 - 注册示例（管理员）：`schtasks /Create /TN AlibabaAutoReplyQuality /TR "powershell.exe -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\analyze_replies.ps1" /SC DAILY /ST 05:00 /F`（Summary 用 `/SC HOURLY` 或等距任务）
-- watchdog 未注册为自启任务（本部署为手动/随登录启动）：如需重启自动拉起，可自行注册 `AlibabaAutoReplyWatchdog`（watchdog.ps1，ONLOGON +30s 延迟，Hidden），任务幂等无害
+- 已注册 `AlibabaAutoReplyWatchdog`（watchdog.ps1，ONLOGON +30s 延迟，Hidden，ExecutionTimeLimit=PT0S 不限时）：登录后自动拉起整栈——watchdog 带起 monitor / Chrome 自愈 / 企微保活 / control-agent 保活；任务幂等（watchdog.pid 单实例检测），与手动启动的实例并存无害
 - 旧任务 `AlibabaAutoReplyWeComCmd` 已于 2026-09-07 企微通道升级时停用并删除（XML 备份：`backups\wecom_upgrade_20260907\`），**请勿重建**；企微远程控制由 control-agent（可选）提供
 
 ### Phase G：首次验收
@@ -133,6 +135,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 | 查看运行状态 | `Get-Content logs\monitor.log -Tail 20` |
 | 停止/启动监控 | `scripts\monitor.ps1 -Action stop/start` |
 | 企微桥状态 | `tools\wecom-connector\bin\wecom-connector.ps1 -Action status`（control-agent 同款） |
+| control-agent 保活/停用 | `scripts\agent_start.ps1`（幂等保活启动器）；停用 `tools\control-agent\bin\control-agent.ps1 -Action stop`（建标记 `data\control-agent.disabled`），恢复用 `-Action start`（删标记） |
 | 代码快照（发布前必做） | `scripts\backup.ps1 -Snapshot` |
 | 镜像同步 | `scripts\sync.ps1 -Status` / `scripts\sync.ps1 -Push`（默认镜像 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`，`-MirrorRoot` 可覆盖） |
 | 报价提醒手动触发 | `scripts\quote_remind.ps1` |
@@ -168,6 +171,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
 - 变更记录（详见 docs\CHANGELOG.md）：
+  - 2026-09-12（2）：control-agent 保活并入 watchdog（五重守护，agent_start.ps1，启动失败 5 分钟冷却）+ 停用标记机制（bin stop/start 自动维护）+ 注册 `AlibabaAutoReplyWatchdog` 登录自启任务（+30s/Hidden/不限时）+ status 纳入 control-agent 与第 5 项任务
   - 2026-09-12：精简与优化轮——退役/休眠脚本归档至 `backups\精简优化_20260912\`（manifest 可回溯）；cdp.ps1 删死分支（仅保留 navigate/eval）；CDP 端口收敛到 `config.json` 的 `cdp_port`（默认 9222）；巨型函数拆分（Generate-Reply / Start-Monitor）；prompt 红线合并归档 + auto_optimize 阈值自动合并与 never 保留最新 40 条；SKILL/README 瘦身；镜像默认改为 opencode 技能目录
   - 2026-09-07：企微通道升级 v2——wecom-connector（HTTP 桥 19886）+ control-agent（自然语言远程控制，取代旧 6 命令体系）；`AlibabaAutoReplyWeComCmd` 计划任务停用删除；watchdog 企微保活改 wecom_start.ps1 v2
   - 2026-08-27：企微长连接职责移交独立组件 tools\wecom-connector（原 scripts\wecom\wecom_bot.js、scripts\lib\wecom.ps1 移交适配）

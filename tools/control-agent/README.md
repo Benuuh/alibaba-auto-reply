@@ -38,6 +38,16 @@ powershell -ExecutionPolicy Bypass -File bin\control-agent.ps1 -Action stop
 
 > **dsh 模型 key**：dsh 使用 `control_api_key`（alibaba-auto-reply credentials.md 同字段）。按 dsh 官方配置方式传入（`~/.dsh/.credentials.yaml` 或 `DEEPSEEK_API_KEY` 环境变量），**不写死在 config/代码中**；未配置时开放式指令回发配置提示，不崩溃。
 
+## 保活与停用（watchdog 集成）
+
+- **保活**：主仓库 `scripts\watchdog.ps1`（五重守护）每 30s 幂等调用 `scripts\agent_start.ps1`：进程在跑 → 静默；未跑 → 文件重定向调 `bin\control-agent.ps1 -Action start`（60s 上限）拉起；启动失败 → watchdog.log 记一行并 5 分钟冷却（避免刷屏）。
+- **停用标记**：`data\control-agent.disabled`（纯 ASCII 时间戳）。
+  - `bin\control-agent.ps1 -Action stop` → 停止进程并**创建标记**；保活见标记即跳过（静默），不会自动拉起。
+  - `bin\control-agent.ps1 -Action start` → 启动并**删除标记**（恢复保活意图）。
+  - 也可手动删除标记文件后由 watchdog 下轮自动拉起。
+- **status**：主仓库 `scripts\status.ps1` §1 显示 control-agent 三态：RUNNING（PID + agent.log 年龄）/ DISABLED（停用标记）/ DOWN（保活将在下轮拉起）。
+- **整栈自启**：计划任务 `AlibabaAutoReplyWatchdog`（登录 +30s，Hidden，不限时）拉起 watchdog，由 watchdog 带起 monitor / 企微 / control-agent。
+
 ## 配置项表（config.json）
 
 | 配置项 | 默认值 | 说明 |

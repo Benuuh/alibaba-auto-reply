@@ -41,11 +41,11 @@
 └──────────────┘   └──────────────┘   └──┬───────────────────▲──┘
                         消费方: alibaba-auto-reply ──────────┘
                         消费方: control-agent(独立游标) ─┐
-┌────────────── watchdog.ps1 (30s) 四重守护 ─────────────▼──────────┐
+┌────────────── watchdog.ps1 (30s) 五重守护 ─────────────▼──────────┐
 │ 进程拉起 / 日志新鲜度 / CDP 连续 10 次不可达自动跑 chrome_ensure /  │
-│ 企微保活(wecom_start.ps1 v2 幂等三段)                              │
+│ 企微保活(wecom_start.ps1 v2) / control-agent 保活(agent_start.ps1) │
 └───────────────────────────────────────────────────────────────────┘
-┌────────────── control-agent (Node 常驻, 可选/当前未运行) ──────────┐
+┌────────────── control-agent (Node 常驻, 由 watchdog 保活) ─────────┐
 │ 企微消息 → owner 校验 → 60s 节流 → 确认闸门 → 外部执行 agent → 回发 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -98,7 +98,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 自 2026-09-07 起企微能力由两个独立可复用组件提供（旧六命令轮询体系已退役归档）：
 
 - **wecom-connector（必须）**：Node 常驻，官方 WebSocket 长连接，HTTP 桥 `127.0.0.1:19886`（`/health /send /messages /cursor /receiver /status`）；多消费者游标持久化；凭据仅环境变量注入；自带测试 63 例（node 46 + PS 17）。详见 `tools\wecom-connector\README.md`。
-- **control-agent（可选/当前未运行）**：企微自然语言指令 → owner 校验 → 节流 → 确认闸门（白名单文件免确认、高风险回发 4 位确认码）→ 外部执行 agent（默认 dsh）→ ≤200 字回发；测试 46 例。详见 `tools\control-agent\README.md`。
+- **control-agent（由 watchdog 保活）**：企微自然语言指令 → owner 校验 → 节流 → 确认闸门（白名单文件免确认、高风险回发 4 位确认码）→ 外部执行 agent（默认 dsh）→ ≤200 字回发；测试 46 例。保活：watchdog 每 30s 幂等调用 `scripts\agent_start.ps1`（启动失败 5 分钟冷却）；手动停用用 `bin\control-agent.ps1 -Action stop`（建停用标记，保活跳过），`-Action start` 恢复。详见 `tools\control-agent\README.md`。
 
 ## 📵 人工接管白名单（不自动回复客户）
 
@@ -134,8 +134,9 @@ alibaba-auto-reply/
 │   ├── config.json.example   ← 路径配置模板
 │   ├── chrome_ensure.ps1     ← Chrome 自愈 + 自动登录
 │   ├── cdp.ps1               ← CDP 桥接（navigate/eval）
-│   ├── watchdog.ps1          ← 四重守护（进程/日志/CDP/企微保活）
+│   ├── watchdog.ps1          ← 五重守护（进程/日志/CDP/企微/control-agent 保活）
 │   ├── wecom_start.ps1       ← 企微保活启动器 v2（幂等三段）
+│   ├── agent_start.ps1       ← control-agent 保活启动器（幂等，停用标记感知）
 │   ├── status.ps1            ← 一键健康检查（含敏感审计）
 │   ├── backup.ps1 / sync.ps1 / consolidate_prompt.ps1 ← 快照/镜像/红线归档
 │   ├── summarize.ps1 / analyze_replies.ps1 / auto_optimize.ps1 ← 报告/质量/规则提炼

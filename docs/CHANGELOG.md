@@ -2,6 +2,14 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-12 - control-agent 保活与整栈自启
+
+- watchdog 升级五重守护：新增 control-agent 保活块（每 30s 幂等调用 `scripts\agent_start.ps1`；启动失败 5 分钟冷却；ALREADY-RUNNING/DISABLED 静默）
+- 新增 `scripts\agent_start.ps1`：control-agent 保活启动器（四码：CONTROL-ALREADY-RUNNING / CONTROL-DISABLED / CONTROL-STARTED / CONTROL-START-FAIL）
+- 停用标记机制：`tools\control-agent\data\control-agent.disabled`——`bin -Action stop` 自动创建（保活跳过）、`-Action start` 自动删除；status 显示 DISABLED 态
+- `status.ps1` 纳入 control-agent（RUNNING/DISABLED/DOWN + agent.log 年龄）与计划任务第 5 项 `AlibabaAutoReplyWatchdog`
+- 注册登录自启任务 `AlibabaAutoReplyWatchdog`（ONLOGON +30s，Hidden，ExecutionTimeLimit=PT0S 不限时，IgnoreNew）：登录后由 watchdog 带起 monitor / 企微 / control-agent
+
 ## 2026-09-12 - 精简与优化轮
 
 ### 资产归档
