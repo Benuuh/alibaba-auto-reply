@@ -8,7 +8,7 @@
 <部署根>\alibaba-auto-reply\
 ├── credentials.md          ← 敏感信息唯一文件（账号/密码/API key/Bot 凭据，不入库不入备份）
 ├── llm_config.json         ← LLM 非敏感配置（model/temperature/max_tokens/timeout_sec/endpoint）
-├── SKILL.md / README.md / README_部署说明.md ← 技能说明与文档（镜像同步对象）
+├── SKILL.md / README.md / README_部署说明.md ← 技能说明与文档（opencode 技能镜像同步对象）
 ├── chrome-profile\         ← Chrome 登录态（含登录态，勿删除）
 ├── scripts\                ← 代码 + 状态 + 规则（常驻目录）
 │   ├── config.json         ← 集中路径配置（由 config.json.example 复制；换机/换目录只改此文件）
@@ -23,15 +23,14 @@
 │   ├── backup.ps1 / sync.ps1 / consolidate_prompt.ps1 ← 快照/镜像同步/红线归档
 │   ├── summarize.ps1 / analyze_replies.ps1 / auto_optimize.ps1 ← 计划任务脚本（4h/05:00/05:30）
 │   ├── weekly_report.ps1 / nudge.ps1 / quote_remind.ps1 ← 周报+唤醒 / 报价提醒 CLI
-│   ├── dashboard.ps1 / notify.ps1 / health_report.ps1 / task_health.ps1 ← 看板/告警/健康/任务巡检
-│   ├── wecom_command.ps1   ← 旧六命令远程控制（已停用留档，勿启用）
+│   ├── dashboard.ps1       ← 数据看板（手动工具，按需运行）
 │   ├── state.json(+bak)    ← 已回复去重状态（双写）
-│   └── lib\                ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom）
+│   └── lib\                ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply）
 ├── tools\
 │   ├── wecom-connector\    ← 企微 HTTP 桥（Node 常驻 127.0.0.1:19886；bin\wecom-connector.ps1 启停）
 │   │   ├── config.json     ← 由 config.json.example 复制（host/port/data_dir/receiver_file/log_dir，无凭据）
 │   │   ├── client\wecom-client.ps1   ← PowerShell 客户端库（Conn-* 系列，零依赖可复用）
-│   │   └── data\ / logs\ / tests\    ← 游标与接收方缓存 / 日志 / 57 例测试
+│   │   └── data\ / logs\ / tests\    ← 游标与接收方缓存 / 日志 / 63 例测试
 │   └── control-agent\      ← 企微自然语言远程控制桥（Node 常驻；bin\control-agent.ps1 启停）
 │       ├── config.json     ← 由 config.json.example 复制（owner_userid 留空=首条消息自动锁定）
 │       └── data\ / logs\ / tests\    ← 游标/待确认/历史 / 日志 / 46 例测试
@@ -91,38 +90,34 @@ Get-Content <部署根>\logs\monitor.log -Tail 20
 ```
 监控为**单实例**：启动前检查 `scripts\monitor.pid`；`-Action stop` 正常停止。
 
-### Phase E：企微通道（wecom-connector + control-agent）
+### Phase E：企微通道（wecom-connector 必须；control-agent 可选/当前未运行）
 ```powershell
 # 1. 启动 HTTP 桥（凭据经环境变量注入：WX_BOT_ID/WX_BOT_SECRET；启动器自动注入）
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\wecom-connector\bin\wecom-connector.ps1 -Action start
 #    输出 WECOM-STARTED / WECOM-ALREADY-RUNNING；查看连接状态：
 curl http://127.0.0.1:19886/health   # {"connected":true}
 
-# 2. 启动远程控制桥
+# 2. 启动远程控制桥（可选，当前部署未运行）
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\control-agent.ps1 -Action start
 
 # 3. owner 绑定：config.json 的 owner_userid 留空时，向机器人发第一条消息即自动锁定并回写
 # 4. 保活：watchdog 每 30s 调用 scripts\wecom_start.ps1（幂等三段，无风暴）
 ```
-- 消费方（monitor/quote_remind/notify/health_report 经 `scripts\lib\wecom.ps1`）端点同构，零额外配置
-- control-agent 保活暂未并入 watchdog（遗留项，用其 `bin\control-agent.ps1` 手动管理）
+- 消费方（monitor / quote_remind / nudge 经 `scripts\lib\wecom.ps1`）端点同构，零额外配置
+- control-agent 为可选组件：保活未并入 watchdog（遗留项），启用时用其 `bin\control-agent.ps1` 手动管理
 - 无凭据时 HTTP 桥也可启动（`connected=false`，/send 返回 503），便于联调
 
-### Phase F：计划任务（5 个，均指向 scripts\ 下脚本）
+### Phase F：计划任务（4 个，均指向 scripts\ 下脚本）
 | 任务名 | 脚本 | 周期 |
 |---|---|---|
 | `AlibabaAutoReplySummary` | summarize.ps1 | 每 4 小时 |
 | `AlibabaAutoReplyQuality` | analyze_replies.ps1 | 每日 05:00 |
 | `AlibabaAutoReplyOptimize` | auto_optimize.ps1 | 每日 05:30 |
 | `AlibabaAutoReplyWeekly` | weekly_report.ps1（含 nudge 唤醒） | 每周一 08:00 |
-| `AlibabaAutoReplyWatchdog` | watchdog.ps1 | 用户登录时（+30s 延迟，Hidden） |
 
-- watchdog 自启任务 = 整套常驻的恢复入口：watchdog 启动后自动拉起 monitor / Chrome 自愈 / 企微保活；任务幂等（watchdog.pid 单实例检测），与手动启动的实例并存无害，重复触发直接退出
-- watchdog 自身的守护即本任务（2026-09-10 注册，解决 Windows Update/手动重启后常驻进程无人拉起问题）；未启用无人登录（ONSTART/自动登录）场景，注销重登录或重启即生效
-
-注册示例（管理员）：`schtasks /Create /TN AlibabaAutoReplyQuality /TR "powershell.exe -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\analyze_replies.ps1" /SC DAILY /ST 05:00 /F`（Summary 用 `/SC HOURLY` 或等距任务）。
-- 旧任务 `AlibabaAutoReplyWeComCmd` 已于 2026-09-07 企微通道升级时停用并删除（XML 备份：`backups\wecom_upgrade_20260907\`），**请勿重建**；企微远程控制由 control-agent 提供
-- 建议额外注册：`dashboard.ps1`（每日 06:00）、`health_report.ps1`（按需/每日）；`task_health.ps1` 手动巡检任务超龄（Summary≤4.5h / Quality|Optimize≤26h / Weekly≤8 天）
+- 注册示例（管理员）：`schtasks /Create /TN AlibabaAutoReplyQuality /TR "powershell.exe -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\analyze_replies.ps1" /SC DAILY /ST 05:00 /F`（Summary 用 `/SC HOURLY` 或等距任务）
+- watchdog 未注册为自启任务（本部署为手动/随登录启动）：如需重启自动拉起，可自行注册 `AlibabaAutoReplyWatchdog`（watchdog.ps1，ONLOGON +30s 延迟，Hidden），任务幂等无害
+- 旧任务 `AlibabaAutoReplyWeComCmd` 已于 2026-09-07 企微通道升级时停用并删除（XML 备份：`backups\wecom_upgrade_20260907\`），**请勿重建**；企微远程控制由 control-agent（可选）提供
 
 ### Phase G：首次验收
 ```powershell
@@ -139,7 +134,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 | 停止/启动监控 | `scripts\monitor.ps1 -Action stop/start` |
 | 企微桥状态 | `tools\wecom-connector\bin\wecom-connector.ps1 -Action status`（control-agent 同款） |
 | 代码快照（发布前必做） | `scripts\backup.ps1 -Snapshot` |
-| 镜像同步 | `scripts\sync.ps1 -Status` / `scripts\sync.ps1 -Push` |
+| 镜像同步 | `scripts\sync.ps1 -Status` / `scripts\sync.ps1 -Push`（默认镜像 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`，`-MirrorRoot` 可覆盖） |
 | 报价提醒手动触发 | `scripts\quote_remind.ps1` |
 | 发送测试消息 | 见 `tools\wecom-connector\client\wecom-client.ps1`（Conn-SendMessage） |
 
@@ -160,7 +155,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 | 滑块验证码 | 刷新页面消除，勿反复提交；必要时人工登录一次 |
 | /health connected=false | Bot ID/Secret 注入是否正确；`bin\wecom-connector.ps1 -Action start` 自愈重启应用凭据 |
 | LLM 全失败/回退规则 | 检查 credentials.md api_key、llm_config endpoint；看 monitor.log |
-| 计划任务超龄 | 运行 `task_health.ps1`；检查 schtasks 是否被禁用/权限 |
+| 计划任务超龄 | 运行 `scripts\status.ps1` 查看任务状态与下次运行时间；检查 schtasks 是否被禁用/权限 |
 | monitor 日志乱码 | .ps1 必须 UTF-8 带 BOM 保存（无 BOM 中文按 GBK 解析） |
 | 控制台输出重定向失败 | monitor 启动必须带 -RedirectStandardOutput/-RedirectStandardError |
 
@@ -173,6 +168,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
 - 变更记录（详见 docs\CHANGELOG.md）：
+  - 2026-09-12：精简与优化轮——退役/休眠脚本归档至 `backups\精简优化_20260912\`（manifest 可回溯）；cdp.ps1 删死分支（仅保留 navigate/eval）；CDP 端口收敛到 `config.json` 的 `cdp_port`（默认 9222）；巨型函数拆分（Generate-Reply / Start-Monitor）；prompt 红线合并归档 + auto_optimize 阈值自动合并与 never 保留最新 40 条；SKILL/README 瘦身；镜像默认改为 opencode 技能目录
   - 2026-09-07：企微通道升级 v2——wecom-connector（HTTP 桥 19886）+ control-agent（自然语言远程控制，取代旧 6 命令体系）；`AlibabaAutoReplyWeComCmd` 计划任务停用删除；watchdog 企微保活改 wecom_start.ps1 v2
   - 2026-08-27：企微长连接职责移交独立组件 tools\wecom-connector（原 scripts\wecom\wecom_bot.js、scripts\lib\wecom.ps1 移交适配）
   - 2026-08-24：v2.0——目录隔离（logs\ data\）、凭据收敛（api_key 入 credentials.md）、lib\ 公共库五件套、tests 34→36 用例、backup/sync/consolidate 工具、watchdog 风暴防护、计划任务超龄检测与补跑

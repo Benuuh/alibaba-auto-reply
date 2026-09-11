@@ -1,5 +1,31 @@
 # CHANGELOG - alibaba-auto-reply
 
+> 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
+
+## 2026-09-12 - 精简与优化轮
+
+### 资产归档
+- 退役/休眠脚本归档：`wecom_command.ps1` / `notify.ps1` / `task_health.ps1` / `health_report.ps1` + 对应测试 → `backups\精简优化_20260912\`（manifest 可回溯，含哈希）
+- 根残留清理：SKILL.md.pre / README_部署说明.md.pre / README_本地重建.md / package-lock.json / UPDATE_SPEC.md；auto_optimize 运行产物 .bak
+- specs\ 已执行/报告（20 份）移入 `specs\归档\`
+
+### 代码重构
+- `cdp.ps1`：删除死分支 newtab/type/screenshot（仅保留 navigate/eval）
+- CDP 端口收敛：`config.json` 新增 `cdp_port`（默认 9222），lib\cdp.ps1 / cdp.ps1 / status.ps1 / chrome_ensure.ps1 统一读取
+- `reply_engine.ps1`：Generate-Reply 拆分（New-ReplyContext + Resolve-IntentEarly/Info/Data），签名与返回值不变，84 断言全绿
+- `monitor.ps1`：Start-Monitor 拆分（Initialize-MonitorRuntime / Invoke-ScanRound / Invoke-ConvoItem），Cleanup-StaleState 优化为单次遍历；字面量逐字核对无丢失
+- 删除零引用函数 `Get-WecomMessages`
+
+### 提示词/语料治理
+- `consolidate_prompt.ps1`：合并范围扩展到已有"历史红线归档"节，全局精确去重（32 条 → 32 条，无重复），prompt 159→143 行
+- `auto_optimize.ps1`：新增 `-ConsolidateThresholdChars`（14000）/`-ConsolidateBlockThreshold`（4）阈值自动合并；never 超限由"保留最旧"改为"保留最新 40 条"并记录丢弃数
+
+### 文档
+- SKILL.md 激进瘦身（20.9KB → 6.6KB），参考区改为指向文件
+- README.md 精简（-25%），事实修正（测试 140 断言 / 目录树 / 退役脚本移除）
+- README_部署说明.md：计划任务 4 个、镜像新默认、control-agent 标注可选
+- 镜像同步默认目录改为 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`
+
 ## 2026-08-24 - v2.0 大版本更新（Phase 0-3）
 
 ### 敏感信息与安全（P0）
