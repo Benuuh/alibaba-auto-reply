@@ -9,6 +9,7 @@ $script:entryJs = Join-Path $script:root "agent_bridge.js"
 $script:logDir = Join-Path $script:root "logs"
 $script:pidFile = Join-Path $script:root "data\control-agent.pid"
 $script:agentLog = Join-Path $script:logDir "agent.log"
+$script:disableFlag = Join-Path $script:root "data\control-agent.disabled"
 
 function Get-BridgeProcesses {
     # PS 5.1 返回数组的坑:return ,@(...) 空数组时 Count 误判为 1;Write-Output -NoEnumerate @() 也会输出一个 $null。
@@ -35,6 +36,8 @@ function Start-Bridge {
     if ($byPid -or $byCmd.Count -gt 0) {
         $pidTxt = $null
         if ($byPid) { $pidTxt = $byPid.ProcessId } elseif ($byCmd.Count -gt 0) { $pidTxt = $byCmd[0].ProcessId }
+        # 手动 start = 恢复保活意图:清停用标记
+        Remove-Item $script:disableFlag -Force -ErrorAction SilentlyContinue
         Write-Output ("CONTROL-ALREADY-RUNNING (PID " + $pidTxt + ")")
         exit 0
     }
@@ -52,7 +55,12 @@ function Start-Bridge {
         if ((Test-Path $script:agentLog) -and ((Get-Date) - (Get-Item $script:agentLog).LastWriteTime).TotalSeconds -lt 20) { $hb = $true; break }
         Start-Sleep -Seconds 1
     }
-    if ($hb) { Write-Output ("CONTROL-STARTED (PID " + $p.Id + ")"); exit 0 }
+    if ($hb) {
+        # 成功启动 = 恢复保活意图:清停用标记
+        Remove-Item $script:disableFlag -Force -ErrorAction SilentlyContinue
+        Write-Output ("CONTROL-STARTED (PID " + $p.Id + ")")
+        exit 0
+    }
     Write-Output "CONTROL-START-FAIL (agent.log 无心跳)"
     exit 1
 }
@@ -63,13 +71,23 @@ function Stop-Bridge {
     $byCmd = @(Get-BridgeProcesses)
     foreach ($proc in $byCmd) { try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
     try { Remove-Item $script:pidFile -Force -ErrorAction SilentlyContinue } catch {}
+    # 停止 = 停用保活意图:建停用标记(纯 ASCII 时间戳),watchdog 见标记跳过拉起
+    try {
+        if (-not (Test-Path (Split-Path $script:disableFlag -Parent))) { New-Item -ItemType Directory -Path (Split-Path $script:disableFlag -Parent) -Force | Out-Null }
+        Set-Content -Path $script:disableFlag -Value ("disabled at " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")) -Encoding ASCII
+    } catch {}
     Write-Output "CONTROL-STOPPED"
 }
 
 function Show-Status {
     $byPid = Get-PidFileProcess
     $byCmd = @(Get-BridgeProcesses)
-    if (-not $byPid -and $byCmd.Count -eq 0) {
+    $running = [bool]($byPid -or $byCmd.Count -gt 0)
+    if (-not $running -and (Test-Path $script:disableFlag)) {
+        Write-Output "control-agent: DISABLED (停用标记存在,删除 data\control-agent.disabled 并 start 可恢复)"
+        exit 0
+    }
+    if (-not $running) {
         Write-Output "control-agent: DOWN"
         exit 1
     }

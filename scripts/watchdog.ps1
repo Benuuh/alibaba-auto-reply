@@ -1,4 +1,5 @@
-﻿param(
+﻿# watchdog.ps1 - 常驻守护(五重): monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活 / control-agent 保活。
+param(
     [string]$Action = "start",
     [string]$LogDir = "",
     [int]$CheckIntervalSec = 30,
@@ -110,9 +111,11 @@ function Start-Watchdog {
         } catch {}
     }
     try { Set-Content -Path $pidFile -Value $PID -Encoding ASCII } catch {}
-    Write-Log "=== Watchdog started (PID $PID, check every ${CheckIntervalSec}s, stale threshold ${LogStaleSec}s, storm ${script:stormCount}/${script:stormWindowMin}m) ==="
+    Write-Log "=== Watchdog started (PID $PID, 五重守护: 进程/日志/CDP/企微/control-agent, check every ${CheckIntervalSec}s, stale threshold ${LogStaleSec}s, storm ${script:stormCount}/${script:stormWindowMin}m) ==="
     # P2.5 CDP 兜底:monitor 自愈失败时(CDP 连续不可达)由 watchdog 直接跑 chrome_ensure
     $cdpFailStreak = 0
+    # control-agent 启动失败冷却截止时间(成功/失败状态变化才写日志,避免 30s 刷屏)
+    $script:agentRetryAfter = [datetime]::MinValue
     while ($true) {
         try {
             $procs = Get-MonitorProcesses
@@ -153,6 +156,31 @@ function Start-Watchdog {
                 } elseif ($ws -match 'WECOM-NO-CREDS|WECOM-START-FAIL') {
                     Write-Log "WATCHDOG-WECOM: issue - $($ws -join ' ')"
                 }
+            }
+            # control-agent 保活（冷却 5 分钟；仅状态变化/失败记日志；DISABLED/ALREADY-RUNNING 静默）
+            $agentStart = Join-Path $LogDir "agent_start.ps1"
+            if ((Test-Path $agentStart) -and ((Get-Date) -ge $script:agentRetryAfter)) {
+                # 文件重定向 + 轮询输出文件(不用管道捕获):node 会继承调用方管道句柄,
+                # 管道捕获会导致 watchdog 循环悬挂直到 node 退出(PS 5.1 句柄继承坑,wecom_start 同款教训)
+                $asOut = Join-Path $env:TEMP ("wagent_out_" + $PID + ".txt")
+                $asErr = Join-Path $env:TEMP ("wagent_err_" + $PID + ".txt")
+                $asChild = Start-Process -FilePath 'powershell.exe' -ArgumentList ('-ExecutionPolicy Bypass -NoProfile -File "' + $agentStart + '"') -WindowStyle Hidden -RedirectStandardOutput $asOut -RedirectStandardError $asErr -PassThru
+                $asDeadline = (Get-Date).AddSeconds(75)
+                $asText = ""
+                while ((Get-Date) -lt $asDeadline) {
+                    if (Test-Path $asOut) {
+                        $asText = (@(Get-Content $asOut -Encoding UTF8 -ErrorAction SilentlyContinue) -join ' ')
+                        if ($asText -match 'CONTROL-') { break }
+                    }
+                    Start-Sleep -Seconds 1
+                }
+                Remove-Item $asOut,$asErr -Force -ErrorAction SilentlyContinue
+                if ($asText -match 'CONTROL-STARTED') { Write-Log "WATCHDOG-AGENT: $asText" }
+                elseif ($asText -match 'CONTROL-START-FAIL') {
+                    Write-Log "WATCHDOG-AGENT: issue - $asText (5 分钟内不重试)"
+                    $script:agentRetryAfter = (Get-Date).AddMinutes(5)
+                }
+                # CONTROL-ALREADY-RUNNING / CONTROL-DISABLED → 静默
             }
         } catch {
             Write-Log "Watchdog error: $($_.Exception.Message)"

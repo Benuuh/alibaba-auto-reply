@@ -35,6 +35,21 @@ if (Test-Path (Join-Path $LogDir "watchdog.pid")) {
     $wtdAlive = [bool](Get-Process -Id $wtdPid -ErrorAction SilentlyContinue)
 }
 StatusLine "watchdog.ps1" $wtdAlive $(if ($wtdPid) { "PID=$wtdPid" } else { "无 PID 文件" })
+# control-agent(企微自然语言远程控制桥,由 watchdog 保活)
+$agentRoot = Join-Path (Get-SkillPath "") "tools\control-agent"
+$agentProc = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match [regex]::Escape((Join-Path $agentRoot "agent_bridge.js")) })
+$agentFlag = Join-Path $agentRoot "data\control-agent.disabled"
+if ($agentProc.Count -eq 0 -and (Test-Path $agentFlag)) {
+    StatusLine "control-agent" $true "DISABLED(停用标记)"
+} elseif ($agentProc.Count -gt 0) {
+    $agentLog = Join-Path $agentRoot "logs\agent.log"
+    $agentAge = "无日志"
+    if (Test-Path $agentLog) { $agentAge = "$([int]((Get-Date) - (Get-Item $agentLog).LastWriteTime).TotalSeconds)s 前" }
+    StatusLine "control-agent" $true "PID=$($agentProc[0].ProcessId), agent.log $agentAge"
+} else {
+    StatusLine "control-agent" $false "DOWN(保活将在下轮拉起)"
+}
 
 # --- 2. CDP / Chrome ---
 $cdpPort = Get-CdpPort
@@ -105,7 +120,7 @@ if (Test-Path $repDir) {
 
 # --- 7. 计划任务 ---
 Section "计划任务"
-foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "AlibabaAutoReplyOptimize", "AlibabaAutoReplyWeekly")) {
+foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "AlibabaAutoReplyOptimize", "AlibabaAutoReplyWeekly", "AlibabaAutoReplyWatchdog")) {
     $task = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
     if ($task) {
         $st = $task.State.ToString()
@@ -114,7 +129,9 @@ foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "Alibaba
             $info = $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
             if ($info -and $info.NextRunTime -and $info.NextRunTime -ne [datetime]::MaxValue) { $next = $info.NextRunTime.ToString("yyyy-MM-dd HH:mm") }
         } catch { }
-        $ok = ($st -eq 'Ready')
+        if ($tn -eq 'AlibabaAutoReplyWatchdog' -and $next -eq '未排程') { $next = '登录时触发' }
+        # Watchdog 为常驻守护任务:Ready(未登录/未启动)与 Running(守护中)均为正常态
+        $ok = ($st -eq 'Ready' -or ($tn -eq 'AlibabaAutoReplyWatchdog' -and $st -eq 'Running'))
         StatusLine $tn $ok "状态=$st, 下次=$next"
     } else {
         StatusLine $tn $false "状态=任务不存在"
