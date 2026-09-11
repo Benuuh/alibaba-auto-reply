@@ -1,0 +1,19 @@
+{
+  "name": "doc-reader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Buyer document reader for alibaba-auto-reply: PDF (text/scan) / xlsx / csv / docx -> text or rendered PNG data URLs",
+  "main": "read.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test tests/read.test.js"
+  },
+  "dependencies": {
+    "@hyzyla/pdfium": "^2.1.13",
+    "@napi-rs/canvas": "^1.0.9",
+    "mammoth": "^1.8.0",
+    "xlsx": "^0.18.5"
+  }
+}

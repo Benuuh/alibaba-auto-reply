@@ -35,6 +35,9 @@ function Invoke-LLM([object[]]$messages, [double]$temperature, [int]$maxTokens, 
         max_tokens  = $maxTokens
         messages    = $messages
     }
+    # 可选透传(仅当 llm_config.json 显式配置): thinking / reasoning_effort(多模态新模型可能支持)
+    if ($cfg.PSObject.Properties.Name -contains 'thinking' -and $cfg.thinking) { $payload.thinking = $cfg.thinking }
+    if ($cfg.PSObject.Properties.Name -contains 'reasoning_effort' -and $cfg.reasoning_effort) { $payload.reasoning_effort = [string]$cfg.reasoning_effort }
     $body = $payload | ConvertTo-Json -Depth 6
 
     try {

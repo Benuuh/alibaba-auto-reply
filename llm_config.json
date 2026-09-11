@@ -2,6 +2,9 @@
     "max_tokens":  500,
     "timeout_sec":  60,
     "temperature":  0.7,
-    "model":  "deepseek-chat",
-    "endpoint":  "https://api.deepseek.com/chat/completions"
+    "model":  "deepseek-v4-flash",
+    "endpoint":  "https://api.deepseek.com/chat/completions",
+    "thinking":  {
+                     "type":  "disabled"
+                 }
 }

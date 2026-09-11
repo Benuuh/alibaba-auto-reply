@@ -18,9 +18,26 @@ function Get-LatestSnapshot([string]$buyer, [string]$snapDir = "") {
     return $latest
 }
 
+# 附件识别 sidecar(B6): data\vision_extract\<buyer>.json 读取(损坏/缺失返回 $null)
+function Get-VisionSidecarForGoods([string]$buyer, [string]$dataDir) {
+    if (-not $dataDir) { $dataDir = Get-SkillPath "data" }
+    if (-not $buyer) { return $null }
+    $key = ($buyer.Trim().ToLowerInvariant() -replace '[\\/:*?"<>|]', '_')
+    if (-not $key) { return $null }
+    $f = Join-Path (Join-Path $dataDir "vision_extract") ($key + ".json")
+    if (-not (Test-Path $f)) { return $null }
+    try { return (Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
 function Get-GoodsDataStatus([string]$buyer, [string]$snapDir = "") {
+    $side = Get-VisionSidecarForGoods $buyer $snapDir
     $latest = Get-LatestSnapshot $buyer $snapDir
-    if (-not $latest) { return $null }
+    if (-not $latest) {
+        if ($side -and ($side.weight_kg -or $side.dims)) {
+            return @{ weight = [bool]$side.weight_kg; dims = [bool]$side.dims; img = $false; addr = $false; supplier = $false; file = $null; source = 'vision' }
+        }
+        return $null
+    }
     $raw = Get-Content $latest.FullName -Raw -Encoding UTF8
     $w = $false; $d = $false; $i = $false; $a = $false; $s = $false
     foreach ($line in @($raw -split "`r?`n")) {
@@ -31,6 +48,9 @@ function Get-GoodsDataStatus([string]$buyer, [string]$snapDir = "") {
         if ($line -match '(?i)\b(address|street|avenue|av\.|avenida|rua|calle|road|endere[cç]o|direcci[oó]n|cep|zip code)\b' -or $line -match '(?i)(brazil|brasil|united states|usa|eua|estados unidos|são paulo|sao paulo|rio de janeiro|los angeles|new york|houston|miami|dallas|curitiba|manaus|fortaleza|recife|belo horizonte|porto alegre)') { $a = $true }
         if ($line -match '(?i)\b(supplier|vendor|fornecedor|proveedor|fabricante|manufacturer)\b') { $s = $true }
     }
+    # B6: 快照正则外合并 sidecar(附件识别提取的重量/尺寸)
+    if (-not $w -and $side -and $side.weight_kg) { $w = $true }
+    if (-not $d -and $side -and $side.dims) { $d = $true }
     return @{ weight = $w; dims = $d; img = $i; addr = $a; supplier = $s; file = $latest.Name }
 }
 
@@ -85,8 +105,14 @@ function Get-GoodsName([string]$buyer, [string]$snapDir = "") {
 
 # 提取买家货物详情具体值(重量/尺寸/地址),供报价提醒展示。提取不到返回空串。
 function Get-GoodsDetails([string]$buyer, [string]$snapDir = "") {
+    $side = Get-VisionSidecarForGoods $buyer $snapDir
     $latest = Get-LatestSnapshot $buyer $snapDir
-    if (-not $latest) { return @{ weight = ''; dims = ''; addr = '' } }
+    if (-not $latest) {
+        if ($side) {
+            return @{ weight = [string]$side.weight_kg; dims = [string]$side.dims; addr = ''; qty = [string]$side.cartons; unit_weight = ''; transport = '' }
+        }
+        return @{ weight = ''; dims = ''; addr = '' }
+    }
     $weight = ''; $dims = ''; $addr = ''; $qty = ''; $unitW = ''; $transport = ''
     foreach ($line in @((Get-Content $latest.FullName -Raw -Encoding UTF8) -split "`r?`n")) {
         if ($line -notmatch '^\[BUYER\]') { continue }
@@ -160,5 +186,9 @@ function Get-GoodsDetails([string]$buyer, [string]$snapDir = "") {
             }
         }
     }
+    # B6: 快照提取为空时用 sidecar 填充(附件识别提取的重量/尺寸/箱数)
+    if (-not $weight -and $side -and $side.weight_kg) { $weight = [string]$side.weight_kg }
+    if (-not $dims -and $side -and $side.dims) { $dims = [string]$side.dims }
+    if (-not $qty -and $side -and $side.cartons) { $qty = [string]$side.cartons }
     return @{ weight = $weight; dims = $dims; addr = $addr; qty = $qty; unit_weight = $unitW; transport = $transport }
 }

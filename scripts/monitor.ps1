@@ -19,6 +19,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\wecom.ps1")
 . (Join-Path $PSScriptRoot "lib\quote.ps1")
 . (Join-Path $PSScriptRoot "lib\no_reply.ps1")
+. (Join-Path $PSScriptRoot "lib\vision.ps1")
+. (Join-Path $PSScriptRoot "lib\doc.ps1")
 $script:skillCfg = Get-SkillConfig
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:cdpScript = Get-SkillPath "cdp"
@@ -141,14 +143,43 @@ function Open-ConvoAndGetMessages([string]$keyword) {
     var txt = rich.innerText.replace(/\n+/g,' ').trim();
     var clean = txt.replace(/翻译中…|反馈|已读|回复|翻译|Revert|由阿里提供|自动接待发送/g,'').trim();
     var hasImg = !!w.querySelector('img[src*="alicdn"], [class*=image] img, [class*=Image] img, [class*=picture]');
+    var nameEl0 = w.querySelector('.item-base-info .name');
+    var buyerName0 = (nameEl0 && nameEl0.innerText.trim()) || '';
+    var isBuyer0 = buyerName0.length > 0 || /由阿里翻译提供|翻译中/.test(txt) || cls.indexOf('item-left') >= 0;
+    // B2 附件标记: 图片 src/data-src(阿里域, 去重, ≤3); 文件卡片兜底特征 "<name>.<ext> <size> K/M"
+    var imgUrls = [];
+    if (isBuyer0) {
+      w.querySelectorAll('img').forEach(function(im){
+        var u = im.getAttribute('src') || im.getAttribute('data-src') || '';
+        if (!u) return;
+        if (!/(alicdn\.com|alibaba\.com|aliimg\.com|data:image)/.test(u)) return;
+        if (imgUrls.indexOf(u) < 0) imgUrls.push(u);
+      });
+      if (imgUrls.length > 3) imgUrls = imgUrls.slice(0, 3);
+    }
+    var fileInfo = null;
+    if (isBuyer0) {
+      var mf = clean.match(/([^\s\/\\]+\.(pdf|xlsx?|csv|docx?|pptx?|zip|rar|txt))\s+(\d+(\.\d+)?\s*[KMG]?B?)/i);
+      if (mf) {
+        var furl = '';
+        var anchors = w.querySelectorAll('a[href]');
+        for (var ai = 0; ai < anchors.length; ai++) {
+          var h = anchors[ai].getAttribute('href') || '';
+          if (/^https?:/.test(h) && (/\.(pdf|xlsx?|csv|docx?|pptx?|zip|rar|txt)($|\?)/i.test(h) || /download/i.test(h))) { furl = h; break; }
+        }
+        if (!furl) {
+          var mUrl = (w.innerHTML || '').match(/https?:\/\/[^"'\s<>]+\.(pdf|xlsx?|csv|docx?|pptx?|zip|rar|txt)(\?[^"'\s<>]*)?/i);
+          if (mUrl) furl = mUrl[0];
+        }
+        fileInfo = { name: mf[1], url: furl };
+      }
+    }
     if (clean.length <= 2) {
-      if (hasImg && (cls.indexOf('item-left') >= 0)) out.push({b:true, t:'[IMG]', ts:''});
+      if (hasImg && (cls.indexOf('item-left') >= 0)) out.push({b:true, t:'[IMG]', ts:'', imgs: imgUrls, file: fileInfo});
       return;
     }
-    var nameEl = w.querySelector('.item-base-info .name');
-    var buyerName = (nameEl && nameEl.innerText.trim()) || '';
-    var isBuyer = buyerName.length > 0 || /由阿里翻译提供|翻译中/.test(txt);
-    if (!isBuyer) isBuyer = cls.indexOf('item-left') >= 0;
+    var buyerName = (nameEl0 && nameEl0.innerText.trim()) || '';
+    var isBuyer = isBuyer0;
     var ts = '';
     var el2 = w;
     while (el2 && !el2.getAttribute('data-expinfo')) { el2 = el2.parentElement; }
@@ -161,8 +192,24 @@ function Open-ConvoAndGetMessages([string]$keyword) {
       var m2 = baseTxt.match(/(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})/);
       if (m2) ts = m2[1];
     }
-    out.push({b: isBuyer, t: clean.substring(0,1000), ts: ts});
+    out.push({b: isBuyer, t: clean.substring(0,1000), ts: ts, imgs: isBuyer ? imgUrls : [], file: isBuyer ? fileInfo : null});
   });
+  // B2 附件标记挂载: 仅最新买家消息; 最新无标记但含指代词(photo/image/图/文件等) → 回溯最近带标记的买家消息
+  var buyerIdx = [];
+  out.forEach(function(o, i){ if (o.b) buyerIdx.push(i); });
+  if (buyerIdx.length > 0) {
+    var last = out[buyerIdx[buyerIdx.length - 1]];
+    var aimgs = (last.imgs || []).slice(0, 3);
+    var afile = last.file || null;
+    if (aimgs.length === 0 && !afile && /(photo|image|pic|picture|foto|imagen|图片|图|文件|附件|document|attachment|pdf|excel|csv|word)/i.test(last.t)) {
+      for (var bi = buyerIdx.length - 1; bi >= 0; bi--) {
+        var cand = out[buyerIdx[bi]];
+        if ((cand.imgs && cand.imgs.length) || cand.file) { aimgs = (cand.imgs || []).slice(0, 3); afile = cand.file || null; break; }
+      }
+    }
+    if (aimgs.length > 0) { last.t = last.t + ' @@IMG:' + aimgs.join('|'); }
+    if (afile) { last.t = last.t + ' @@FILE:' + encodeURIComponent(afile.name) + '|' + (afile.url || ''); }
+  }
   var lines = [];
   out.forEach(function(o){ lines.push((o.b ? '[BUYER] ' : '[ME] ') + o.t + (o.ts ? ' @@TS:' + o.ts : '')); });
   // P3.4 买家档案:抓取客户详情卡片原始文本(国家/注册时间/标签等),PS 侧解析
@@ -257,7 +304,8 @@ function Get-RulesRaw {
 }
 
 # LLM 生成回复：DeepSeek (OpenAI 兼容) API。失败返回 $null（由调用方回退规则引擎）
-function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest, [string[]]$context, [switch]$BanRetry, [switch]$CommitRetry) {
+# -ImageDataUrls: 多模态附件图片(data URL, ≤3); -AttachmentText: 文档文本/说明(与文本消息合并)
+function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest, [string[]]$context, [switch]$BanRetry, [switch]$CommitRetry, [string[]]$ImageDataUrls = $null, [string]$AttachmentText = $null) {
     $cfg = Get-LLMConfig
     if (-not $cfg) { return $null }
     $rulesRaw = Get-RulesRaw
@@ -300,10 +348,18 @@ function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest,
     if ($bp -and $bp.country) { $profileLine = "买家国家: $($bp.country)" }
 
     $userMsg = "买家名: $convoName`n$profileLine`n最新买家消息: $latest`n$metaLine`n`n=== 完整对话上下文（倒序，第一条最新） ===`n$ctxText"
-    $messages = @(
-        @{ role = "system"; content = $systemPrompt },
-        @{ role = "user"; content = $userMsg }
-    )
+    if ($AttachmentText) { $userMsg += "`n`n[附件内容]`n" + $AttachmentText }
+    if ($ImageDataUrls -and @($ImageDataUrls).Count -gt 0) {
+        $messages = @(
+            @{ role = "system"; content = $systemPrompt },
+            @{ role = "user"; content = @(New-VisionContentParts $ImageDataUrls $userMsg) }
+        )
+    } else {
+        $messages = @(
+            @{ role = "system"; content = $systemPrompt },
+            @{ role = "user"; content = $userMsg }
+        )
+    }
     return Invoke-LLM $messages ([double]$cfg.temperature) ([int]$cfg.max_tokens) $logFile
 }
 
@@ -520,7 +576,7 @@ function Invoke-ConvoItem($ctx, $item) {
         if ($nrConvo.profile) { Save-BuyerProfile $skey $nrConvo.profile }
         $nrLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
         Add-Content -Path $nrLog -Value ("# BUYER: " + $key) -Encoding UTF8
-        Add-Content -Path $nrLog -Value $nrConvo.msgs -Encoding UTF8
+        Add-Content -Path $nrLog -Value (Remove-AttachmentMarkers $nrConvo.msgs) -Encoding UTF8
         $ctx.noReplyPreview[$key] = $item.preview
         Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
         return
@@ -571,7 +627,32 @@ function Invoke-ConvoItem($ctx, $item) {
         return
     }
     $ctx.openCooldown.Remove($key)
-    $msgs = $convo.msgs
+    $msgsRaw = $convo.msgs
+    # B2: 附件标记解析(仅最新买家消息) + 快照剥离标记(格式不变)
+    $attImages = @(); $attFile = $null
+    $rawBuyerLines = @($msgsRaw -split "`n" | Where-Object { $_ -match '^\[BUYER\]' })
+    if ($rawBuyerLines.Count -gt 0) {
+        $rawLatest = $rawBuyerLines[0]
+        if ($rawLatest -match '@@IMG:([^\s]+)') { $attImages = @(@($Matches[1] -split '\|') | Where-Object { $_ } | Select-Object -First 3) }
+        if ($rawLatest -match '@@FILE:([^\s]+)') {
+            $fp = $Matches[1] -split '\|', 2
+            $attFile = @{ name = [uri]::UnescapeDataString($fp[0]); url = '' }
+            if ($fp.Count -gt 1) { $attFile.url = $fp[1] }
+        }
+        # 增强路径: 最新消息含指代词但无标记 → 回溯最近带标记的买家消息
+        if ($attImages.Count -eq 0 -and -not $attFile -and $rawLatest -match '(?i)(photo|image|pic|picture|foto|imagen|图片|图|文件|附件|document|attachment|pdf|excel|csv|word)') {
+            foreach ($bl in $rawBuyerLines) {
+                if ($bl -match '@@IMG:([^\s]+)') { $attImages = @(@($Matches[1] -split '\|') | Where-Object { $_ } | Select-Object -First 3); break }
+                if ($bl -match '@@FILE:([^\s]+)') {
+                    $fp2 = $Matches[1] -split '\|', 2
+                    $attFile = @{ name = [uri]::UnescapeDataString($fp2[0]); url = '' }
+                    if ($fp2.Count -gt 1) { $attFile.url = $fp2[1] }
+                    break
+                }
+            }
+        }
+    }
+    $msgs = Remove-AttachmentMarkers $msgsRaw
     # P3.4 保存买家档案(国家/注册时间等,PII 仅存本机 data\buyers\)
     if ($convo.profile) { Save-BuyerProfile $skey $convo.profile }
     $msgLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
@@ -617,13 +698,69 @@ function Invoke-ConvoItem($ctx, $item) {
             $rules = Get-Rules
             $reply = $null
             $src = 'RULE'
+            $visionSource = ''
+            $visionUrls = @()
+            $docExtractText = ''
+            $attFileName = ''
+            # 0) B5 图片多模态: 下载 → 多模态回复(与提取解耦)
+            if ($attImages.Count -gt 0) {
+                $dataUrls = @()
+                foreach ($u in $attImages) { $du = Get-ImageDataUrl $u; if ($du) { $dataUrls += $du } }
+                if ($dataUrls.Count -gt 0) {
+                    $visionSource = 'image'
+                    $visionUrls = $dataUrls
+                    Write-Log "VISION-IMG $($key): $($dataUrls.Count)/$($attImages.Count) image(s) downloaded"
+                    $reply = Generate-Reply-LLM $rules $key $latestClean $lines -ImageDataUrls $dataUrls
+                    if ($reply) { Write-Log "VISION-REPLY $($key) src=LLM(multimodal)"; $src = 'LLM' }
+                    else { Write-Log "VISION-REPLY-FAIL $($key): multimodal LLM returned null" }
+                } else {
+                    Write-Log "VISION-IMG-FAIL $($key): image download failed"
+                }
+            }
+            # 0b) B5 文档: CDP 页面上下文 fetch 优先 → 兜底 PS 下载 → doc-reader → 文本/扫描图
+            if (-not $reply -and $attFile) {
+                $b64 = $null
+                if ($attFile.url) { $b64 = Get-DocumentBase64ViaCdp $attFile.url }
+                if (-not $b64 -and $attFile.url) { $b64 = Get-DocumentBase64ViaHttp $attFile.url }
+                if ($b64) {
+                    $docTmp = $null
+                    try {
+                        $docTmp = Save-DocTempFile $attFile.name ([Convert]::FromBase64String($b64))
+                        $docRes = Invoke-DocReader $docTmp 6000 2
+                        if ($docRes -and $docRes.ok) {
+                            Write-Log "DOC-READ $($key): $($attFile.name) kind=$($docRes.kind) chars=$($docRes.text.Length) images=$(@($docRes.images).Count)"
+                            $visionSource = 'document'
+                            $attFileName = $attFile.name
+                            if ($docRes.kind -eq 'pdf-scan' -and @($docRes.images).Count -gt 0) {
+                                $visionUrls = @($docRes.images)
+                                $docPrompt = "买家发送了文件《$($attFile.name)》(扫描件, 已渲染为图片)。请结合文件内容回复; 明确可见的重量/尺寸/箱数/单号可确认, 不确定不臆造。"
+                                $reply = Generate-Reply-LLM $rules $key $latestClean $lines -ImageDataUrls @($docRes.images) -AttachmentText $docPrompt
+                                if ($reply) { Write-Log "VISION-REPLY $($key) src=LLM(doc-scan)"; $src = 'LLM' }
+                                else { Write-Log "VISION-REPLY-FAIL $($key): doc-scan LLM returned null" }
+                            } else {
+                                $docExtractText = $docRes.text
+                                $docPrompt = "买家发送了文件《$($attFile.name)》（类型：$($docRes.kind)）：`n" + $docRes.text + "`n请结合文件内容回复；明确可见的重量/尺寸/箱数/单号可确认，不确定不臆造。"
+                                $reply = Generate-Reply-LLM $rules $key $latestClean $lines -AttachmentText $docPrompt
+                                if ($reply) { Write-Log "VISION-REPLY $($key) src=LLM(doc)"; $src = 'LLM' }
+                                else { Write-Log "VISION-REPLY-FAIL $($key): doc LLM returned null" }
+                            }
+                        } else {
+                            Write-Log "DOC-READ-FAIL $($key): $($attFile.name) (fallback to text flow)"
+                        }
+                    } finally {
+                        Remove-DocTemp $docTmp
+                    }
+                } else {
+                    Write-Log "DOC-DOWNLOAD-FAIL $($key): $($attFile.name) (fallback to text flow)"
+                }
+            }
             # 1) 所有非图片消息优先走 LLM（含简短确认，LLM 已提速至 ~1.5s，回复更自然）
-            if ($latestClean -ne '[IMG]') {
+            if (-not $reply -and $latestClean -ne '[IMG]') {
                 $reply = Generate-Reply-LLM $rules $key $latestClean $lines
                 if ($reply) { Write-Log "Reply source: LLM"; $src = 'LLM' }
             }
             # 2) LLM 未配置/失败/超时 → 图片消息 → 多语言引导话术
-            if ($latestClean -eq '[IMG]') {
+            if (-not $reply -and $latestClean -eq '[IMG]') {
                 $imgReply = @{
                     en = "Thanks for the images! To give you an accurate quote, could you also share the goods details in text - total weight (kg), packaging dimensions (L*W*H) and the destination address?"
                     es = "¡Gracias por las imágenes! Para darle una cotización precisa, ¿podría compartir también el peso total (kg), las dimensiones del embalaje (L*A*H) y la dirección de destino?"
@@ -642,6 +779,29 @@ function Invoke-ConvoItem($ctx, $item) {
                 $srcLabel = 'RULE_ENGINE'
                 if ($quick) { $srcLabel = 'QUICK' }
                 Write-Log "Reply source: $srcLabel (LLM failback)"
+            }
+            # 2b) B5 提取调用(与回复解耦): 附件存在时第二次 LLM 只输出 JSON → sidecar(source+文件名)
+            if ($visionSource) {
+                try {
+                    $exPrompt = 'Read the attached content. Output ONLY JSON: {"weight_kg":"","dims":"","cartons":"","tracking":"","note":""}. Use only clearly visible values; leave fields empty if unsure.'
+                    $exMsgs = $null
+                    if ($visionUrls.Count -gt 0) {
+                        $exMsgs = @(@{ role = 'user'; content = @(New-VisionContentParts $visionUrls $exPrompt) })
+                    } elseif ($docExtractText) {
+                        $exMsgs = @(@{ role = 'user'; content = ($exPrompt + "`n`n=== 文件内容 ===`n" + $docExtractText) })
+                    }
+                    if ($exMsgs) {
+                        $exText = Invoke-LLM $exMsgs 0.2 300 $logFile
+                        $ex = Get-VisionExtract $exText
+                        if ($ex) {
+                            $exFile = 'attachment'
+                            if ($attFileName) { $exFile = $attFileName }
+                            elseif ($attImages.Count -gt 0) { $exFile = (($attImages[0] -split '\?')[0].Split('/')[-1]) }
+                            Save-VisionExtract $key $ex $visionSource $exFile $script:dataDir | Out-Null
+                            Write-Log "VISION-EXTRACT $($key) src=$visionSource fields=$((@($ex.Keys)) -join ',')"
+                        }
+                    }
+                } catch { Write-Log "VISION-EXTRACT-ERR $($key): $($_.Exception.Message)" }
             }
             if ($reply -and $reply.Trim().Length -gt 0) {
                 # === 发送前禁词拦截（spec 禁词拦截 Phase 4）：LLM/引擎双路径均过检；命中→LLM 重写一次→仍命中或引擎命中→安全兜底句 ===
