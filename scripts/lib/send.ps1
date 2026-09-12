@@ -2,6 +2,31 @@
 # 返回格式(monitor/nudge 兼容): "OPEN_FAIL (..)" / "ABORT_WRONG_CONVO (expected=.., current=..)" / "NO_TEXTAREA" / "FILLED | CLICKED | SENT_OK" / ".. | NOT_SENT"
 # 依赖: config.ps1, lib\cdp.ps1(Invoke-CdpEval), reply_engine.ps1(Get-StateKey)
 function Send-OneTalkMessage([string]$buyer, [string]$text) {
+    # Accio 网关发送（灰度开关 accio_send_enabled 默认关；失败自动回退 CDP；仅 Phase 4 验证后开启）
+    try {
+        if ((Get-Command Send-AccioMessage -ErrorAction SilentlyContinue) -and (Get-Command Get-SkillConfig -ErrorAction SilentlyContinue)) {
+            $__cfg = Get-SkillConfig
+            if ($__cfg -and ($__cfg.PSObject.Properties.Name -contains 'accio_send_enabled') -and $__cfg.accio_send_enabled) {
+                $__map = Get-AccioConversationMap
+                $__nk = Get-AccioNameKey $buyer
+                if ($__map -and $__nk -and $__map.ContainsKey($__nk)) {
+                    $__e = $__map[$__nk]
+                    if ($__e.selfAliId) {
+                        $__res = Send-AccioMessage -ConversationId $__e.conversationId -BuyerAliId ([long]$__e.contactAliId) -SelfAliId ([long]$__e.selfAliId) -Text $text
+                        if ($__res) {
+                            Write-AccioLog "ACCIO-SEND src=gateway buyer=$buyer"
+                            return "ACCIO-SENT | SENT_OK"
+                        }
+                        Write-AccioLog "ACCIO-SEND src=cdp buyer=$buyer (gateway failed)"
+                    }
+                } else {
+                    Write-AccioLog "ACCIO-SEND src=cdp buyer=$buyer (not in gateway map)"
+                }
+            }
+        }
+    } catch {
+        if (Get-Command Write-AccioLog -ErrorAction SilentlyContinue) { Write-AccioLog "ACCIO-SEND-ERR: $($_.Exception.Message)" }
+    }
     # 1) 打开会话(按买家名匹配列表项)
     $esc = $buyer.Replace("\","\\").Replace("'","\'").Replace('"','\"')
     $js1 = @"

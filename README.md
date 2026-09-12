@@ -13,6 +13,7 @@
 | 能力 | 说明 |
 |---|---|
 | 🔄 **24h 自动监控** | CDP 控制 Chrome 登录 OneTalk，每 12 秒轮询"待回复"板块，断线自动自愈（重启 Chrome + 自动登录），登录态独立 profile 持久保存 |
+| 🔌 **Accio 读取增强（可选）** | 官方 Accio Desktop 本地网关只读拉取全量历史（无 30 天墙）；影子对比 → 读取开关灰度，任何失败自动回退 CDP；发送保持 CDP（未启用） |
 | 🤖 **双引擎回复** | DeepSeek LLM 生成自然回复（意图识别 + 质量红线 + 发送前禁词/责任承诺双检）；LLM 失败/超时自动回退规则引擎（19 类场景） |
 | 🌍 **多语言买家** | 中/英/西/葡/法买家消息识别，统一美式英文回复 |
 | 📦 **信息收集** | 自动追问缺失货物信息（总重/尺寸/图片/收货地址），同字段最多追问 2 次，买家承诺提供后不再追问 |
@@ -79,7 +80,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 | 文件 | 作用 |
 |---|---|
-| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）；经 `scripts\config.ps1` 统一读取 |
+| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）+ Accio 开关 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（缺省全 false）；经 `scripts\config.ps1` 统一读取 |
 | `scripts\reply_rules.json` | 语料库：品牌/价格准则/收集字段/模板/规则（编辑后立即生效） |
 | `scripts\reply_agent_prompt.md` | LLM 提示词：意图识别 + 质量红线（编辑后立即生效） |
 | `llm_config.json` | LLM 非敏感配置（model=`deepseek-v4-flash` / temperature / max_tokens / timeout / endpoint / `thinking:disabled`，**不存 key**） |
@@ -108,6 +109,16 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 - **行为**：名单买家新消息不触发任何自动回复（LLM/规则/图片模板/QUICK 全跳过）；只读留痕（快照 + 档案）并照常 [NEW-INQUIRY] 提醒人工接管。
 - **联动**：报价提醒与沉睡唤醒对名单买家跳过；豁免期不写去重状态，移出后自动恢复。
 - **存储**：`data\manual_override.json`（本机 PII 不入库）；按会话显示名匹配（大小写/空格/下划线容错）。
+
+## 🔌 Accio 网关（可选，读取增强）
+
+官方 **Accio Desktop**（阿里国际站桌面端）在 `localhost:4097` 暴露本地 IM 网关，可只读拉取全量历史（无 30 天墙）。系统把它作为**可选的读取增强数据源**，CDP 永远是主路径与降级通道：
+
+- **影子模式**（`accio_shadow=true`）：处理会话时并行对比网关历史与 CDP 提取（`ACCIO-SHADOW` 日志：条数/最新文本/时间戳/覆盖率），不改任何行为
+- **读取开关**（`accio_read_enabled=true`）：LLM/规则上下文优先用网关全量历史（日志 `ACCIO-READ src=gateway`）；内容重叠校验失败或网关不可用自动回退 CDP（`ACCIO-READ src=cdp`）；去重/最新消息基准仍取 CDP，保证零行为突变
+- **发送开关**（`accio_send_enabled`，默认关）：网关发送通道已实现（双边 receiverAliID + 回读验证约定），需用户指定测试会话验证后才启用；当前保持 CDP 发送
+- **组件**：`tools\accio-client`（Node 零依赖 CLI，自研协议实现 + fake gateway 测试）；适配层 `scripts\lib\accio.ps1`；登录自启：启动文件夹快捷方式 `Accio Desktop.lnk`
+- **凭据纪律**：只读 `%USERPROFILE%\.accio\accounts\*\...\gateway-cli.json`（每次调用重读），鉴权值不落日志/仓库
 
 ## 🛡️ 安全
 
@@ -144,12 +155,13 @@ alibaba-auto-reply/
 │   ├── weekly_report.ps1 / nudge.ps1 / quote_remind.ps1 ← 周报/唤醒/报价提醒
 │   ├── dashboard.ps1         ← 数据看板（手动工具）
 │   ├── state.json(+bak)      ← 已回复去重状态
-│   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push）
+│   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push/accio）
 ├── tools\                    ← 独立可复用组件（各自 npm 依赖与测试）
 │   ├── wecom-connector\      ← 企微 HTTP 桥（Node，63 例测试）
 │   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
+│   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例测试 + shadow_compare.ps1）
 │   └── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试）
-├── tests\                    ← 主仓库回归测试（5 文件 216 断言，fixtures 虚构数据）
+├── tests\                    ← 主仓库回归测试（6 文件 245 断言，fixtures 虚构数据）
 ├── logs\  data\  reports\  backups\   ← 运行时数据（均不入库）
 └── chrome-profile\           ← Chrome 登录态（独立 profile，勿删除）
 ```
@@ -157,13 +169,14 @@ alibaba-auto-reply/
 ## 🧪 开发与运维
 
 ```powershell
-# 主仓库回归测试（5 文件 216 断言：goods 27 + no_reply 29 + reply_engine 84 + report_push 33 + vision 43）
+# 主仓库回归测试（6 文件 245 断言：goods 27 + no_reply 29 + reply_engine 84 + report_push 33 + vision 43 + accio 29）
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
 
 # tools 组件测试
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\wecom-connector\tests\run_tests.ps1   # 63 例
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\tests\run_tests.ps1     # 46 例
 node --test tools\doc-reader\tests\read.test.js                                                 # 7 例
+node --test tools\accio-client\tests\gateway.test.js tools\accio-client\tests\api.test.js      # 14 例
 
 # 代码快照 / 镜像同步 / 健康检查
 powershell -ExecutionPolicy Bypass -NoProfile -File scripts\backup.ps1 -Snapshot

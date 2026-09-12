@@ -2,6 +2,23 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-12 - Accio 网关迁移（读取增强）与 watchdog 保活修复
+
+### A 包：Accio 读取增强（影子→读取灰度，CDP 始终兜底）
+- 新增组件 `tools\accio-client`（Node 零依赖 CLI：status/conversations/messages/send + fake gateway 测试 14 例）；协议按实测调用方式自行重写（`/mcp/proxy`；`query_recent_conversation` 包 request、`query_conversation_msg_timeRange` 扁平、`send_msg` 双边 receiverAliID）
+- 新增适配层 `scripts\lib\accio.ps1`：网关探测（60s 缓存）、会话映射（买家名归一化）、消息→`[BUYER]/[ME] ... @@TS:` 行转换、影子对比（模糊匹配+覆盖率）、内容重叠校验、发送封装；失败一律回退 CDP
+- `monitor.ps1`：影子/读取钩子（日志 `ACCIO-SHADOW` / `ACCIO-READ`）；**去重/最新消息基准保持 CDP**，网关仅替换回复上下文（零行为突变）
+- `lib\send.ps1`：发送切换钩子（`accio_send_enabled` 默认关；网关失败回退 CDP；未对真实买家测试）
+- `config.json(.example)`：新增 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（默认 false）
+- 影子对比实测：22 会话，最新买家消息 20/22 匹配（2 例为同名多线程/DOM 杂质，已有重叠校验防护）
+- 登录自启：启动文件夹快捷方式 `Accio Desktop.lnk`（计划任务注册需管理员权限，未采用）
+- `status.ps1`：新增 Accio 状态行（进程/端口 4097/版本）；`watchdog.ps1`：Accio 轻量探测（持续不可达记 `WATCHDOG-ACCIO`，不自动重启桌面应用）
+- 测试：`tests\accio.tests.ps1`（29 断言）+ accio-client node 测试（14 例）；主套件 6 文件 245 断言全绿
+
+### C 包：watchdog control-agent 保活修复
+- 保活块新增超时留痕：75s 无 `CONTROL-` 输出 → `WATCHDOG-AGENT: timeout waiting result (will retry next cycle)`（不设冷却，下轮立即重试）
+- kill 测试 2 次（含 watchdog 重启后首轮）均在 1 个周期内拉起并留 `WATCHDOG-AGENT: CONTROL-STARTED` 日志
+
 ## 2026-09-12 - 报告企微推送 + 附件识别与模型切换
 
 ### 报告推送（A 包）

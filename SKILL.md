@@ -27,10 +27,11 @@ CDP 控制本机 Chrome 登录 OneTalk 卖家消息中心：监控询盘、按�
 - A3 自动循环：每 12s 扫描待回复板块 → 打开会话 → 提取消息 → 意图识别/缺口核对 → 生成回复 → 发送 → 去重。成功=`REPLIED ... SENT_OK`；`RETRY-QUEUE`=发送失败进冷却重试，等待即可。附件：图片走视觉多模态、文档（PDF/xlsx/csv/docx）解析文本或渲染扫描件，失败回退 IMG_TEMPLATE/普通文本流程；明确可见的重量/尺寸/箱数/单号机会性提取入 `data\vision_extract\<buyer>.json`（不臆造）。
 - A4 回复依据：`scripts\reply_rules.json`（规则/字段/模板）+ `scripts\reply_agent_prompt.md`（LLM 提示词，改后立即生效）；规则引擎见 `scripts\reply_engine.ps1`。
 - A5 新询盘提醒：新买家首次出现自动推企微（24h 节流）；`SERVICE_DOWN`/`SEND_FAIL` 只记日志不影响回复。
+- A6 Accio 读取增强（可选）：`accio_read_enabled=true` 时回复上下文优先用 Accio 网关全量历史（无 30 天墙），失败/内容不匹配自动回退 CDP（日志 `ACCIO-READ src=gateway|cdp`）；`accio_shadow` 影子对比（`ACCIO-SHADOW`）；开关在 `scripts\config.json`，改后需重启 monitor；发送（`accio_send_enabled`）未启用。
 
 ## B. 健康检查与维护
 - B1 `scripts\status.ps1`：无 `[!!]` 且敏感审计 `[OK]`。
-- B2 守护与任务：`watchdog.ps1` 运行中（30s 检查，五重守护：进程/日志/CDP/企微/control-agent）；计划任务 5 项：Summary/Quality/Optimize/Weekly（Ready）+ Watchdog（登录自启，常驻 Running）。control-agent 由 watchdog 保活（`scripts\agent_start.ps1`，失败 5 分钟冷却）；停用/恢复用 `bin\control-agent.ps1 -Action stop/start`（标记 `data\control-agent.disabled`）。
+- B2 守护与任务：`watchdog.ps1` 运行中（30s 检查，五重守护：进程/日志/CDP/企微/control-agent；另有 Accio 轻量探测，网关不可达记 `WATCHDOG-ACCIO` 日志）；计划任务 5 项：Summary/Quality/Optimize/Weekly（Ready）+ Watchdog（登录自启，常驻 Running）。control-agent 由 watchdog 保活（`scripts\agent_start.ps1`，失败 5 分钟冷却；超时留 `WATCHDOG-AGENT: timeout` 日志）；停用/恢复用 `bin\control-agent.ps1 -Action stop/start`（标记 `data\control-agent.disabled`）。
 - B3 镜像：`scripts\sync.ps1 -Status` 无 DIFFERS/ONLY-WORK，否则 `-Push`；镜像目录 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`。
 - B4 发布：`backup.ps1 -Snapshot` → 改代码（UTF-8 BOM）→ `status.ps1` → `sync.ps1 -Push` → git commit/push（`.githooks\` 自动脱敏，[BLOCK] 必须整改，禁止 `--no-verify`）→ 观察 24h；改 `monitor.ps1` 需低询盘时段重启。
 
@@ -92,5 +93,6 @@ powershell -ExecutionPolicy Bypass -NoProfile -File ...\scripts\sync.ps1 -Status
 - 部署/架构/机制/工具：`README_部署说明.md`；企微组件：`tools\wecom-connector\README.md`、`tools\control-agent\README.md`
 - 报告推送：`scripts\lib\report_push.ps1`（quality/weekly 生成后自动推企微摘要；开关 config `report_push_enabled`；去重 `data\report_push_state.json`）
 - 附件识别：`scripts\lib\vision.ps1`（图片/提取/sidecar）、`scripts\lib\doc.ps1`（下载/临时文件）、`tools\doc-reader\README.md`（PDF/xlsx/csv/docx 解析）
+- Accio 网关（可选读取增强）：`tools\accio-client\README.md`（Node CLI）、`scripts\lib\accio.ps1`（适配层）、`tools\accio-client\shadow_compare.ps1`（影子对比）
 - 质量闭环：`scripts\analyze_replies.ps1`（05:00 质量报告）→ `scripts\auto_optimize.ps1`（05:30 自动提炼）→ `scripts\consolidate_prompt.ps1`（阈值合并归档）
 - 监控机制要点：去重=state.json 消息 hash+时间戳（仅 SENT_OK 记录）；防错发=发送前会话名校验；断线自愈=抓列表失败×3 刷新页、CDP 掉线×3 跑 `chrome_ensure.ps1`；按需 reload（idle 10m / busy 30m）

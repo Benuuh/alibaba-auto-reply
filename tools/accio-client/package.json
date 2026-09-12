@@ -1,0 +1,11 @@
+{
+  "name": "accio-client",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Accio Desktop local gateway client (zero dependency, rewritten from protocol observations)",
+  "type": "commonjs",
+  "main": "cli.js",
+  "scripts": {
+    "test": "node --test tests/gateway.test.js tests/api.test.js"
+  }
+}

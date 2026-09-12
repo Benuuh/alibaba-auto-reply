@@ -18,10 +18,10 @@ function ConvertTo-NoReplyKey([string]$s) {
     return $t
 }
 
-$script:__noReplyCache = @{}     # path -> @{ t=tick; ft=文件mtime; list=@() }
+$script:__noReplyCache = @{}     # path -> @{ raw=文件原始内容; list=@() }(内容级缓存:同 tick 内两次写入 mtime 相同也不会读到旧名单)
 $script:__noReplyWarned = @{}    # path -> $true(损坏/缺失仅 WARN 一次)
 
-# 读名单: 10s TTL 静态缓存(文件 mtime 变化立即失效,便于测试与即时编辑)
+# 读名单: 内容级缓存(文件内容变化立即失效,便于测试与即时编辑;文件极小,每调用重读开销可忽略)
 function Get-NoReplyList([string]$Path = "") {
     if (-not $Path) {
         if (Get-Command Get-SkillPath -ErrorAction SilentlyContinue) {
@@ -31,19 +31,30 @@ function Get-NoReplyList([string]$Path = "") {
             $Path = Join-Path $root "manual_override.json"
         }
     }
-    $ft = -1
-    if (Test-Path $Path) {
-        try { $ft = (Get-Item $Path).LastWriteTimeUtc.Ticks } catch {}
+    $exists = Test-Path $Path
+    $raw = ""
+    if ($exists) {
+        try { $raw = Get-Content $Path -Raw -Encoding UTF8 } catch { $raw = "" }
+        if ($null -eq $raw) { $raw = "" }
     }
-    $now = [Environment]::TickCount
     if ($script:__noReplyCache.ContainsKey($Path)) {
         $c = $script:__noReplyCache[$Path]
-        if ($c.ft -eq $ft -and ($now - $c.t) -lt 10000) { return $c.list }
+        if ($c.raw -eq $raw) { return $c.list }
     }
     $list = @()
-    if (Test-Path $Path) {
+    if (-not $exists) {
+        if (-not $script:__noReplyWarned.ContainsKey($Path)) {
+            $script:__noReplyWarned[$Path] = $true
+            Write-Warning "no_reply: $Path 不存在,按空名单处理"
+        }
+    } elseif (-not $raw) {
+        if (-not $script:__noReplyWarned.ContainsKey($Path)) {
+            $script:__noReplyWarned[$Path] = $true
+            Write-Warning "no_reply: $Path 读取失败,按空名单处理"
+        }
+    } else {
         try {
-            $arr = Get-Content $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+            $arr = $raw | ConvertFrom-Json
             if ($arr -is [System.Array]) {
                 foreach ($e in $arr) {
                     $nk = ConvertTo-NoReplyKey ([string]$e)
@@ -62,11 +73,8 @@ function Get-NoReplyList([string]$Path = "") {
                 Write-Warning "no_reply: $Path 读取失败,按空名单处理"
             }
         }
-    } elseif (-not $script:__noReplyWarned.ContainsKey($Path)) {
-        $script:__noReplyWarned[$Path] = $true
-        Write-Warning "no_reply: $Path 不存在,按空名单处理"
     }
-    $script:__noReplyCache[$Path] = @{ t = $now; ft = $ft; list = $list }
+    $script:__noReplyCache[$Path] = @{ raw = $raw; list = $list }
     return $list
 }
 

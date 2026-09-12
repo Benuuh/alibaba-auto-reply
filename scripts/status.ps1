@@ -51,6 +51,21 @@ if ($agentProc.Count -eq 0 -and (Test-Path $agentFlag)) {
     StatusLine "control-agent" $false "DOWN(保活将在下轮拉起)"
 }
 
+# Accio 网关(桌面应用;读取优先迁移的只读数据源,CDP 始终兜底)
+$accioProcs = @(Get-Process -Name Accio -ErrorAction SilentlyContinue)
+$accioExe = $null
+if ($accioProcs.Count -gt 0 -and $accioProcs[0].Path) { $accioExe = $accioProcs[0].Path }
+elseif (Test-Path 'D:\Accio\Accio.exe') { $accioExe = 'D:\Accio\Accio.exe' }
+$accioVer = ""
+if ($accioExe) { try { $accioVer = (Get-Item $accioExe).VersionInfo.ProductVersion } catch {} }
+if ($accioProcs.Count -gt 0) {
+    $gwOk = $false
+    try { $gwOk = (Test-NetConnection 127.0.0.1 -Port 4097 -WarningAction SilentlyContinue).TcpTestSucceeded } catch {}
+    StatusLine "Accio 网关" $gwOk "PID=$($accioProcs[0].Id), v$accioVer, 端口4097=$(if ($gwOk) { '可达' } else { '不可达' })"
+} else {
+    StatusLine "Accio 网关" $false "未运行(监控走 CDP;自启任务 AccioAutostart) v$accioVer"
+}
+
 # --- 2. CDP / Chrome ---
 $cdpPort = Get-CdpPort
 Section "Chrome / CDP ($cdpPort)"

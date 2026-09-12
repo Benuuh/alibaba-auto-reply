@@ -21,6 +21,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\no_reply.ps1")
 . (Join-Path $PSScriptRoot "lib\vision.ps1")
 . (Join-Path $PSScriptRoot "lib\doc.ps1")
+. (Join-Path $PSScriptRoot "lib\accio.ps1")
 $script:skillCfg = Get-SkillConfig
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:cdpScript = Get-SkillPath "cdp"
@@ -31,6 +32,9 @@ $script:logFileDir = Get-SkillPath "logs"
 $script:dataDir = Get-SkillPath "data"
 $logFile = Join-Path $script:logFileDir "monitor.log"
 $stateFile = Join-Path $LogDir "state.json"
+# Accio 网关灰度开关(默认全关;影子/读取失败一律回退 CDP)
+$script:accioFlags = Get-AccioFlags $script:skillCfg
+Set-AccioLogFile $logFile
 
 # 发送前拦截安全兜底句（spec 禁词拦截 Phase 4 + 2026-09-10 责任承诺拦截）：命中禁词/责任承诺且重写仍越线/引擎路径命中时整体替换；争议与通用场景安全，纯 ASCII，非空保证
 $script:banSafeFallback = "Thanks for your patience - I've noted this and I'm checking with the team. I'll get back to you with a clear update shortly."
@@ -658,8 +662,25 @@ function Invoke-ConvoItem($ctx, $item) {
     $msgLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
     Add-Content -Path $msgLog -Value ("# BUYER: " + $key) -Encoding UTF8
     Add-Content -Path $msgLog -Value $msgs -Encoding UTF8
-    $lines = @($msgs -split "`n") | Where-Object { $_ -notmatch '在Alibaba|平台聊天和交易|由阿里翻译提供|翻译提示|已读$|反馈$|举报$|自动接待' }
-    $buyerMsgs = @($lines | Where-Object { $_ -match '^\[BUYER\]' })
+    $cdpLines = @($msgs -split "`n") | Where-Object { $_ -notmatch '在Alibaba|平台聊天和交易|由阿里翻译提供|翻译提示|已读$|反馈$|举报$|自动接待' }
+    $lines = $cdpLines
+    # Accio 影子/读取切换（开关默认关；任何失败自动回退 CDP）。
+    # 去重/最新买家消息基准始终取 CDP，避免网关行文本差异导致 hash 突变→重复回复。
+    if ($script:accioFlags.shadow -or $script:accioFlags.read) {
+        $gwLines = Get-AccioReplyLines $key
+        if ($script:accioFlags.shadow) {
+            if ($gwLines) { Invoke-AccioShadowCompare $key $cdpLines $gwLines }
+            else { Write-Log "ACCIO-SHADOW $($key): gateway unavailable (cdp-only)" }
+        }
+        if ($script:accioFlags.read) {
+            if ($gwLines -and (Test-AccioLinesOverlap $cdpLines $gwLines)) {
+                $lines = @($gwLines); Write-Log "ACCIO-READ src=gateway $($key) lines=$(@($gwLines).Count)"
+            } else {
+                Write-Log "ACCIO-READ src=cdp $($key) (gateway unavailable or content mismatch)"
+            }
+        }
+    }
+    $buyerMsgs = @($cdpLines | Where-Object { $_ -match '^\[BUYER\]' })
     if ($buyerMsgs.Count -gt 0) {
         $latest = ($buyerMsgs[0] -replace '^\[BUYER\] ','')
         if ($latest.Trim().Length -eq 0) {

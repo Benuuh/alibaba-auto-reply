@@ -128,6 +128,19 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 ```
 逐项确认：monitor/watchdog 进程、CDP 9222、日志新鲜度、去重状态、企微 connected、计划任务、敏感审计无 [!!] 级问题。
 
+### Phase H：Accio 网关（可选，读取增强）
+官方 **Accio Desktop** 本地网关可只读拉取全量历史（无 30 天墙），作为可选数据源（CDP 始终兜底）。启用步骤：
+
+1. 安装并登录 Accio Desktop（官方渠道，国际站店铺在 Accio 内完成 Alibaba 连接器登录）；**首次登录后重启一次 Accio**（网关凭据文件 `%USERPROFILE%\.accio\accounts\*\...\gateway-cli.json` 只在启动时且已登录才写入）
+2. 登录自启：启动文件夹快捷方式 `Accio Desktop.lnk`（指向 Accio 安装目录，本机已配置；计划任务方式需管理员权限）
+3. 灰度开关（`scripts\config.json`，默认全 false）：
+   - `accio_shadow=true` → 影子对比（只记 `ACCIO-SHADOW` 日志，不改行为）
+   - `accio_read_enabled=true` → 回复上下文优先用网关全量历史（失败/内容不匹配自动回退 CDP，日志 `ACCIO-READ src=gateway|cdp`）
+   - `accio_send_enabled`（保持 false）→ 网关发送通道（需用户指定测试会话 + 回读验证后才可开启）
+4. 改开关后需重启 monitor 生效；组件测试：`node --test tools\accio-client\tests\gateway.test.js tools\accio-client\tests\api.test.js`
+5. 一键影子对比（只读，不打开浏览器）：`powershell -File tools\accio-client\shadow_compare.ps1 -MaxConversations 25`
+6. 健康检查：`status.ps1` 新增 Accio 状态行（进程/端口 4097/版本）；watchdog 每轮轻量探测，网关持续不可达会记 `WATCHDOG-ACCIO` 日志（不自动重启桌面应用）
+
 ## 四、常用运维
 
 | 操作 | 命令 |
@@ -140,6 +153,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 | 代码快照（发布前必做） | `scripts\backup.ps1 -Snapshot` |
 | 镜像同步 | `scripts\sync.ps1 -Status` / `scripts\sync.ps1 -Push`（默认镜像 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`，`-MirrorRoot` 可覆盖） |
 | 报价提醒手动触发 | `scripts\quote_remind.ps1` |
+| Accio 网关状态/影子对比 | `status.ps1`（Accio 状态行）；`tools\accio-client\shadow_compare.ps1`（只读对比）；开关见 config.json 的 `accio_*` |
 | 发送测试消息 | 见 `tools\wecom-connector\client\wecom-client.ps1`（Conn-SendMessage） |
 
 **配置热更新**：改 `scripts\reply_rules.json` / `reply_agent_prompt.md` 立即生效，无需重启；改 config.json 类路径/凭据后需重启对应进程。

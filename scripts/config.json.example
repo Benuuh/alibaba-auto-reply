@@ -15,5 +15,8 @@
     "report_push_enabled": true,
     "reload_idle_min": 3,
     "restart_storm_count": 4,
-    "restart_storm_window_min": 10
+    "restart_storm_window_min": 10,
+    "accio_shadow": false,
+    "accio_read_enabled": false,
+    "accio_send_enabled": false
 }

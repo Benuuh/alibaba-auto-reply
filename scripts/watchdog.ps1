@@ -116,6 +116,8 @@ function Start-Watchdog {
     $cdpFailStreak = 0
     # control-agent 启动失败冷却截止时间(成功/失败状态变化才写日志,避免 30s 刷屏)
     $script:agentRetryAfter = [datetime]::MinValue
+    # Accio 网关降级状态(仅进程轻量探测;连续不可达 N 轮记一次日志,避免刷屏)
+    $script:accioDownStreak = 0
     while ($true) {
         try {
             $procs = Get-MonitorProcesses
@@ -167,20 +169,39 @@ function Start-Watchdog {
                 $asChild = Start-Process -FilePath 'powershell.exe' -ArgumentList ('-ExecutionPolicy Bypass -NoProfile -File "' + $agentStart + '"') -WindowStyle Hidden -RedirectStandardOutput $asOut -RedirectStandardError $asErr -PassThru
                 $asDeadline = (Get-Date).AddSeconds(75)
                 $asText = ""
+                $sawControl = $false
                 while ((Get-Date) -lt $asDeadline) {
                     if (Test-Path $asOut) {
                         $asText = (@(Get-Content $asOut -Encoding UTF8 -ErrorAction SilentlyContinue) -join ' ')
-                        if ($asText -match 'CONTROL-') { break }
+                        if ($asText -match 'CONTROL-') { $sawControl = $true; break }
                     }
                     Start-Sleep -Seconds 1
                 }
                 Remove-Item $asOut,$asErr -Force -ErrorAction SilentlyContinue
-                if ($asText -match 'CONTROL-STARTED') { Write-Log "WATCHDOG-AGENT: $asText" }
-                elseif ($asText -match 'CONTROL-START-FAIL') {
-                    Write-Log "WATCHDOG-AGENT: issue - $asText (5 分钟内不重试)"
-                    $script:agentRetryAfter = (Get-Date).AddMinutes(5)
+                if ($sawControl) {
+                    if ($asText -match 'CONTROL-STARTED') { Write-Log "WATCHDOG-AGENT: $asText" }
+                    elseif ($asText -match 'CONTROL-START-FAIL') {
+                        Write-Log "WATCHDOG-AGENT: issue - $asText (5 分钟内不重试)"
+                        $script:agentRetryAfter = (Get-Date).AddMinutes(5)
+                    }
+                    # CONTROL-ALREADY-RUNNING / CONTROL-DISABLED → 静默
+                } else {
+                    # 超时无结果:留痕并立即重试(不设冷却)——此前静默会导致首轮失败不可见
+                    Write-Log "WATCHDOG-AGENT: timeout waiting result (will retry next cycle)"
                 }
-                # CONTROL-ALREADY-RUNNING / CONTROL-DISABLED → 静默
+            }
+            # Accio 桌面应用健康探测(轻量:仅进程;网关不可达时监控侧自动回退 CDP,不重启桌面应用)
+            $accioUp = @(Get-Process -Name Accio -ErrorAction SilentlyContinue).Count -gt 0
+            if (-not $accioUp) {
+                $script:accioDownStreak++
+                if ($script:accioDownStreak -eq 3) {
+                    Write-Log "WATCHDOG-ACCIO: gateway down, CDP fallback active (x3)"
+                } elseif ($script:accioDownStreak -gt 3 -and ($script:accioDownStreak % 20) -eq 0) {
+                    Write-Log "WATCHDOG-ACCIO: gateway still down (x$($script:accioDownStreak)), CDP fallback active"
+                }
+            } else {
+                if ($script:accioDownStreak -ge 3) { Write-Log "WATCHDOG-ACCIO: gateway up (Accio running)" }
+                $script:accioDownStreak = 0
             }
         } catch {
             Write-Log "Watchdog error: $($_.Exception.Message)"
