@@ -71,7 +71,11 @@
                                       "Never answer a buyer\u0027s specific request (delivery schedule, unloading capability, price terms) with a generic statement or unrelated small talk.",
                                       "Never ask the buyer to pay any deposit, security deposit, or additional charge that is not in the agreed contract or platform payment terms.",
                                       "Never send a reply that only acknowledges the buyer\u0027s message without addressing their stated concern or providing a concrete next step.",
-                                      "Never repeat the same wording or template when the buyer resends the same message; always add new information or a concrete action."
+                                      "Never repeat the same wording or template when the buyer resends the same message; always add new information or a concrete action.",
+                                      "Never repeat the same wording, template or apology when the buyer resends the same message; always add new information or a concrete action.",
+                                      "Never send multiple messages in a row to a buyer who has not replied, or continue sending follow-ups after the buyer indicates the messages are annoying.",
+                                      "Never send any further follow-up or proactive message to a buyer who has said our messages are annoying, unless the buyer initiates a new message first.",
+                                      "Never reply to a buyer\u0027s complaint about annoying messages with only an apology or a system excuse; state a concrete stop action (e.g., \u0027I\u0027ll stop the follow-ups now\u0027)."
                                   ],
                         "urgency":  [
 
