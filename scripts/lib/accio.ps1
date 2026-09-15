@@ -1,4 +1,4 @@
-# lib/accio.ps1 - Accio 网关适配层(PS 封装)。
+﻿# lib/accio.ps1 - Accio 网关适配层(PS 封装)。
 # 原则:失败一律返回 $null/空并写日志,由调用方回退 CDP;不打印任何鉴权值。
 # 依赖: config.ps1(Get-SkillPath/Get-SkillConfig) + lib\log.ps1(Write-SkillLog) + tools\accio-client\cli.js。
 if (-not (Get-Command Get-SkillPath -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot "..\config.ps1") }
@@ -10,6 +10,46 @@ $script:AccioNodeExe = $null
 $script:AccioGatewayCache = $null      # @{ ok=[bool]; at=[datetime] }
 $script:AccioConvCache = $null         # @{ at=[datetime]; list=@() }
 $script:AccioInfoCache = $null         # @{ at=[datetime]; mtime=[datetime]; info=@{url;pid;relayPort} }
+# F7(2026-09-15 停摆根因修复):AUTH-REQUIRED 负缓存。Accio 桌面应用更新/重启期间网关会返回
+# AUTH-REQUIRED,旧实现每轮都重新探测并失败(浪费轮次时间 + 把日志刷成噪声)。命中后 5 分钟内不再探测,
+# 直接返回 $null 走 CDP 回退(设计内行为,回复不受影响)。
+$script:AccioAuthBlocked = $null       # @{ at=[datetime]; until=[datetime]; code=[string] }
+$script:AccioAuthBlockSec = 300
+$script:AccioAuthSkipLoggedAt = $null  # ACCIO-AUTH-SKIP 日志节流(≥60s 一行)
+# 供 status.ps1 巡检:最近一次 AUTH-REQUIRED 的时间
+function Get-AccioAuthState {
+    if ($script:AccioAuthBlocked) { return $script:AccioAuthBlocked }
+    return $null
+}
+# F7:把鉴权状态落盘(logs\accio_auth_state.json),使 status.ps1 等独立进程可观测,
+# 并让负缓存跨 monitor 重启依然生效。
+function Save-AccioAuthState([object]$state) {
+    try {
+        $dir = Get-SkillPath "logs"
+        if (-not $dir) { return }
+        $f = Join-Path $dir "accio_auth_state.json"
+        if (-not $state) { Remove-Item $f -Force -ErrorAction SilentlyContinue; return }
+        @{ at = $state.at.ToString('yyyy-MM-dd HH:mm:ss'); until = $state.until.ToString('yyyy-MM-dd HH:mm:ss'); code = $state.code } |
+            ConvertTo-Json | Set-Content -Path $f -Encoding UTF8
+    } catch {}
+}
+# 启动时恢复上次的负缓存(仅在仍未过期时)
+function Restore-AccioAuthState {
+    try {
+        $dir = Get-SkillPath "logs"
+        if (-not $dir) { return }
+        $f = Join-Path $dir "accio_auth_state.json"
+        if (-not (Test-Path $f)) { return }
+        $j = Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $j.until) { return }
+        $until = [datetime]::Parse([string]$j.until)
+        if ($until -gt (Get-Date)) {
+            $script:AccioAuthBlocked = @{ at = [datetime]::Parse([string]$j.at); until = $until; code = [string]$j.code }
+        } else {
+            Remove-Item $f -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
 
 function Set-AccioLogFile([string]$Path) { $script:AccioLogFile = $Path }
 function Write-AccioLog([string]$msg) { if ($script:AccioLogFile) { Write-SkillLog $msg $script:AccioLogFile } }
@@ -126,7 +166,18 @@ function Invoke-AccioCli([string[]]$CliArgs, [int]$TimeoutMs = 120000) {
         if ($obj.PSObject.Properties.Name -contains 'ok' -and -not $obj.ok) {
             $code = 'UNKNOWN'
             if ($obj.error -and $obj.error.code) { $code = [string]$obj.error.code }
-            Write-AccioLog "ACCIO-ERR: $($CliArgs[0]) code=$code"
+            if ($code -eq 'AUTH-REQUIRED') {
+                # F7:命中鉴权失败 → 记负缓存并只写一行(去重,避免每轮刷屏)
+                $wasBlocked = $false
+                if ($script:AccioAuthBlocked -and $script:AccioAuthBlocked.until -gt (Get-Date)) { $wasBlocked = $true }
+                $script:AccioAuthBlocked = @{ at = (Get-Date); until = (Get-Date).AddSeconds($script:AccioAuthBlockSec); code = $code }
+                Save-AccioAuthState $script:AccioAuthBlocked
+                if (-not $wasBlocked) {
+                    Write-AccioLog "ACCIO-ERR: $($CliArgs[0]) code=$code -> negative-cache ${script:AccioAuthBlockSec}s (fallback CDP; 需在 Accio 桌面应用重新登录才能恢复直读)"
+                }
+            } else {
+                Write-AccioLog "ACCIO-ERR: $($CliArgs[0]) code=$code"
+            }
             return $null
         }
         return $obj
@@ -143,6 +194,15 @@ function Get-AccioConversations([int]$Pages = 5, [int]$Count = 50, [switch]$Forc
     $now = Get-Date
     if (-not $Force -and $script:AccioConvCache -and (($now - $script:AccioConvCache.at).TotalSeconds -lt 300)) {
         return $script:AccioConvCache.list
+    }
+    # F7:鉴权负缓存生效期内不再探测,直接回退 CDP(每轮只留一行去重日志)
+    if (-not $Force -and $script:AccioAuthBlocked -and $script:AccioAuthBlocked.until -gt $now) {
+        $leftSec = [int](($script:AccioAuthBlocked.until - $now).TotalSeconds)
+        if (-not $script:AccioAuthSkipLoggedAt -or ((Get-Date) - $script:AccioAuthSkipLoggedAt).TotalSeconds -ge 60) {
+            Write-AccioLog "ACCIO-AUTH-SKIP: AUTH-REQUIRED negative-cache active (${leftSec}s left, last=$($script:AccioAuthBlocked.at.ToString('yyyy-MM-dd HH:mm:ss'))) - skip conversations probe, fallback CDP"
+            $script:AccioAuthSkipLoggedAt = Get-Date
+        }
+        return $null
     }
     if (-not (Test-AccioGateway)) { return $null }
     $obj = Invoke-AccioCli @('conversations', '--pages', "$Pages", '--count', "$Count")

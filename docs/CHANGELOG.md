@@ -2,6 +2,37 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-15 - 停摆根因修复（monitor 被误杀 / 僵锁自锁 / 风暴保护永久放弃）
+
+**事故**：04:44–07:57 停摆约 3h05m。一轮真实回复耗时 >90s → watchdog 按"日志静默 > 90s"杀掉**正在工作**的 monitor → 强杀导致 `data\onetalk-write.lock` 残留僵锁 → `Get-AppLock` 删锁却不重试（`timeoutSec=0` 时 deadline 已过）→ 后续每轮 `LOCK-BUSY` 空转且日志静默 → 再被判 stale → 再杀，5 次后触发风暴保护 `exit 1` **永久停止自愈**，无人知晓直至人工巡检。
+
+### F1 锁自愈（`lib\lock.ps1`）
+- `Get-AppLock`：判定 holder 已死后**当场重试创建锁并返回 $true**（原实现 `continue` 在 `timeoutSec=0` 时直接退出循环返回 $false）。切断"僵锁 → 空转 → 误杀 → 新僵锁"闭环
+- 新增回归测试 `tests\lock.tests.ps1`（11 断言：无锁可取 / 僵锁自愈 / 活锁不抢占且不删他人锁 / 测试锁不残留）；主套件 6 → 7 文件
+
+### F2 stale 判定（`monitor.ps1` + `watchdog.ps1` + `lib\llm.ps1`）
+- (a) **轮次心跳**：回复轮次内输出 `ROUND-START / ROUND-VISION-BEGIN|END / ROUND-LLM-BEGIN|END / ROUND-LLM-WAIT / ROUND-SEND / ROUND-DONE`；LLM 阻塞等待改为 `BeginGetResponse` + 15s 心跳轮询（**超时语义不变**，仍为 `timeout_sec`，超时仍归类 TIMEOUT 不重试），响应体改分块读取（StreamReader 保持 UTF-8 解码等价），使单次最长 LLM 调用不再产生 >30s 静默
+- (b) **活锁豁免**：新增 `Test-LiveWriteLock`；`onetalk-write.lock` 持有 PID 存活时，watchdog 判 stale **不杀**只记 `treated as busy, skip`；真僵死路径日志也带上锁状态，便于复盘区分"在忙"与"真死"
+- (c) **阈值**：静默阈值 90 → **240s**，新增 `config.json` 键 `watchdog_log_stale_sec`（缺省 240，可覆盖）；README Phase I 记录参数与语义
+
+### F3 风暴保护改冷却 + 告警（`watchdog.ps1` + `status.ps1`）
+- 命中风暴不再 `exit 1`，改为写入 `logs\watchdog_cooldown.json`（`until`/`reason`/`count`）进入冷却（`restart_storm_cooldown_min`，缺省 30min），并推企微 `[ALERT] watchdog 重启风暴(...)，进入冷却 N 分钟；请人工检查 monitor.log`（推送失败只记日志）
+- 冷却期内主循环继续运行（抑制 monitor 重启，企微/control-agent 保活照常），每分钟留一行 `COOLDOWN` 状态；到期自动清冷却、恢复完整守护；进程被杀后重启会继承未到期冷却
+- `status.ps1` 新增 `WATCHDOG COOLDOWN` 行
+
+### F4 回复轮次总预算（`monitor.ps1` + `lib\llm.ps1`）
+- 新增 `config.json` 键 `reply_round_budget_sec`（缺省 180s）；每次 LLM 调用前检查剩余预算，不足则跳过该调用并标记本轮；发送前若预算已耗尽则**本轮不发送**、保留待处理、下一轮重试，日志 `ROUND-BUDGET-EXCEEDED <key> elapsed=..s budget=..s stage=..`
+- 多模态/附件识别路径纳入同一预算；重试的 3s 退避与总耗时计入预算
+
+### F7 Accio 授权降噪与可观测（`lib\accio.ps1` + `status.ps1`）
+- `AUTH-REQUIRED` 做 **5 分钟负缓存**：命中后不再每轮探测 `conversations`，直接回退 CDP（回复不受影响）；日志去重（命中一行 `negative-cache 300s`，期间每 ≥60s 一行 `ACCIO-AUTH-SKIP`）
+- 负缓存状态落盘 `logs\accio_auth_state.json`，跨 monitor 重启生效；`status.ps1` 新增 `Accio 授权` 行
+- 该状态多与 Accio 桌面应用更新/重启窗口重合，属瞬态；恢复直读需在 Accio 桌面应用重新登录
+
+### 其他
+- `lib\accio.ps1` 补 UTF-8 BOM（原文件无 BOM，违反"所有 .ps1 必须 UTF-8 带 BOM"，导致其中文日志行按 GBK 解析出现乱码）
+
+
 ## 2026-09-12 - Accio 网关迁移（读取增强）与 watchdog 保活修复
 
 ### A 包：Accio 读取增强（影子→读取灰度，CDP 始终兜底）

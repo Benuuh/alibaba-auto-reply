@@ -16,8 +16,22 @@ function Get-AppLock([string]$name, [int]$timeoutSec = 10) {
             } catch { Start-Sleep -Milliseconds 500 }
         } else {
             $holder = (Get-Content $lockFile -Raw -ErrorAction SilentlyContinue).Split('|')[0]
-            if ($holder -and -not (Get-Process -Id $holder -ErrorAction SilentlyContinue)) {
+            # 只接受纯数字 PID:锁文件损坏/半写入(并发 Set-Content 被打断)时,
+            # Get-Process -Id <非数字> 会抛参数绑定异常;调用方多为 $ErrorActionPreference='Stop',
+            # 该异常会直接终止 monitor 本轮。非数字一律按僵锁回收。
+            $holderAlive = $false
+            if ($holder -and $holder -match '^\d+$') {
+                $holderAlive = [bool](Get-Process -Id ([int]$holder) -ErrorAction SilentlyContinue)
+            }
+            if ($holder -and -not $holderAlive) {
                 Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+                # F1(2026-09-15 停摆根因 R2):僵锁已清必须"当场重试创建"。
+                # timeoutSec=0 时 deadline 已是过去时刻,此处若 continue 会直接退出 do-while 并返回 false
+                # → 该轮被判 LOCK-BUSY 跳过(日志静默)→ watchdog 判 stale 杀进程 → 又留僵锁,形成自锁闭环。
+                try {
+                    Set-Content -Path $lockFile -Value ($PID.ToString() + "|" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")) -Encoding ASCII -ErrorAction Stop
+                    return $true
+                } catch { Start-Sleep -Milliseconds 500 }
                 continue
             }
             Start-Sleep -Seconds 1

@@ -3,7 +3,11 @@ param(
     [string]$Action = "start",
     [string]$LogDir = "",
     [int]$CheckIntervalSec = 30,
-    [int]$LogStaleSec = 90
+    # F2(c) 2026-09-15 停摆根因修复:静默阈值 90 → 240。
+    # 2026-09-15 事故中一轮真实回复耗时 >90s(多模态识别 + LLM 重试叠加)导致 watchdog 误杀正在工作的
+    # monitor。F2(a) 的 ROUND-* 心跳(轮次内 <30s 一行)才是主防线,放宽阈值只是兜底。
+    # 故此处不可设为无限大;可由 config.json 的 watchdog_log_stale_sec 覆盖。
+    [int]$LogStaleSec = 240
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,21 +23,74 @@ $logFile = Join-Path $script:logFileDir "watchdog.log"
 $monitorScript = Join-Path $LogDir "monitor.ps1"
 $ensureScript = Join-Path $LogDir "chrome_ensure.ps1"
 
-# 防重启风暴:window 分钟内重启超过 count 次说明 monitor 启动即崩溃,停止重启并告警(阈值可从 config.json 调)
+# 防重启风暴:window 分钟内重启超过 count 次说明 monitor 启动即崩溃,进入冷却并告警(阈值可从 config.json 调)
 $script:stormCount = 4
 $script:stormWindowMin = 10
+# F3(2026-09-15 停摆根因修复):命中风暴后不再"永久放弃",改为进入冷却期,冷却期内不重启 monitor,
+# 冷却到期自动恢复守护能力,并推送企微告警。
+$script:stormCooldownMin = 30
 $cfgStorm = Get-SkillConfig
 if ($cfgStorm.restart_storm_count) { $script:stormCount = [int]$cfgStorm.restart_storm_count }
 if ($cfgStorm.restart_storm_window_min) { $script:stormWindowMin = [int]$cfgStorm.restart_storm_window_min }
+if ($cfgStorm.restart_storm_cooldown_min) { $script:stormCooldownMin = [int]$cfgStorm.restart_storm_cooldown_min }
+# F2(c):静默阈值可由 config 覆盖(缺省 240)
+if ($cfgStorm.watchdog_log_stale_sec) { $LogStaleSec = [int]$cfgStorm.watchdog_log_stale_sec }
 if ($script:stormCount -lt 1) { $script:stormCount = 1 }
 if ($script:stormWindowMin -lt 1) { $script:stormWindowMin = 1 }
+if ($script:stormCooldownMin -lt 1) { $script:stormCooldownMin = 1 }
+if ($LogStaleSec -lt 30) { $LogStaleSec = 30 }
 $script:restartTimes = New-Object System.Collections.ArrayList
+$script:cooldownFile = Join-Path $script:logFileDir "watchdog_cooldown.json"
+
+# F3:冷却状态读写。返回 @{ until; reason; count } 或 $null(无冷却/已到期)
+function Get-WatchdogCooldown {
+    if (-not (Test-Path $script:cooldownFile)) { return $null }
+    try {
+        $c = Get-Content $script:cooldownFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $c.until) { return $null }
+        $until = [datetime]::Parse([string]$c.until)
+        if ($until -gt (Get-Date)) { return @{ until = $until; reason = [string]$c.reason; count = [int]$c.count } }
+        return $null
+    } catch { return $null }
+}
+function Clear-WatchdogCooldown {
+    if (Test-Path $script:cooldownFile) { Remove-Item $script:cooldownFile -Force -ErrorAction SilentlyContinue }
+}
+# F3:进入冷却 + 企微告警(推送失败只记日志,绝不抛错阻塞守护循环)
+function Enter-WatchdogCooldown([string]$reason, [int]$count) {
+    $until = (Get-Date).AddMinutes($script:stormCooldownMin)
+    $obj = @{ until = $until.ToString('yyyy-MM-dd HH:mm:ss'); reason = $reason; count = $count; at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
+    try { $obj | ConvertTo-Json | Set-Content -Path $script:cooldownFile -Encoding UTF8 } catch {}
+    Write-Log "RESTART-STORM: $($script:stormWindowMin) 分钟内已重启 ${count} 次(原因: $reason),进入冷却 $($script:stormCooldownMin) 分钟(至 $($obj.until)),冷却期内不重启 monitor,请人工检查"
+    try {
+        $wecomScript = Join-Path $LogDir "lib\wecom.ps1"
+        if (Test-Path $wecomScript) {
+            . $wecomScript
+            $alert = "[ALERT] watchdog 重启风暴($reason)，进入冷却 $($script:stormCooldownMin) 分钟；请人工检查 monitor.log"
+            $r = Send-WecomMessage $alert
+            Write-Log "RESTART-STORM-ALERT: $r"
+        } else {
+            Write-Log "RESTART-STORM-ALERT: skipped (lib\wecom.ps1 not found)"
+        }
+    } catch { Write-Log "RESTART-STORM-ALERT-FAIL: $($_.Exception.Message)" }
+}
 function Test-RestartStorm {
     $now = Get-Date
     $keep = @($script:restartTimes | Where-Object { ($now - $_).TotalMinutes -lt $script:stormWindowMin })
     $script:restartTimes = New-Object System.Collections.ArrayList
     foreach ($t in $keep) { [void]$script:restartTimes.Add($t) }
     return ($script:restartTimes.Count -ge $script:stormCount)
+}
+# F2(b):活锁豁免判定 —— data\onetalk-write.lock 的持有 PID 仍存活视为"monitor 正在处理轮次"
+# (含长耗时 LLM/多模态识别),不得以"日志静默"为由杀它。抽成独立函数便于单元测试。
+function Test-LiveWriteLock {
+    $lockPath = Join-Path (Get-SkillPath "data") "onetalk-write.lock"
+    if (-not (Test-Path $lockPath)) { return $null }
+    $lh = (Get-Content $lockPath -Raw -ErrorAction SilentlyContinue).Split('|')[0]
+    # 只接受纯数字 PID:锁文件损坏/半写入时 Get-Process -Id <非数字> 会抛参数绑定异常,
+    # 而调用方(monitor/watchdog)可能是 $ErrorActionPreference='Stop',必须在此挡住。
+    if ($lh -and $lh -match '^\d+$' -and (Get-Process -Id ([int]$lh) -ErrorAction SilentlyContinue)) { return $lh }
+    return $null
 }
 # 按命令行精确匹配正在运行的 monitor 实例(与 Get-MonitorProcesses 兜底共用同一判定)
 function Get-MonitorProcessesByCommandLine {
@@ -51,8 +108,10 @@ function Invoke-WatchdogRestart([string]$reason) {
         return
     }
     if (Test-RestartStorm) {
-        Write-Log "RESTART-STORM: $($script:stormWindowMin) 分钟内已重启 $($script:restartTimes.Count + 1) 次(原因: $reason),停止自动重启避免循环,请人工检查"
-        exit 1
+        # F3(2026-09-15):原实现此处 exit 1 —— 永久停止一切重启,把"可自愈故障"变成"静默停摆"(事故 3h04m 无人知)。
+        # 现改为进入冷却期:冷却内不重启 monitor(避免循环),到期自动恢复守护能力,并推送企微告警。
+        Enter-WatchdogCooldown $reason ($script:restartTimes.Count + 1)
+        return
     }
     Start-MonitorProcess
     [void]$script:restartTimes.Add((Get-Date))
@@ -118,23 +177,57 @@ function Start-Watchdog {
     $script:agentRetryAfter = [datetime]::MinValue
     # Accio 网关降级状态(仅进程轻量探测;连续不可达 N 轮记一次日志,避免刷屏)
     $script:accioDownStreak = 0
+    # F3:冷却期循环计数(用于"每分钟留一行"节流)
+    $script:cooldownTick = 0
+    # 启动时若存在未到期冷却(上次进程被杀但冷却文件残留),继续遵守并留痕
+    if (Get-WatchdogCooldown) {
+        $cd0 = Get-WatchdogCooldown
+        Write-Log "COOLDOWN: inherited active cooldown until $($cd0.until.ToString('yyyy-MM-dd HH:mm:ss')) (reason=$($cd0.reason))"
+        $script:cooldownTick = 1
+    }
     while ($true) {
         try {
             $procs = Get-MonitorProcesses
             $logAge = Get-LogAgeSec
 
-            if ($procs.Count -eq 0) {
-                # 进程不存在 → 重启(带风暴防护)
-                Write-Log "Monitor process NOT FOUND (log age ${logAge}s). Restarting..."
-                Invoke-WatchdogRestart "process not found"
-            } elseif ($logAge -gt $LogStaleSec) {
-                # 进程在但日志长时间未更新 → 判定僵死，杀掉重启(带风暴防护)
-                Write-Log "Monitor process alive but log stale ${logAge}s > ${LogStaleSec}s. Killing and restarting..."
-                foreach ($p in $procs) {
-                    try { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+            # F3:冷却期检查(冷却内不重启 monitor;每分钟评估一次是否可退出冷却)
+            $cd = Get-WatchdogCooldown
+            if ($cd) {
+                $minsLeft = [int]((($cd.until) - (Get-Date)).TotalMinutes) + 1
+                $script:cooldownTick++
+                # 每分钟留一行(冷却状态必须可观测),避免刷屏
+                if (($script:cooldownTick % [int](60 / [Math]::Max(1, $CheckIntervalSec))) -eq 1) {
+                    Write-Log "COOLDOWN: active (reason=$($cd.reason), count=$($cd.count), until=$($cd.until.ToString('yyyy-MM-dd HH:mm:ss')), ~${minsLeft}m left) - monitor restart suppressed, keepalives continue"
                 }
-                Start-Sleep -Seconds 2
-                Invoke-WatchdogRestart "stale log"
+                if ($procs.Count -eq 0) {
+                    Write-Log "COOLDOWN: monitor process NOT FOUND but cooldown active (until $($cd.until.ToString('yyyy-MM-dd HH:mm:ss'))) - not restarting yet"
+                }
+            } else {
+                if ($script:cooldownTick -gt 0) {
+                    Write-Log "COOLDOWN: expired - watchdog resumed full守护 (monitor restart re-enabled)"
+                    $script:cooldownTick = 0
+                    Clear-WatchdogCooldown
+                }
+                if ($procs.Count -eq 0) {
+                    # 进程不存在 → 重启(带风暴防护)
+                    Write-Log "Monitor process NOT FOUND (log age ${logAge}s). Restarting..."
+                    Invoke-WatchdogRestart "process not found"
+                } elseif ($logAge -gt $LogStaleSec) {
+                    # F2(b) 活锁豁免:锁被存活进程持有 = monitor 正在处理轮次(含长耗时 LLM/多模态),不得误杀。
+                    # 2026-09-15 停摆事故即由此处误判 stale 杀活跃进程引起。
+                    $lockHolder = Test-LiveWriteLock
+                    if ($lockHolder) {
+                        Write-Log "WATCHDOG: log quiet ${logAge}s > ${LogStaleSec}s but onetalk-write held by LIVE PID $lockHolder - treated as busy, skip"
+                    } else {
+                        # 进程在但日志长时间未更新 → 判定僵死，杀掉重启(带风暴防护)
+                        Write-Log "Monitor process alive but log stale ${logAge}s > ${LogStaleSec}s, no live write lock. Killing and restarting..."
+                        foreach ($p in $procs) {
+                            try { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+                        }
+                        Start-Sleep -Seconds 2
+                        Invoke-WatchdogRestart "stale log"
+                    }
+                }
             }
             # P2.5 CDP 兜底:CDP 连续不可达 10 次(约 5 分钟)直接跑 chrome_ensure.ps1
             if (Test-CdpReady) {

@@ -35,6 +35,26 @@ if (Test-Path (Join-Path $LogDir "watchdog.pid")) {
     $wtdAlive = [bool](Get-Process -Id $wtdPid -ErrorAction SilentlyContinue)
 }
 StatusLine "watchdog.ps1" $wtdAlive $(if ($wtdPid) { "PID=$wtdPid" } else { "无 PID 文件" })
+# F3(2026-09-15 停摆根因修复):重启风暴冷却状态。存在且未到期 = 冷却中(此期间 watchdog 不重启 monitor)。
+# 2026-09-15 事故中风暴保护是"永久 exit",现已改为有限冷却 + 企微告警,此处即为可观测入口。
+$cdFile = Join-Path (Get-SkillPath "logs") "watchdog_cooldown.json"
+if (Test-Path $cdFile) {
+    $cd = $null
+    try { $cd = Get-Content $cdFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+    if ($cd -and $cd.until) {
+        $cdUntil = [datetime]::Parse([string]$cd.until)
+        if ($cdUntil -gt (Get-Date)) {
+            $cdLeft = [int](($cdUntil - (Get-Date)).TotalMinutes) + 1
+            StatusLine "WATCHDOG COOLDOWN" $false "冷却中 至 $($cdUntil.ToString('yyyy-MM-dd HH:mm:ss')) (~${cdLeft}m) reason=$($cd.reason) count=$($cd.count) — 冷却内不重启 monitor"
+        } else {
+            StatusLine "WATCHDOG COOLDOWN" $true "无(上次冷却 $($cdUntil.ToString('yyyy-MM-dd HH:mm:ss')) 已到期,守护已恢复)"
+        }
+    } else {
+        StatusLine "WATCHDOG COOLDOWN" $true "无(冷却文件不可解析)"
+    }
+} else {
+    StatusLine "WATCHDOG COOLDOWN" $true "无"
+}
 # control-agent(企微自然语言远程控制桥,由 watchdog 保活)
 $agentRoot = Join-Path (Get-SkillPath "") "tools\control-agent"
 $agentProc = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
@@ -64,6 +84,28 @@ if ($accioProcs.Count -gt 0) {
     StatusLine "Accio 网关" $gwOk "PID=$($accioProcs[0].Id), v$accioVer, 端口4097=$(if ($gwOk) { '可达' } else { '不可达' })"
 } else {
     StatusLine "Accio 网关" $false "未运行(监控走 CDP;自启任务 AccioAutostart) v$accioVer"
+}
+
+# F7(2026-09-15 停摆根因修复):Accio 只读链路授权状态。
+# AUTH-REQUIRED 负缓存期间 monitor 不再每轮探测(直接回退 CDP,回复不受影响),此处一眼可见;
+# 恢复直读需在 Accio 桌面应用重新登录。
+$authFile = Join-Path (Get-SkillPath "logs") "accio_auth_state.json"
+if (Test-Path $authFile) {
+    $auth = $null
+    try { $auth = Get-Content $authFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+    if ($auth -and $auth.until) {
+        $authUntil = [datetime]::Parse([string]$auth.until)
+        if ($authUntil -gt (Get-Date)) {
+            $authLeft = [int](($authUntil - (Get-Date)).TotalSeconds)
+            StatusLine "Accio 授权" $false "AUTH-REQUIRED 负缓存中 (最近 $($auth.at), 剩 ${authLeft}s; 回退 CDP 只读)"
+        } else {
+            StatusLine "Accio 授权" $true "正常(上次 AUTH-REQUIRED $($auth.at) 已过期)"
+        }
+    } else {
+        StatusLine "Accio 授权" $true "正常"
+    }
+} else {
+    StatusLine "Accio 授权" $true "正常(无 AUTH-REQUIRED 记录)"
 }
 
 # --- 2. CDP / Chrome ---

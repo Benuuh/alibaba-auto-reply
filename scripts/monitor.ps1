@@ -35,6 +35,15 @@ $stateFile = Join-Path $LogDir "state.json"
 # Accio 网关灰度开关(默认全关;影子/读取失败一律回退 CDP)
 $script:accioFlags = Get-AccioFlags $script:skillCfg
 Set-AccioLogFile $logFile
+# F7:恢复 Accio 鉴权负缓存(跨重启生效),避免上一进程记录的 AUTH-REQUIRED 冷却窗口丢失
+Restore-AccioAuthState
+
+# F4(2026-09-15 停摆根因修复):回复轮次总预算(秒,缺省 180)。超预算则本轮不发送、保留待处理,下一轮重试
+$script:replyRoundBudgetSec = 180
+if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_round_budget_sec' -and $script:skillCfg.reply_round_budget_sec) {
+    $script:replyRoundBudgetSec = [int]$script:skillCfg.reply_round_budget_sec
+}
+if ($script:replyRoundBudgetSec -lt 30) { $script:replyRoundBudgetSec = 30 }
 
 # 发送前拦截安全兜底句（spec 禁词拦截 Phase 4 + 2026-09-10 责任承诺拦截）：命中禁词/责任承诺且重写仍越线/引擎路径命中时整体替换；争议与通用场景安全，纯 ASCII，非空保证
 $script:banSafeFallback = "Thanks for your patience - I've noted this and I'm checking with the team. I'll get back to you with a clear update shortly."
@@ -723,8 +732,15 @@ function Invoke-ConvoItem($ctx, $item) {
             $visionUrls = @()
             $docExtractText = ''
             $attFileName = ''
+            # F2(a)/F4:回复轮次开始 —— 起心跳上下文与总预算,并打出第一行 ROUND-* 进度日志
+            $roundBudget = $script:replyRoundBudgetSec
+            $roundCtx = Start-LlmRound $key $roundBudget
+            $attFlag = 'none'
+            if ($attFile) { $attFlag = 'file' } elseif (@($attImages).Count -gt 0) { $attFlag = 'img' }
+            Write-Log "ROUND-START $($key) attach=$attFlag imgs=$(@($attImages).Count) ctx=$(@($lines).Count) budget=${roundBudget}s"
             # 0) B5 图片多模态: 下载 → 多模态回复(与提取解耦)
             if ($attImages.Count -gt 0) {
+                Write-Log "ROUND-VISION-BEGIN $($key) kind=image n=$($attImages.Count)"
                 $dataUrls = @()
                 foreach ($u in $attImages) { $du = Get-ImageDataUrl $u; if ($du) { $dataUrls += $du } }
                 if ($dataUrls.Count -gt 0) {
@@ -737,9 +753,11 @@ function Invoke-ConvoItem($ctx, $item) {
                 } else {
                     Write-Log "VISION-IMG-FAIL $($key): image download failed"
                 }
+                Write-Log "ROUND-VISION-END $($key) kind=image elapsed=$(Get-LlmRoundElapsedSec)s got=$([bool]$reply)"
             }
             # 0b) B5 文档: CDP 页面上下文 fetch 优先 → 兜底 PS 下载 → doc-reader → 文本/扫描图
             if (-not $reply -and $attFile) {
+                Write-Log "ROUND-VISION-BEGIN $($key) kind=document name=$($attFile.name)"
                 $b64 = $null
                 if ($attFile.url) { $b64 = Get-DocumentBase64ViaCdp $attFile.url }
                 if (-not $b64 -and $attFile.url) { $b64 = Get-DocumentBase64ViaHttp $attFile.url }
@@ -774,6 +792,7 @@ function Invoke-ConvoItem($ctx, $item) {
                 } else {
                     Write-Log "DOC-DOWNLOAD-FAIL $($key): $($attFile.name) (fallback to text flow)"
                 }
+                Write-Log "ROUND-VISION-END $($key) kind=document elapsed=$(Get-LlmRoundElapsedSec)s got=$([bool]$reply)"
             }
             # 1) 所有非图片消息优先走 LLM（含简短确认，LLM 已提速至 ~1.5s，回复更自然）
             if (-not $reply -and $latestClean -ne '[IMG]') {
@@ -825,6 +844,13 @@ function Invoke-ConvoItem($ctx, $item) {
                 } catch { Write-Log "VISION-EXTRACT-ERR $($key): $($_.Exception.Message)" }
             }
             if ($reply -and $reply.Trim().Length -gt 0) {
+                # F4:预算耗尽 → 本轮不发送,保留待处理状态,下一轮重试(避免超预算轮次拖长静默)
+                if (Test-LlmRoundBudgetExceeded) {
+                    Set-LlmRoundBudgetExceeded "pre-send" $logFile
+                    Write-Log "ROUND-DONE $($key) ms=$($roundCtx.sw.ElapsedMilliseconds) result=BUDGET-SKIP (kept pending for next round)"
+                    Stop-LlmRound
+                    return
+                }
                 # === 发送前禁词拦截（spec 禁词拦截 Phase 4）：LLM/引擎双路径均过检；命中→LLM 重写一次→仍命中或引擎命中→安全兜底句 ===
                 $banList = $null
                 if ($rules -and $rules.banned_phrases) { $banList = @($rules.banned_phrases) }
@@ -878,6 +904,7 @@ function Invoke-ConvoItem($ctx, $item) {
                     }
                 }
                 $sendRes = Send-OneTalkMessage $key $reply
+                Write-Log "ROUND-SEND $($key) chars=$($reply.Length) elapsed=$(Get-LlmRoundElapsedSec)s"
                 Write-Log "REPLIED to $($key): $sendRes"
                 Write-Log "Reply text: $($reply)"
                 # 仅发送成功才记录去重；发送失败（ABORT/未发出）不记录，
@@ -928,6 +955,8 @@ function Invoke-ConvoItem($ctx, $item) {
             } else {
                 Write-Log "SKIP $($key): empty reply generated"
             }
+            Write-Log "ROUND-DONE $($key) ms=$($roundCtx.sw.ElapsedMilliseconds) budget=${roundBudget}s"
+            Stop-LlmRound
         }
     } else {
         Write-Log "SKIP $($key): no buyer msgs found"

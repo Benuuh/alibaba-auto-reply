@@ -140,6 +140,30 @@ powershell -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\status.p
 4. 改开关后需重启 monitor 生效；组件测试：`node --test tools\accio-client\tests\gateway.test.js tools\accio-client\tests\api.test.js`
 5. 一键影子对比（只读，不打开浏览器）：`powershell -File tools\accio-client\shadow_compare.ps1 -MaxConversations 25`
 6. 健康检查：`status.ps1` 新增 Accio 状态行（进程/端口 4097/版本）；watchdog 每轮轻量探测，网关持续不可达会记 `WATCHDOG-ACCIO` 日志（不自动重启桌面应用）
+7. 授权降噪（2026-09-15）：Accio 桌面应用更新/重启期间网关会返回 `AUTH-REQUIRED`。此时 monitor 记录**负缓存 5 分钟**（日志 `ACCIO-ERR: conversations code=AUTH-REQUIRED -> negative-cache 300s`，期间仅每 60s 一行 `ACCIO-AUTH-SKIP`），直接回退 CDP 只读，**回复不受影响**；`status.ps1` 以 `Accio 授权` 行显示该状态。恢复直读需在 Accio 桌面应用**重新登录**（负缓存状态落盘 `logs\accio_auth_state.json`，可跨 monitor 重启生效）
+
+### Phase I：watchdog 守护参数与"静默阈值"含义（2026-09-15 停摆整改）
+
+watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是否存在**与**日志是否新鲜**。理解这两个参数是避免误杀的关键：
+
+| 参数 | 位置 | 缺省 | 含义 |
+|---|---|---|---|
+| `LogStaleSec`（静默阈值） | `watchdog.ps1 -LogStaleSec`，可被 `config.json` 的 `watchdog_log_stale_sec` 覆盖 | **240s**（原 90s） | 进程存活但日志静默超过该值 → 判定僵死并杀掉重启 |
+| `CheckIntervalSec` | `watchdog.ps1 -CheckIntervalSec` | 30s | 巡检周期 |
+| `restart_storm_count` / `restart_storm_window_min` | `config.json` | 4 / 10 | 窗口内重启达该次数 → 判定重启风暴 |
+| `restart_storm_cooldown_min` | `config.json` | 30（min） | 命中风暴后的**冷却时长**：冷却内不重启 monitor，到期自动恢复守护，并向企微推 `[ALERT]` |
+| `reply_round_budget_sec` | `config.json` | 180（s） | 单轮回复总预算；不足则本轮不发送、保留待处理，下一轮重试（日志 `ROUND-BUDGET-EXCEEDED`） |
+
+**静默阈值的语义（重要）**：阈值放宽到 240s **不等于**可以长时间静默。monitor 在回复轮次内每 15s 至少写一行 `ROUND-*` 进度日志（`ROUND-START` / `ROUND-VISION-*` / `ROUND-LLM-BEGIN|WAIT|END` / `ROUND-SEND` / `ROUND-DONE`），因此**正常轮次的最大日志静默 < 30s**；一旦静默接近 240s，基本可判定真僵死。
+
+**双重防误杀**：
+1. **活锁豁免**——若 `data\onetalk-write.lock` 的持有 PID 仍存活，说明 monitor 正在处理轮次（含长耗时 LLM/多模态识别），watchdog **不得**以 stale 为由杀它，只记 `WATCHDOG: log quiet Ns > 240s but onetalk-write held by LIVE PID n - treated as busy, skip`。
+2. **僵锁自愈**——`Get-AppLock` 发现锁持有者已死会当场删除并**立即重试获取**（`timeoutSec=0` 亦然），避免"删了锁却仍返回 false → 该轮 LOCK-BUSY 空转 → 再被判 stale"的自锁闭环。
+
+**风暴保护不再永久放弃**：命中风暴时写入 `logs\watchdog_cooldown.json`（`until`/`reason`/`count`）并推企微告警，冷却期内主循环继续运行（仅抑制 monitor 重启，企微/control-agent 保活照常），到期自动恢复。冷却状态见 `status.ps1` 的 `WATCHDOG COOLDOWN` 行；人为解除可删除该 json 文件。
+
+**排障速查**：`Select-String 'ROUND-' logs\monitor.log`（轮次心跳）、`Select-String 'COOLDOWN|RESTART-STORM|treated as busy' logs\watchdog.log`（守护动作）、`Select-String 'LOCK-BUSY' logs\monitor.log`（写锁争用，正常应为 0）。
+
 
 ## 四、常用运维
 
