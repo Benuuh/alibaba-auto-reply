@@ -109,7 +109,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\cont
 - control-agent 已由 watchdog 保活（每 30s 幂等调用 `scripts\agent_start.ps1`，启动失败 5 分钟冷却）；手动停用：`bin\control-agent.ps1 -Action stop`（建停用标记 `data\control-agent.disabled`，保活跳过），`-Action start` 删除标记并恢复
 - 无凭据时 HTTP 桥也可启动（`connected=false`，/send 返回 503），便于联调
 
-### Phase F：计划任务（5 个，均指向 scripts\ 下脚本）
+### Phase F：计划任务（6 个，均指向 scripts\ 下脚本）
 | 任务名 | 脚本 | 周期 |
 |---|---|---|
 | `AlibabaAutoReplySummary` | summarize.ps1 | 每 4 小时 |
@@ -117,6 +117,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\cont
 | `AlibabaAutoReplyOptimize` | auto_optimize.ps1 | 每日 05:30 |
 | `AlibabaAutoReplyWeekly` | weekly_report.ps1（含 nudge 唤醒） | 每周一 08:00 |
 | `AlibabaAutoReplyWatchdog` | watchdog.ps1（整栈自启，ExecutionTimeLimit=PT0S） | 登录时 +30s（Hidden） |
+| `AlibabaAutoReplyHealth` | health_check.ps1（健康心跳，每项 30 分钟去重告警） | 每 15 分钟 |
 
 - 注册示例（管理员）：`schtasks /Create /TN AlibabaAutoReplyQuality /TR "powershell.exe -ExecutionPolicy Bypass -NoProfile -File <部署根>\scripts\analyze_replies.ps1" /SC DAILY /ST 05:00 /F`（Summary 用 `/SC HOURLY` 或等距任务）
 - 已注册 `AlibabaAutoReplyWatchdog`（watchdog.ps1，ONLOGON +30s 延迟，Hidden，ExecutionTimeLimit=PT0S 不限时）：登录后自动拉起整栈——watchdog 带起 monitor / Chrome 自愈 / 企微保活 / control-agent 保活；任务幂等（watchdog.pid 单实例检测），与手动启动的实例并存无害
@@ -163,6 +164,14 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 **风暴保护不再永久放弃**：命中风暴时写入 `logs\watchdog_cooldown.json`（`until`/`reason`/`count`）并推企微告警，冷却期内主循环继续运行（仅抑制 monitor 重启，企微/control-agent 保活照常），到期自动恢复。冷却状态见 `status.ps1` 的 `WATCHDOG COOLDOWN` 行；人为解除可删除该 json 文件。
 
 **排障速查**：`Select-String 'ROUND-' logs\monitor.log`（轮次心跳）、`Select-String 'COOLDOWN|RESTART-STORM|treated as busy' logs\watchdog.log`（守护动作）、`Select-String 'LOCK-BUSY' logs\monitor.log`（写锁争用，正常应为 0）。
+
+### Phase J：健康心跳告警（F8，2026-09-16）
+
+计划任务 `AlibabaAutoReplyHealth` 每 15 分钟运行 `scripts\health_check.ps1`，独立于 watchdog 检查整栈健康；异常时经企微推送告警（**每项检查 30 分钟去重**，恢复时推送 `RECOVERED`），每轮结果写入 `logs\health.log`，去重状态写入 `data\health_state.json`（可安全删除，删除后下一轮重新告警）。
+
+检查项（缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`wecom_connected`（19886 /health connected=true）、`control_agent`（agent_bridge.js 进程存在，或有 `data\control-agent.disabled` 停用标记）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
+
+排障：`Get-Content logs\health.log -Tail 20`（每行 `HEALTH: name=OK|FAIL ...`）；任务状态 `Get-ScheduledTaskInfo -TaskName AlibabaAutoReplyHealth`（LastTaskResult 应为 0）。
 
 
 ## 四、常用运维

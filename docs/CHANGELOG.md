@@ -2,6 +2,22 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-16 - watchdog 死亡事故恢复 + F5 保活实测 + F8 健康心跳告警
+
+**事故**：2026-09-15 20:30 Windows Update 计划外重启后，watchdog（PID 15532）仅存活约 19s 即被终止（LastTaskResult=0xC000013A；Task Scheduler Operational 日志当时禁用，死因未定论），此后 17.5h 无守护；monitor（PID 17256）存活但页面无会话，持续 `Scan cycle done` 静默空转，直至 14:03 CDP 掉线触发自愈、14:05 重新登录后才恢复回复。
+
+### F5 保活路径实测（验证通过，未改代码）
+- 分离进程实测 `control-agent.ps1 -Action start` 冷启动：`finished=True elapsed=2s`，输出 `CONTROL-STARTED`；`agent_start.ps1`（WaitForExit 60s）与 `watchdog.ps1`（75s 轮询）均为有界等待。结论：现网代码不存在"保活路径永久阻塞 watchdog"，不改代码；`agent_start.ps1` 的 60s 长等待列为观察项（出现 `WATCHDOG-AGENT: timeout` 时人工关注）
+
+### F8 健康心跳告警上线
+- 新增 `scripts\health_check.ps1`（8 项检查：monitor 进程/日志新鲜度、watchdog 进程、风暴冷却、企微连通、control-agent、CDP、页面登录态；每项 30 分钟去重，恢复推送 RECOVERED），结果写 `logs\health.log`，状态写 `data\health_state.json`
+- 新增计划任务 `AlibabaAutoReplyHealth`（每 15 分钟，Interactive/Limited，IgnoreNew，ExecutionTimeLimit 5 分钟）
+- 端到端实测：停 watchdog → `watchdog_process=FAIL` + `HEALTH-ALERT ... SENT_OK`；恢复 watchdog → `watchdog_process=OK` + `HEALTH-RECOVER ... SENT_OK`
+
+### 事故期间发现
+- 2026-09-16 15:24 调试 Chrome 实例消失（无崩溃事件记录），CDP 掉线；monitor 因旧列表逐项重试延迟自愈，人工执行 `chrome_ensure.ps1` 恢复 Chrome 后发现登录会话已过期，页面停在登录页且 `sif_form-submit` 按钮 disabled；用 CDP 可信输入重填并提交后恢复登录（15:32 起 `hasTa:true`）。F8 的 `page_logged_in` 检查覆盖此类"CDP 通但未登录"静默故障
+- Task Scheduler Operational 日志本次尝试启用失败（执行会话非管理员，`wevtutil` 拒绝访问）；需管理员手动执行 `wevtutil sl Microsoft-Windows-TaskScheduler/Operational /e:true`
+
 ## 2026-09-15 - 停摆根因修复（monitor 被误杀 / 僵锁自锁 / 风暴保护永久放弃）
 
 **事故**：04:44–07:57 停摆约 3h05m。一轮真实回复耗时 >90s → watchdog 按"日志静默 > 90s"杀掉**正在工作**的 monitor → 强杀导致 `data\onetalk-write.lock` 残留僵锁 → `Get-AppLock` 删锁却不重试（`timeoutSec=0` 时 deadline 已过）→ 后续每轮 `LOCK-BUSY` 空转且日志静默 → 再被判 stale → 再杀，5 次后触发风暴保护 `exit 1` **永久停止自愈**，无人知晓直至人工巡检。
