@@ -22,6 +22,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\vision.ps1")
 . (Join-Path $PSScriptRoot "lib\doc.ps1")
 . (Join-Path $PSScriptRoot "lib\accio.ps1")
+. (Join-Path $PSScriptRoot "log_rotate.ps1")
+. (Join-Path $PSScriptRoot "retention.ps1")
 $script:skillCfg = Get-SkillConfig
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:cdpScript = Get-SkillPath "cdp"
@@ -397,6 +399,23 @@ function Set-RepliedState([object]$state) {
     Set-Content -Path (Join-Path $LogDir "state.json.bak") -Value $json -Encoding UTF8
 }
 
+# 去重状态统一写入:按类型分流合并 replied 表并双写落盘(发送成功路径与旧记录升级共用)。
+# 注意:首次创建时 replied 是 @{} (IDictionary),PSObject.Properties 会枚举 CLR 内部属性污染 state.json,
+# 必须按类型分流:IDictionary 用 Keys,反序列化的 PSCustomObject 用 Properties。
+function Set-StateHash($ctx, [string]$skey, [string]$hash) {
+    if (-not $ctx.state -or -not $ctx.state.replied) { $ctx.state = [pscustomobject]@{ replied = @{} } }
+    $rep = @{}
+    $src = $ctx.state.replied
+    if ($src -is [System.Collections.IDictionary]) {
+        foreach ($k in $src.Keys) { $rep[$k] = $src[$k] }
+    } else {
+        foreach ($p in $src.PSObject.Properties) { $rep[$p.Name] = $p.Value }
+    }
+    $rep[$skey] = $hash
+    $ctx.state = [pscustomobject]@{ replied = $rep }
+    Set-RepliedState $ctx.state
+}
+
 # 启动时清理：msgs 快照只保留最近 200 份，防止无限增长
 function Cleanup-LegacyQueues {
     Get-ChildItem -Path $script:dataDir -Filter "msgs_*.txt" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -Skip 200 | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -708,17 +727,18 @@ function Invoke-ConvoItem($ctx, $item) {
         # 新格式：文本 hash + 时间戳；无时间戳时回退纯文本 hash（兼容旧 state）
         $hash = if ($ts) { "$hText|$ts" } else { $hText }
         $already = $false
+        $saved = ''
         if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
-            $saved = $ctx.state.replied.$skey
-            if ($ts) {
-                # 带时间戳的新格式：完全匹配才算已回复；旧格式记录视为未回复并升级
-                if ($saved -eq $hash) { $already = $true }
-            } else {
-                if ($saved -eq $hText) { $already = $true }
-            }
+            $saved = [string]$ctx.state.replied.$skey
+            $already = Test-AlreadyReplied $saved $hText $ts
         }
         if ($already) {
             Write-Log "SKIP $($key): already replied (dedup)"
+            # 旧记录升级:已回复但 saved 为无 ts 旧格式、本次有可解析 ts → 补写规范记录(不发送)
+            if ($ts -and $saved -and ($saved -notmatch '\|') -and ($null -ne (ConvertTo-EpochMs $ts))) {
+                Set-StateHash $ctx $skey $hash
+                Write-Log "DEDUP-UPGRADE $($key) -> $hash"
+            }
             $prev = $null
             if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
             $count = 1
@@ -910,20 +930,10 @@ function Invoke-ConvoItem($ctx, $item) {
                 # 仅发送成功才记录去重；发送失败（ABORT/未发出）不记录，
                 # 否则会话会永久卡在待回复板块且永不重试
                 if ($sendRes -match 'SENT_OK') {
-                    # V12:统一键赋值。注意:首次创建时 replied 是 @{} (IDictionary),
-                    # PSObject.Properties 会枚举出 CLR 内部属性(Count/Keys/Values/IsFixedSize等)污染 state.json,
-                    # 必须按类型分流:IDictionary 用 Keys,反序列化的 PSCustomObject 用 Properties
-                    if (-not $ctx.state -or -not $ctx.state.replied) { $ctx.state = [pscustomobject]@{ replied = @{} } }
-                    $rep = @{}
-                    $__src = $ctx.state.replied
-                    if ($__src -is [System.Collections.IDictionary]) {
-                        foreach ($__k in $__src.Keys) { $rep[$__k] = $__src[$__k] }
-                    } else {
-                        foreach ($__p in $__src.PSObject.Properties) { $rep[$__p.Name] = $__p.Value }
-                    }
-                    $rep[$skey] = $hash
-                    $ctx.state = [pscustomobject]@{ replied = $rep }
-                    Set-RepliedState $ctx.state
+                    Set-StateHash $ctx $skey $hash
+                    # 发送成功后短冷却:同一会话 3 分钟内不再重复处理(preview 变化自动解除)
+                    $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = 1 }
+                    Write-Log "POST-SEND-COOLDOWN $($key) 3min"
                     # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
                     try {
                         $gst = Get-GoodsDataStatus $key $script:dataDir
@@ -1053,6 +1063,20 @@ function Initialize-MonitorRuntime {
             Remove-Item -Path (Join-Path $LogDir "monitor.pid") -Force -ErrorAction SilentlyContinue
         } | Out-Null
     } catch {}
+    # P0 日志/快照治理(2026-09-18):启动时轮转 monitor.log 并执行快照保留(先 DryRun 记录再实际执行);失败不影响启动
+    try {
+        $__logMaxMb = 20
+        $__logKeep = 10
+        if ($script:skillCfg.PSObject.Properties.Name -contains 'log_max_mb' -and $script:skillCfg.log_max_mb) { $__logMaxMb = [int]$script:skillCfg.log_max_mb }
+        if ($script:skillCfg.PSObject.Properties.Name -contains 'log_keep_files' -and $script:skillCfg.log_keep_files) { $__logKeep = [int]$script:skillCfg.log_keep_files }
+        Write-Log (Invoke-LogRotation -LogDir $script:logFileDir -Name 'monitor' -MaxMb $__logMaxMb -KeepFiles $__logKeep)
+    } catch { }
+    try {
+        $__snapDays = 90
+        if ($script:skillCfg.PSObject.Properties.Name -contains 'snapshot_retention_days' -and $script:skillCfg.snapshot_retention_days) { $__snapDays = [int]$script:skillCfg.snapshot_retention_days }
+        Write-Log (Invoke-SnapshotRetention -DataDir $script:dataDir -Days $__snapDays -DryRun)
+        Write-Log (Invoke-SnapshotRetention -DataDir $script:dataDir -Days $__snapDays)
+    } catch { }
     Invoke-LayoutMigration
     Write-Log "=== Monitor started (PID $PID, auto-reply engine built-in) ==="
     Cleanup-LegacyQueues

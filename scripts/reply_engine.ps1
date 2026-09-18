@@ -408,6 +408,37 @@ function Get-StableHash([string]$text) {
             [System.Text.Encoding]::UTF8.GetBytes($norm))).Replace('-','')
 }
 
+# ts 归一化(epoch ms,纯函数):13 位数字=ms 原样;10 位数字=秒*1000;
+# 'yyyy-MM-dd HH:mm:ss' / 'yyyy/MM/dd HH:mm:ss' 按本地时区转 epoch ms;无法解析返回 $null
+function ConvertTo-EpochMs([string]$ts) {
+    if ([string]::IsNullOrWhiteSpace($ts)) { return $null }
+    $t = $ts.Trim()
+    if ($t -match '^\d{13}$') { return [long]$t }
+    if ($t -match '^\d{10}$') { return ([long]$t * 1000) }
+    foreach ($fmt in @('yyyy-MM-dd HH:mm:ss','yyyy/MM/dd HH:mm:ss')) {
+        try {
+            $d = [datetime]::ParseExact($t, $fmt, [Globalization.CultureInfo]::InvariantCulture)
+            return [long](([datetimeoffset]$d).ToUnixTimeMilliseconds())
+        } catch { }
+    }
+    return $null
+}
+
+# 去重判定(纯函数):文本 hash 相同才可能判已回复;任一侧 ts 缺失/不可解析→保守判已回复(防重复发送);
+# 两侧均可解析时,仅当新 ts 严格大于 saved ts 才视为新消息(买家重发同文案且时间戳更新)。
+function Test-AlreadyReplied([string]$savedHash, [string]$hText, [string]$ts) {
+    if ([string]::IsNullOrWhiteSpace($savedHash)) { return $false }
+    $parts = $savedHash -split '\|', 2
+    $savedText = $parts[0]
+    $savedTs = ''
+    if ($parts.Count -gt 1) { $savedTs = $parts[1] }
+    if ($savedText -ne $hText) { return $false }
+    $cur = ConvertTo-EpochMs $ts
+    $old = ConvertTo-EpochMs $savedTs
+    if ($null -eq $cur -or $null -eq $old) { return $true }
+    return ($cur -le $old)
+}
+
 # 发送前禁词检测（纯函数；monitor 发送前拦截与回归测试共用定义，避免复制）：
 # 大小写不敏感；ASCII 词按词边界匹配并容忍复数/'s 后缀；中文按子串命中；长词先匹配避免短词抢先命中长词。
 # 词表主源在 reply_rules.json banned_phrases；$bannedList 缺省/$null 时回退本函数内置默认表（同语料词表）。返回命中词或 $null。

@@ -19,6 +19,10 @@
     "restart_storm_cooldown_min": 30,
     "watchdog_log_stale_sec": 240,
     "reply_round_budget_sec": 180,
+    "log_max_mb": 20,
+    "log_keep_files": 10,
+    "snapshot_retention_days": 90,
+    "deadman_ping_url": "",
     "accio_shadow": false,
     "accio_read_enabled": false,
     "accio_send_enabled": false

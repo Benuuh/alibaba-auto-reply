@@ -212,6 +212,31 @@ Assert-True "fin-clean-deliver"  ($null -eq (Test-FinancialCommitment "we are re
 Assert-True "fin-clean-quote"    ($null -eq (Test-FinancialCommitment "I'll finalize your quote and get back to you shortly"))
 Assert-True "fin-clean-service"  ($null -eq (Test-FinancialCommitment "we cover the full route with door-to-door service"))
 
+# ===== 去重判定（P0-20260918: ConvertTo-EpochMs / Test-AlreadyReplied）=====
+# 44. ConvertTo-EpochMs: 13 位毫秒 / 10 位秒 / 日期格式 / 非法值
+Assert-True "epoch13-passthrough" ((ConvertTo-EpochMs "1789455764544") -eq [long]1789455764544)
+Assert-True "epoch10-to-ms"       ((ConvertTo-EpochMs "1789455764") -eq [long]1789455764000)
+Assert-True "epoch-date-format"   ($null -ne (ConvertTo-EpochMs "2026-09-15 15:02:44"))
+Assert-True "epoch-slash-format"  ($null -ne (ConvertTo-EpochMs "2026/09/15 15:02:44"))
+Assert-True "epoch-empty-null"    ($null -eq (ConvertTo-EpochMs ""))
+Assert-True "epoch-invalid-null"  ($null -eq (ConvertTo-EpochMs "garbage"))
+Assert-True "epoch-space-null"    ($null -eq (ConvertTo-EpochMs "   "))
+# 45. Test-AlreadyReplied: 文本不同→未回复;任一侧 ts 缺失/不可解析→已回复(保守);
+#     两侧可解析时仅新 ts 严格更大→未回复
+$H = "83ACB9F545EFED9CD5705B5D4FC7723D"
+Assert-True  "dedup-empty-saved"        (-not (Test-AlreadyReplied "" $H "1789455764544"))
+Assert-True  "dedup-diff-text"          (-not (Test-AlreadyReplied "$H|1000" "OTHERHASH" "2000"))
+Assert-True  "dedup-same-no-ts"         (Test-AlreadyReplied $H $H "1789455764544")
+Assert-True  "dedup-both-no-ts"         (Test-AlreadyReplied $H $H "")
+Assert-True  "dedup-same-ts"            (Test-AlreadyReplied "$H|1789455764000" $H "1789455764000")
+Assert-True  "dedup-current-ts-missing" (Test-AlreadyReplied "$H|1789455764000" $H "")
+Assert-True  "dedup-current-ts-invalid" (Test-AlreadyReplied "$H|1789455764000" $H "garbage")
+Assert-True  "dedup-saved-ts-invalid"   (Test-AlreadyReplied "$H|garbage" $H "1789455764000")
+Assert-True  "dedup-newer-ts"           (-not (Test-AlreadyReplied "$H|1789455764000" $H "1789455764001"))
+Assert-True  "dedup-older-ts"           (Test-AlreadyReplied "$H|1789455764000" $H "1789455763999")
+# sandy 回归:第一轮 state 记无 ts($H),第二轮抓到同文案+ts → 必须判已回复(防重复发送)
+Assert-True  "dedup-sandy-regression"   (Test-AlreadyReplied $H $H "2026-09-15 15:02:44")
+
 Write-Output ""
 Write-Output ("RESULT: pass={0} fail={1}" -f $script:pass, $script:fail)
 if ($script:fail -gt 0) { Write-Output ("FAILED CASES: " + ($script:fails -join ", ")); exit 1 }

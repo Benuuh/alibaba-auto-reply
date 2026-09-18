@@ -158,9 +158,18 @@ function Invoke-AccioCli([string[]]$CliArgs, [int]$TimeoutMs = 120000) {
         $out = $outTask.Result
         $err = $errTask.Result
         $obj = $null
-        try { $obj = $out | ConvertFrom-Json } catch {}
+        $jsonErr = $null
+        try { $obj = $out | ConvertFrom-Json } catch { $jsonErr = $_ }
         if ($null -eq $obj) {
-            Write-AccioLog ("ACCIO-PARSE-ERR: " + (($err + ' ' + $out).Trim().Substring(0, [Math]::Min(200, ($err + ' ' + $out).Trim().Length))))
+            # 单行化:JSON 换行压成空格,附 ConvertFrom-Json 异常原因,整体截断 200 字符(日志行 ≤250)
+            $detail = (($err + ' ' + $out) -replace '\s+',' ').Trim()
+            if ($jsonErr) {
+                $jm = ''
+                try { $jm = [string]$jsonErr.Exception.Message } catch { $jm = [string]$jsonErr }
+                $detail = ($detail + ' jsonErr=' + ($jm -replace '\s+',' ')).Trim()
+            }
+            if ($detail.Length -gt 200) { $detail = $detail.Substring(0,200) }
+            Write-AccioLog ("ACCIO-PARSE-ERR: " + $detail)
             return $null
         }
         if ($obj.PSObject.Properties.Name -contains 'ok' -and -not $obj.ok) {

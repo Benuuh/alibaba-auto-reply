@@ -1,4 +1,4 @@
-# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
+﻿# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
 # Checks: monitor process + log freshness / watchdog process / cooldown / wecom / control-agent / CDP + page login.
 # Alerts via WeCom with 30-min dedup per check; writes logs\health.log. Always exits 0 unless fatal.
 param([string]$LogDir = "")
@@ -8,6 +8,7 @@ $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "lib\log.ps1")
 . (Join-Path $PSScriptRoot "lib\wecom.ps1")
 . (Join-Path $PSScriptRoot "lib\cdp.ps1")
+. (Join-Path $PSScriptRoot "lib\deadman.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:logsDir = Get-SkillPath "logs"
 $script:dataDir = Get-SkillPath "data"
@@ -128,5 +129,66 @@ foreach ($a in $alerts) {
 foreach ($r in $recovers) {
     try { $x = Send-WecomMessage $r; Write-Log ("HEALTH-RECOVER: " + $r + " -> " + $x) } catch { }
 }
+
+# F8b watchdog auto-heal (2026-09-18): start watchdog detached when watchdog_process fails.
+# Idempotent (pid file + command line double-check); heal attempts throttled to one per 30 min via state key
+# 'watchdog_heal' (same 30-min period as alerts); HEAL/HEAL-FAIL traces in health.log; never breaks exit 0.
+try {
+    $wdCheck = $checks | Where-Object { $_.name -eq 'watchdog_process' } | Select-Object -First 1
+    if ($wdCheck -and (-not $wdCheck.ok)) {
+        $lastHeal = $null
+        $healPrev = $null
+        if ($state.ContainsKey('watchdog_heal')) { $healPrev = $state['watchdog_heal'] }
+        if ($healPrev -and ($healPrev.PSObject.Properties.Name -contains 'lastHeal') -and $healPrev.lastHeal) {
+            try { $lastHeal = [datetime]::Parse([string]$healPrev.lastHeal) } catch { }
+        }
+        if (-not $lastHeal -or ($now - $lastHeal).TotalMinutes -ge 30) {
+            if (Test-PidAlive (Join-Path $LogDir "watchdog.pid") 'watchdog\.ps1') {
+                # already running (started between check and heal) - no action, no throttle update
+            } else {
+                $wdScript = Join-Path $LogDir "watchdog.ps1"
+                $wdOut = Join-Path $script:logsDir "watchdog_out.log"
+                $wdErr = Join-Path $script:logsDir "watchdog_err.log"
+                $healResult = 'fail'
+                try {
+                    Start-Process powershell.exe -ArgumentList ("-ExecutionPolicy Bypass -NoProfile -File `"$wdScript`" -Action start") -WindowStyle Hidden -RedirectStandardOutput $wdOut -RedirectStandardError $wdErr | Out-Null
+                    Start-Sleep -Seconds 6
+                    if (Test-PidAlive (Join-Path $LogDir "watchdog.pid") 'watchdog\.ps1') {
+                        $wdPid = ''
+                        try { $wdPid = (Get-Content (Join-Path $LogDir "watchdog.pid") -Raw -ErrorAction SilentlyContinue).Trim() } catch { }
+                        Write-Log ("HEALTH-HEAL pid=" + $wdPid)
+                        $healResult = 'ok'
+                    } else {
+                        Write-Log "HEALTH-HEAL-FAIL"
+                    }
+                } catch {
+                    Write-Log ("HEALTH-HEAL-FAIL: " + $_.Exception.Message)
+                }
+                $state['watchdog_heal'] = @{ lastHeal = $now.ToString('yyyy-MM-dd HH:mm:ss'); result = $healResult }
+            }
+        }
+    }
+} catch { }
 try { $state | ConvertTo-Json -Depth 5 | Set-Content -Path $script:stateFile -Encoding UTF8 } catch { }
+
+# P0 deadman heartbeat (2026-09-18): ping external URL every health run (ping only, no PII);
+# health.log throttled to max one line per 6h (state in data\deadman_state.json). fail never alerts (no alert loop).
+try {
+    $dmCfg = Get-SkillConfig
+    $dmUrl = ''
+    if ($dmCfg.PSObject.Properties.Name -contains 'deadman_ping_url') { $dmUrl = [string]$dmCfg.deadman_ping_url }
+    if ($dmUrl) {
+        $dmRes = Send-DeadmanPing $dmUrl
+        $dmStateFile = Join-Path $script:dataDir 'deadman_state.json'
+        $dmLast = $null
+        if (Test-Path $dmStateFile) {
+            try { $dmLast = [datetime]::Parse([string]((Get-Content $dmStateFile -Raw -Encoding UTF8 | ConvertFrom-Json).lastLog)) } catch { }
+        }
+        if (-not $dmLast -or ((Get-Date) - $dmLast).TotalHours -ge 6) {
+            Write-Log ("DEADMAN-PING " + $dmRes)
+            $dmState = [pscustomobject]@{ lastLog = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'); result = $dmRes }
+            try { $dmState | ConvertTo-Json | Set-Content -Path $dmStateFile -Encoding UTF8 } catch { }
+        }
+    }
+} catch { Write-Log ("DEADMAN-ERR: " + $_.Exception.Message) }
 exit 0

@@ -161,7 +161,7 @@ alibaba-auto-reply/
 │   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
 │   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例测试 + shadow_compare.ps1）
 │   └── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试）
-├── tests\                    ← 主仓库回归测试（6 文件 245 断言，fixtures 虚构数据）
+├── tests\                    ← 主仓库回归测试（8 文件 296 断言，fixtures 虚构数据）
 ├── logs\  data\  reports\  backups\   ← 运行时数据（均不入库）
 └── chrome-profile\           ← Chrome 登录态（独立 profile，勿删除）
 ```
@@ -169,7 +169,7 @@ alibaba-auto-reply/
 ## 🧪 开发与运维
 
 ```powershell
-# 主仓库回归测试（6 文件 245 断言：goods 27 + no_reply 29 + reply_engine 84 + report_push 33 + vision 43 + accio 29）
+# 主仓库回归测试（8 文件 296 断言：goods 27 + no_reply 29 + reply_engine 102 + report_push 33 + vision 43 + accio 29 + lock 11 + log_maintenance 22）
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
 
 # tools 组件测试
@@ -182,9 +182,15 @@ node --test tools\accio-client\tests\gateway.test.js tools\accio-client\tests\ap
 powershell -ExecutionPolicy Bypass -NoProfile -File scripts\backup.ps1 -Snapshot
 powershell -ExecutionPolicy Bypass -NoProfile -File scripts\sync.ps1 -Status   # 或 -Push
 powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
+
+# 日志轮转 / 快照保留（DryRun 只报告不动文件；monitor 启动时也会自动执行一次）
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\log_rotate.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\retention.ps1 -DryRun
 ```
 
-**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（周一 08:00 周报 + nudge）。
+**守护加固（2026-09-18 P0）**：Watchdog/Health 任务 `StopOnIdleEnd=false`；Health 发现 watchdog 死亡时自动拉起（`HEALTH-HEAL pid=<new>`，30 分钟节流）；去重判定改为 ts 归一化（`Test-AlreadyReplied`）+ 发送后 3 分钟冷却；死信心跳 `deadman_ping_url`（healthchecks.io，仅 ping 无 PII，默认空=不发）。
+
+**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（周一 08:00 周报 + nudge）、Watchdog（登录自启，常驻守护）、Health（每 15 分钟健康心跳 + 自动拉起 watchdog）。
 
 ## 📄 License
 

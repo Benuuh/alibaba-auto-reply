@@ -77,11 +77,12 @@ CDP 控制本机 Chrome 登录 OneTalk 卖家消息中心：监控询盘、按�
 ```powershell
 # 启动 monitor（必须重定向）
 Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -File ...\scripts\monitor.ps1 -Action start" -WindowStyle Hidden -RedirectStandardOutput "...\logs\monitor_out.log" -RedirectStandardError "...\logs\monitor_err.log"
-# 启动 / 停止 watchdog
+# 启动 watchdog（通常由 AlibabaAutoReplyWatchdog 任务/Health 自动拉起，无需手动）
 Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -File ...\scripts\watchdog.ps1 -Action start" -WindowStyle Hidden
-powershell -ExecutionPolicy Bypass -File ...\scripts\watchdog.ps1 -Action stop
-# 停止 monitor / 健康检查 / 快照 / 镜像
-Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match 'monitor\.ps1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+# 停 watchdog / monitor：一律按 pid 文件精确停（禁止 -Action stop，历史自杀式匹配缺陷 F6 未修）
+$wp=(Get-Content ...\scripts\watchdog.pid -Raw).Trim(); if($wp -match '^\d+$'){ Stop-Process -Id ([int]$wp) -Force }
+$mp=(Get-Content ...\scripts\monitor.pid -Raw).Trim(); if($mp -match '^\d+$'){ Stop-Process -Id ([int]$mp) -Force }
+# 健康检查 / 快照 / 镜像 / 日志轮转 / 快照保留
 powershell -ExecutionPolicy Bypass -NoProfile -File ...\scripts\status.ps1
 powershell -ExecutionPolicy Bypass -NoProfile -File ...\scripts\backup.ps1 -Snapshot
 powershell -ExecutionPolicy Bypass -NoProfile -File ...\scripts\sync.ps1 -Status
@@ -95,4 +96,5 @@ powershell -ExecutionPolicy Bypass -NoProfile -File ...\scripts\sync.ps1 -Status
 - 附件识别：`scripts\lib\vision.ps1`（图片/提取/sidecar）、`scripts\lib\doc.ps1`（下载/临时文件）、`tools\doc-reader\README.md`（PDF/xlsx/csv/docx 解析）
 - Accio 网关（可选读取增强）：`tools\accio-client\README.md`（Node CLI）、`scripts\lib\accio.ps1`（适配层）、`tools\accio-client\shadow_compare.ps1`（影子对比）
 - 质量闭环：`scripts\analyze_replies.ps1`（05:00 质量报告）→ `scripts\auto_optimize.ps1`（05:30 自动提炼）→ `scripts\consolidate_prompt.ps1`（阈值合并归档）
-- 监控机制要点：去重=state.json 消息 hash+时间戳（仅 SENT_OK 记录）；防错发=发送前会话名校验；断线自愈=抓列表失败×3 刷新页、CDP 掉线×3 跑 `chrome_ensure.ps1`；按需 reload（idle 10m / busy 30m）
+- 监控机制要点：去重=state.json 消息 hash+时间戳（仅 SENT_OK 记录；ts 归一化判定 `Test-AlreadyReplied`，任一侧 ts 缺失判已回复，发送成功后 3 分钟会话冷却 `POST-SEND-COOLDOWN`）；防错发=发送前会话名校验；断线自愈=抓列表失败×3 刷新页、CDP 掉线×3 跑 `chrome_ensure.ps1`；按需 reload（idle 10m / busy 30m）
+- 守护加固（2026-09-18）：Watchdog/Health 任务 `StopOnIdleEnd=false`；Health 自动拉起 watchdog（`HEALTH-HEAL`，30 分钟节流）；monitor 启动自动日志轮转（`log_rotate.ps1`，logs\archive\）与快照保留（`retention.ps1`，data\archive\msgs_<yyyyMM>.zip）；死信心跳 `deadman_ping_url`（空=不发，health.log 每 6h 一行）

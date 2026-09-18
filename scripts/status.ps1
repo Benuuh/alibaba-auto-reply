@@ -29,12 +29,16 @@ if (Test-Path (Join-Path $LogDir "monitor.pid")) {
     $monAlive = [bool](Get-Process -Id $monPid -ErrorAction SilentlyContinue)
 }
 StatusLine "monitor.ps1" $monAlive $(if ($monPid) { "PID=$monPid" } else { "无 PID 文件" })
-$wtdPid = $null; $wtdAlive = $false
+$wtdPid = $null; $wtdAlive = $false; $wtdCmdOk = $false
 if (Test-Path (Join-Path $LogDir "watchdog.pid")) {
     $wtdPid = (Get-Content (Join-Path $LogDir "watchdog.pid") -Raw -ErrorAction SilentlyContinue).Trim()
-    $wtdAlive = [bool](Get-Process -Id $wtdPid -ErrorAction SilentlyContinue)
+    if ($wtdPid -match '^\d+$') {
+        $wtdProc = Get-CimInstance Win32_Process -Filter "ProcessId=$wtdPid" -ErrorAction SilentlyContinue
+        $wtdAlive = [bool]$wtdProc
+        $wtdCmdOk = [bool]($wtdProc -and $wtdProc.CommandLine -match 'watchdog\.ps1')
+    }
 }
-StatusLine "watchdog.ps1" $wtdAlive $(if ($wtdPid) { "PID=$wtdPid" } else { "无 PID 文件" })
+StatusLine "watchdog.ps1" ($wtdAlive -and $wtdCmdOk) $(if ($wtdPid) { $d = if ($wtdAlive -and $wtdCmdOk) { "命令行匹配" } elseif ($wtdAlive) { "命令行不匹配" } else { "进程不存在" }; "PID=$wtdPid ($d, Health 自动拉起可用)" } else { "无 PID 文件" })
 # F3(2026-09-15 停摆根因修复):重启风暴冷却状态。存在且未到期 = 冷却中(此期间 watchdog 不重启 monitor)。
 # 2026-09-15 事故中风暴保护是"永久 exit",现已改为有限冷却 + 企微告警,此处即为可观测入口。
 $cdFile = Join-Path (Get-SkillPath "logs") "watchdog_cooldown.json"

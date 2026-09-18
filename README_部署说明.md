@@ -173,6 +173,19 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 
 排障：`Get-Content logs\health.log -Tail 20`（每行 `HEALTH: name=OK|FAIL ...`）；任务状态 `Get-ScheduledTaskInfo -TaskName AlibabaAutoReplyHealth`（LastTaskResult 应为 0）。
 
+### Phase K：守护加固 P0（2026-09-18，取消服务化，无需密码）
+
+1. **任务空闲终止修正（根因）**：`AlibabaAutoReplyWatchdog` / `AlibabaAutoReplyHealth` 两个计划任务的 `StopOnIdleEnd` 由 `true` 改为 `false`（09-16 15:44 watchdog 被 0xC000013A 终止的根因是空闲条件结束）。Watchdog 任务保持 Enabled（watchdog 运行宿主）。
+2. **Health 自动拉起 watchdog（F8b）**：`health_check.ps1` 在 `watchdog_process=FAIL` 时以分离进程拉起 `watchdog.ps1 -Action start`（幂等：pid 文件 + 命令行双重确认；heal 尝试 30 分钟节流，状态 `data\health_state.json` 的 `watchdog_heal` 键）。成功写 `HEALTH-HEAL pid=<new>`，失败写 `HEALTH-HEAL-FAIL`；异常不影响 exit 0。
+3. **新增 config 键**：`log_max_mb`（20）、`log_keep_files`（10）、`snapshot_retention_days`（90）、`deadman_ping_url`（""）。
+4. **日志轮转**：`scripts\log_rotate.ps1`（`Invoke-LogRotation`，超限重试 3 次×2s 移入 `logs\archive\<name>_<时间戳>.log`，保留最近 N 份；支持 `-DryRun`）；monitor 启动时对 monitor.log 执行一次。
+5. **快照保留**：`scripts\retention.ps1`（`Invoke-SnapshotRetention`，`data\msgs_*.txt` 超 N 天按月份打包 `data\archive\msgs_<yyyyMM>.zip` 后删除源文件；只处理 msgs_*.txt，不碰 buyers/vision_extract/manual_override/state/报告；支持 `-DryRun`）；monitor 启动时先 DryRun 记录再执行。
+6. **死信心跳**：`scripts\lib\deadman.ps1`（`Send-DeadmanPing`，GET 超时 10s；空 URL→skip，异常→fail）；`health_check.ps1` 每轮 ping 一次，`health.log` 每 6 小时最多一行 `DEADMAN-PING ok|fail`（状态 `data\deadman_state.json`）。真实 URL 待用户在 healthchecks.io 注册后填入 `deadman_ping_url`（仅 ping 无 PII）。
+7. **重复发送修复（P0-2）**：`reply_engine.ps1` 新增 `ConvertTo-EpochMs`（ts 归一化）与 `Test-AlreadyReplied`（文本相同且 ts 不更新=已回复；任一侧 ts 缺失=保守判已回复）；`monitor.ps1` 去重块改调该函数，旧无 ts 记录遇可解析 ts 时写 `DEDUP-UPGRADE`；发送成功后设置 3 分钟会话冷却（日志 `POST-SEND-COOLDOWN`，preview 变化自动解除）。
+8. **ACCIO-PARSE-ERR 单行化**：JSON 解析失败日志压成单行（附 `jsonErr=`），截断 200 字符，不再产生多行 JSON 块。
+
+排障：`Get-Content logs\health.log -Tail 20 | Select-String 'HEALTH-HEAL|DEADMAN'`；`Select-String 'DEDUP-UPGRADE|POST-SEND-COOLDOWN' logs\monitor.log`；轮转 DryRun `powershell -File scripts\log_rotate.ps1 -DryRun`；保留 DryRun `powershell -File scripts\retention.ps1 -DryRun`。
+
 
 ## 四、常用运维
 
@@ -219,6 +232,7 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
 - 变更记录（详见 docs\CHANGELOG.md）：
+  - 2026-09-18：P0 优化——守护加固（任务 `StopOnIdleEnd=false` + Health 自动拉起 watchdog，取消 WinSW 服务化）、重复发送修复（ts 归一化去重 + 发送后 3 分钟冷却）、日志/PII 治理（ACCIO-PARSE-ERR 单行化、日志轮转、快照保留、案卷归档）、死信心跳（healthchecks.io ping 接口就绪）
   - 2026-09-12（3）：报告企微推送（`lib\report_push.ps1`，quality/weekly 生成后自动推摘要，`report_push_enabled` 开关 + 去重）+ 模型切换 `deepseek-v4-flash`（`thinking:disabled`）+ 附件识别（`lib\vision.ps1`/`lib\doc.ps1` + `tools\doc-reader` 组件；monitor 图片多模态/文档解析/机会性提取 → `data\vision_extract\`；goods 合并 sidecar）
   - 2026-09-12（2）：control-agent 保活并入 watchdog（五重守护，agent_start.ps1，启动失败 5 分钟冷却）+ 停用标记机制（bin stop/start 自动维护）+ 注册 `AlibabaAutoReplyWatchdog` 登录自启任务（+30s/Hidden/不限时）+ status 纳入 control-agent 与第 5 项任务
   - 2026-09-12：精简与优化轮——退役/休眠脚本归档至 `backups\精简优化_20260912\`（manifest 可回溯）；cdp.ps1 删死分支（仅保留 navigate/eval）；CDP 端口收敛到 `config.json` 的 `cdp_port`（默认 9222）；巨型函数拆分（Generate-Reply / Start-Monitor）；prompt 红线合并归档 + auto_optimize 阈值自动合并与 never 保留最新 40 条；SKILL/README 瘦身；镜像默认改为 opencode 技能目录

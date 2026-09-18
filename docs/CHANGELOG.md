@@ -2,6 +2,34 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-18 - P0 优化：守护加固（任务修正 + Health 自动拉起）/ 重复发送修复 / 日志与 PII 治理 / 死信心跳
+
+**背景**：09-16 watchdog 被任务空闲条件终止（0xC000013A）后未再运行；14 天日志分析发现 725 次发送中 141 对同买家同文案、间隔 ≤600s（≈19%）的重复发送；`ACCIO-PARSE-ERR` 因保留 JSON 换行产生多行日志；工作区残留 13 条含 PII 的未跟踪案卷。用户二次拍板取消 WinSW 服务化，改为任务修正 + Health 自动拉起（全程无需 Windows 密码）。
+
+### 守护加固（P0-1）
+- `AlibabaAutoReplyWatchdog` / `AlibabaAutoReplyHealth` 任务 `StopOnIdleEnd` true→false（根因修复；对象方式修改，BEFORE/AFTER XML 留证 `specs\_evidence_20260918_p0\`）
+- `health_check.ps1` F8b：`watchdog_process=FAIL` 时以分离进程拉起 `watchdog.ps1 -Action start`（幂等：pid + 命令行双确认；heal 30 分钟节流，状态键 `watchdog_heal`；`HEALTH-HEAL pid=<new>` / `HEALTH-HEAL-FAIL` 留痕，不影响 exit 0）
+- 实测：启动任务 → 按 pid kill → health_check → `HEALTH-HEAL pid=1960`，新进程存活（证据 `specs\_evidence_20260918_p0\heal_test.txt`）
+
+### 重复发送修复（P0-2）
+- `reply_engine.ps1` 新增 `ConvertTo-EpochMs`（13 位毫秒/10 位秒/`yyyy-MM-dd HH:mm:ss`/`yyyy/MM/dd HH:mm:ss` → epoch ms，非法 `$null`）与 `Test-AlreadyReplied`（文本相同且 ts 不更新=已回复；任一侧 ts 缺失/不可解析=保守判已回复；新 ts 严格更大=新消息）
+- `monitor.ps1` 去重块改调 `Test-AlreadyReplied`；旧无 ts 记录升级写 `DEDUP-UPGRADE`；发送成功后 3 分钟会话冷却 `POST-SEND-COOLDOWN`（preview 变化自动解除）
+- `tests\reply_engine.tests.ps1` 新增 17 断言（含 sandy 回归场景）
+
+### 日志与 PII 治理（P0-3/4）
+- `lib\accio.ps1`：`ACCIO-PARSE-ERR` 单行化（JSON 换行压空格 + `jsonErr=` 异常原因 + 截断 200 字符）
+- 新增 `scripts\log_rotate.ps1`（超限移入 `logs\archive\`，保留 N 份，重试 3 次×2s，`-DryRun`）与 `scripts\retention.ps1`（`data\msgs_*.txt` 超期按月份打包 `data\archive\msgs_<yyyyMM>.zip`，只碰 msgs，`-DryRun`）；monitor 启动自动执行
+- 新增 `tests\log_maintenance.tests.ps1`（22 断言：轮转/保留/DryRun）
+- 13 条未跟踪案卷移入 `specs\案卷_20260915\`（SHA256 全部 MATCH，MANIFEST 留档）；8 个一次性脚本移入 `specs\归档\`；AUTOOPT 产物提交 `66a9e8b`
+
+### 死信心跳（P0-5）
+- 新增 `scripts\lib\deadman.ps1`（`Send-DeadmanPing`：空 URL→skip，GET 超时 10s，异常→fail 吞掉）；`health_check.ps1` 每轮 ping，`health.log` 每 6h 一行 `DEADMAN-PING ok|fail`（`data\deadman_state.json`）
+- 本地 mock 实测通过（`PING /ping` → `ok`；空 URL → `skip`）；真实 healthchecks.io URL 待用户注册后填入 `deadman_ping_url`
+
+### 配置与文档
+- `config.json(.example)` 新增 `log_max_mb`(20) / `log_keep_files`(10) / `snapshot_retention_days`(90) / `deadman_ping_url`("")
+- README / SKILL / 部署说明增补；`status.ps1` watchdog 行增加命令行校验
+
 ## 2026-09-16 - watchdog 死亡事故恢复 + F5 保活实测 + F8 健康心跳告警
 
 **事故**：2026-09-15 20:30 Windows Update 计划外重启后，watchdog（PID 15532）仅存活约 19s 即被终止（LastTaskResult=0xC000013A；Task Scheduler Operational 日志当时禁用，死因未定论），此后 17.5h 无守护；monitor（PID 17256）存活但页面无会话，持续 `Scan cycle done` 静默空转，直至 14:03 CDP 掉线触发自愈、14:05 重新登录后才恢复回复。
