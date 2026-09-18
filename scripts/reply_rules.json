@@ -40,8 +40,6 @@
                                        "Be professional, polite and concise"
                                    ],
                         "never":  [
-                                      "Never proactively ask for the customer\u0027s personal contact info",
-                                      "Never proactively provide our contact info (only share when the customer asks)",
                                       "Never propose offline transactions",
                                       "Never mention Alibaba transaction fees",
                                       "Never share fake or unverified pricing",
@@ -75,7 +73,13 @@
                                       "Never repeat the same wording, template or apology when the buyer resends the same message; always add new information or a concrete action.",
                                       "Never send multiple messages in a row to a buyer who has not replied, or continue sending follow-ups after the buyer indicates the messages are annoying.",
                                       "Never send any further follow-up or proactive message to a buyer who has said our messages are annoying, unless the buyer initiates a new message first.",
-                                      "Never reply to a buyer\u0027s complaint about annoying messages with only an apology or a system excuse; state a concrete stop action (e.g., \u0027I\u0027ll stop the follow-ups now\u0027)."
+                                      "Never reply to a buyer\u0027s complaint about annoying messages with only an apology or a system excuse; state a concrete stop action (e.g., \u0027I\u0027ll stop the follow-ups now\u0027).",
+                                      "Never reply to a buyer\u0027s pickup/self-collection statement with a generic acknowledgment that ignores their refusal; directly address the pickup point or offer an alternative.",
+                                      "Never repeat the same reply wording when the buyer resends the same message; add new information or a concrete action.",
+                                      "Never reply to a buyer\u0027s repeated message with only an acknowledgment or a bare number; always add a concrete next step or timeline.",
+                                      "Never reply to a buyer\u0027s refusal of a pickup/self-collection point with a generic acknowledgment; directly address the pickup method or offer an alternative.",
+                                      "Never send a reply that only acknowledges receipt of the buyer\u0027s data without stating what happens next or when the quote will come.",
+                                      "Never reply to a buyer\u0027s repeated message with a bare number or single word (e.g., \u0027336\u0027, \u0027The drak green\u0027) without a concrete next step or timeline."
                                   ],
                         "urgency":  [
 
