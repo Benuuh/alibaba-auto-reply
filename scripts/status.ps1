@@ -181,7 +181,7 @@ if (Test-Path $repDir) {
 
 # --- 7. 计划任务 ---
 Section "计划任务"
-foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "AlibabaAutoReplyOptimize", "AlibabaAutoReplyWeekly", "AlibabaAutoReplyWatchdog")) {
+foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "AlibabaAutoReplyOptimize", "AlibabaAutoReplyWeekly", "AlibabaAutoReplyWatchdog", "AlibabaAutoReplyHealth")) {
     $task = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
     if ($task) {
         $st = $task.State.ToString()
