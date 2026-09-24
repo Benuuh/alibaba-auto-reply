@@ -40,8 +40,6 @@
                                        "Be professional, polite and concise"
                                    ],
                         "never":  [
-                                      "Never propose offline transactions",
-                                      "Never mention Alibaba transaction fees",
                                       "Never share fake or unverified pricing",
                                       "Never ask for information the buyer has already provided or promised to provide, and never ask the same question twice in one conversation - if answered, acknowledge and move forward (e.g. buyer said \u0027will get you dimensions\u0027 - just confirm, do not re-send the inquiry template)",
                                       "Never answer off-topic: if the buyer asks about billing rules, transit time or price, answer that directly",
@@ -79,7 +77,9 @@
                                       "Never reply to a buyer\u0027s repeated message with only an acknowledgment or a bare number; always add a concrete next step or timeline.",
                                       "Never reply to a buyer\u0027s refusal of a pickup/self-collection point with a generic acknowledgment; directly address the pickup method or offer an alternative.",
                                       "Never send a reply that only acknowledges receipt of the buyer\u0027s data without stating what happens next or when the quote will come.",
-                                      "Never reply to a buyer\u0027s repeated message with a bare number or single word (e.g., \u0027336\u0027, \u0027The drak green\u0027) without a concrete next step or timeline."
+                                      "Never reply to a buyer\u0027s repeated message with a bare number or single word (e.g., \u0027336\u0027, \u0027The drak green\u0027) without a concrete next step or timeline.",
+                                      "Never resend the same information-collection template or re-ask a field the buyer has already provided or promised; acknowledge and move forward.",
+                                      "Never reply to a repeated buyer message with the same wording, a bare acknowledgment, or a single number; always add new information or a concrete next step."
                                   ],
                         "urgency":  [
 

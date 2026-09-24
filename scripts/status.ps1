@@ -75,6 +75,21 @@ if ($agentProc.Count -eq 0 -and (Test-Path $agentFlag)) {
     StatusLine "control-agent" $false "DOWN(保活将在下轮拉起)"
 }
 
+# 企微通道(长连接连通性,与 health_check 的 wecom_connected 同判据)
+$wcOk = $false; $wcDetail = "SERVICE_DOWN"
+try { $h = Invoke-RestMethod 'http://127.0.0.1:19886/health' -TimeoutSec 3
+      $wcOk = ($h.connected -eq $true)
+      if ($wcOk) { $s = Invoke-RestMethod 'http://127.0.0.1:19886/status' -TimeoutSec 3
+                   $wcDetail = "connected, uptime $($s.uptime_sec)s, msg_count $($s.msg_count)" }
+      else { $wcDetail = "进程在但长连接未建立(保活将在 ≤90s 自愈)" } } catch { $wcDetail = "19886 不可达" }
+StatusLine "企微通道" $wcOk $wcDetail
+
+# 未恢复告警(企微不可达时的唯一可观测入口)
+. (Join-Path $PSScriptRoot "lib\alert_local.ps1")
+$al = @(Get-LocalAlert)
+if ($al.Count -eq 0) { StatusLine "未恢复告警" $true "无" }
+else { StatusLine "未恢复告警" $false ("{0} 项: {1}" -f $al.Count, (($al | ForEach-Object { $_.check }) -join ', ')) }
+
 # Accio 网关(桌面应用;读取优先迁移的只读数据源,CDP 始终兜底)
 $accioProcs = @(Get-Process -Name Accio -ErrorAction SilentlyContinue)
 $accioExe = $null

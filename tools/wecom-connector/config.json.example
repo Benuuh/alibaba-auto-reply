@@ -4,5 +4,14 @@
   "data_dir": "data",
   "receiver_file": "data/wecom_receiver.json",
   "bot_id": "WX_BOT_ID占位-请替换",
-  "bot_secret": "WX_BOT_SECRET占位-请替换"
+  "bot_secret": "WX_BOT_SECRET占位-请替换",
+
+  "_comment_kick": "被顶下线(disconnected_event)自愈:SDK 在该态永不重连,只能由进程退出 + 守护者拉起接管。exit_on_kicked_offline=false 时只记日志不退出(回退/排障用)。kick_window_min 内累计 kick_threshold 次进入长退避 kick_long_backoff_min 分钟,否则退避 kick_short_backoff_sec 秒;在线稳定 kick_stable_reset_min 分钟后清空历史。环境变量 WX_EXIT_ON_KICKED_OFFLINE 可覆盖 exit_on_kicked_offline(仅字符串 false 关闭)。",
+  "exit_on_kicked_offline": true,
+  "kick_exit_delay_ms": 1000,
+  "kick_window_min": 30,
+  "kick_threshold": 3,
+  "kick_short_backoff_sec": 60,
+  "kick_long_backoff_min": 30,
+  "kick_stable_reset_min": 10
 }

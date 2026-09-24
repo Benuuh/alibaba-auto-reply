@@ -1,8 +1,12 @@
 # ===== 凭据（绝不上传） =====
 credentials.md
+# 凭据备份（.specbak_* 等派生名同样含 wx_bot_id/wx_bot_secret/api_key；精确名规则挡不住它们）
+credentials.md*
 
 # ===== Chrome 登录态 =====
 chrome-profile/
+# OKKI 任务独立 profile(与上一行同口径;2026-09-23 重建)
+/chrome-profile-okki/
 
 # ===== 运行日志（logs\） =====
 logs/
@@ -83,3 +87,19 @@ scripts/last_sync.json
 /.opencode/
 /alibaba/
 /skills-main/
+
+# ===== 2026-09-24 发布补充：脱敏审计新增排除 =====
+# 代码/配置快照备份（任意层级；含本机真实路径与旧配置，属本地产物）
+*.specbak_*
+# 商业单据与客户案卷（PI/提单/报关/CBP 查验等真实单据，含客户名、地址、电话、
+# 银行账号、箱号提单号，属客户机密，一律不入库）
+/pi_export/
+/pdf_read/
+# 商业单据原件（PI 报价单/形式发票等，含客户与价格信息）
+/PI原件*.xlsx
+/PI原件*.pdf
+# 扫描件图像（任意层级，防止单据图片被误加）
+*.jpg
+*.png
+# 注意：tests/ 下的夹具为虚构数据，仍需入库
+!tests/fixtures/*.png

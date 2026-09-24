@@ -1,4 +1,4 @@
-﻿# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
+# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
 # Checks: monitor process + log freshness / watchdog process / cooldown / wecom / control-agent / CDP + page login.
 # Alerts via WeCom with 30-min dedup per check; writes logs\health.log. Always exits 0 unless fatal.
 param([string]$LogDir = "")
@@ -7,6 +7,7 @@ $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "config.ps1")
 . (Join-Path $PSScriptRoot "lib\log.ps1")
 . (Join-Path $PSScriptRoot "lib\wecom.ps1")
+. (Join-Path $PSScriptRoot "lib\alert_local.ps1")
 . (Join-Path $PSScriptRoot "lib\cdp.ps1")
 . (Join-Path $PSScriptRoot "lib\deadman.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
@@ -123,11 +124,29 @@ foreach ($c in $checks) {
 }
 $statusLine = "HEALTH: " + (($checks | ForEach-Object { $_.name + "=" + $(if ($_.ok) { "OK" } else { "FAIL" }) }) -join " ")
 Write-Log $statusLine
+# Alert fan-out (2026-09-22 F3): WeCom is the primary channel but it dies together with the very thing it
+# reports on, so every failed send also lands in the local channel (logs\alert_active.json + logs\ALERT.md
+# + desktop popup) which status.ps1 reads. Never breaks the exit-0 contract.
 foreach ($a in $alerts) {
-    try { $r = Send-WecomMessage $a; Write-Log ("HEALTH-ALERT: " + $a + " -> " + $r) } catch { Write-Log ("HEALTH-ALERT-FAIL: " + $_.Exception.Message) }
+    try {
+        $r = Send-WecomMessage $a
+        Write-Log ("HEALTH-ALERT: " + $a + " -> " + $r)
+        if ($r -ne 'SENT_OK') {
+            $cn = ([string]$a -replace '^\[HEALTH\]\s+', '') -replace '\s+FAIL:.*$', ''
+            $dt = ([string]$a -replace '^.*?FAIL:\s*', '')
+            $lr = Write-LocalAlert $cn $dt ([string]$r)
+            Write-Log ("HEALTH-ALERT-LOCAL: " + $cn + " wecom=" + $r + " -> " + $lr)
+        }
+    } catch { Write-Log ("HEALTH-ALERT-FAIL: " + $_.Exception.Message) }
 }
 foreach ($r in $recovers) {
-    try { $x = Send-WecomMessage $r; Write-Log ("HEALTH-RECOVER: " + $r + " -> " + $x) } catch { }
+    try {
+        $x = Send-WecomMessage $r
+        Write-Log ("HEALTH-RECOVER: " + $r + " -> " + $x)
+        $cn = ([string]$r -replace '^\[HEALTH\]\s+', '') -replace '\s+RECOVERED.*$', ''
+        $lr = Clear-LocalAlert $cn
+        Write-Log ("HEALTH-RECOVER-LOCAL: " + $cn + " -> " + $lr)
+    } catch { }
 }
 
 # F8b watchdog auto-heal (2026-09-18): start watchdog detached when watchdog_process fails.
