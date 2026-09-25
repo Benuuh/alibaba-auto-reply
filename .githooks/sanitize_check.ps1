@@ -49,7 +49,11 @@ $contentBlock = @(
     # 2026-09-07 发布补充:通用形态(企微/飞书/Slack webhook URL、本机真实路径、bot 凭据赋值;值需 12+ 字母数字以避代码引用误伤)
     'qyapi\.weixin[^\s"'']*|hooks\.slack[^\s"'']*|open\.feishu[^\s"'']*',
     'D:\\Agent_work', 'C:\\Users\\22129',
-    '(wx_bot_id|wx_bot_secret|bot_secret|control_api_key)["'']?\s*[:=：]\s*["'']?[A-Za-z0-9_\-]{12,}'
+    '(wx_bot_id|wx_bot_secret|bot_secret|control_api_key)["'']?\s*[:=：]\s*["'']?[A-Za-z0-9_\-]{12,}',
+    # [LOCAL-PATCH okki-autologin] 2026-09-25 OKKI(小满) 凭据字段：既有模式按字面 (password)/(account) 匹配，认不出带前缀的字段
+    "(?m)\*\*OKKI 密码 \(okki_password\)\*\*：(?!xxx(?:\s|$)|你的|占位|<)\S+",
+    "(?m)\*\*OKKI 账号 \(okki_account\)\*\*：(?!xxx(?:\s|$)|你的|占位|<)\S+",
+    'okki_password["'']?\s*[:=：]\s*["'']?\S{6,}'
 )
 
 # ---- 内容敏感模式(警告级:疑似 PII,不阻断但提示) ----

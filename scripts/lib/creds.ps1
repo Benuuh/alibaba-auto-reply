@@ -6,6 +6,8 @@
 #   - **账号 (account)**：xxx
 #   - **密码 (password)**：xxx
 #   - **API Key (api_key)**：xxx
+#   - **OKKI 账号 (okki_account)**：xxx        # [LOCAL-PATCH okki-autologin]
+#   - **OKKI 密码 (okki_password)**：xxx       # [LOCAL-PATCH okki-autologin]
 # 解析失败返回 $null(调用方需处理:记日志/回退,不得崩溃)。
 
 if (-not (Get-Command Get-SkillPath -ErrorAction SilentlyContinue)) {
@@ -29,6 +31,11 @@ function Get-CredentialValue([string]$name) {
         "api_key"  { if ($cred -match '- \*\*API Key \(api_key\)\*\*：(\S+)') { return $Matches[1] } }
         "wx_bot_id" { if ($cred -match '- \*\*企微机器人 Bot ID \(wx_bot_id\)\*\*：(\S+)') { return $Matches[1] } }
         "wx_bot_secret" { if ($cred -match '- \*\*企微机器人 Secret \(wx_bot_secret\)\*\*：(\S+)') { return $Matches[1] } }
+        # [LOCAL-PATCH okki-autologin] 2026-09-25 本地扩展：OKKI(小满 CRM) 凭据
+        # 与既有字段同格式：- **OKKI 密码 (okki_password)**：<值>
+        # 用 ([^\r\n]+) 而非 (\S+)：允许密码含空格；读取端 .Trim() 去尾随空白
+        "okki_account"  { if ($cred -match '- \*\*OKKI 账号 \(okki_account\)\*\*：([^\r\n]+)') { return $Matches[1].Trim() } }
+        "okki_password" { if ($cred -match '- \*\*OKKI 密码 \(okki_password\)\*\*：([^\r\n]+)') { return $Matches[1].Trim() } }
     }
     return $null
 }

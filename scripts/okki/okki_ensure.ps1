@@ -89,6 +89,28 @@ try {
         Exit-With 0 "OK url=$($obj.host)$($obj.path)"
     }
     if ($obj.loginForm) {
+        # [LOCAL-PATCH okki-autologin] 2026-09-25 本地扩展：登录态失效时尝试自动登录
+        #   - 受控：仅当 credentials.md 存在 OKKI 凭据 且 okki_login.ps1 存在时才尝试
+        #   - 不作为：任何失败都回落到上游原行为（exit 2），绝不改变 ensure 的语义
+        $loginScript = Join-Path $PSScriptRoot "okki_login.ps1"
+        $hasOkkiCreds = $false
+        try {
+            . (Join-Path (Split-Path $PSScriptRoot -Parent) "lib\creds.ps1")
+            $hasOkkiCreds = [bool](Get-CredentialValue 'okki_password')
+        } catch { $hasOkkiCreds = $false }
+        if ((Test-Path $loginScript) -and $hasOkkiCreds) {
+            Write-OkkiLog "OKKI-ENSURE: NEED_LOGIN → 尝试自动登录"
+            & powershell -ExecutionPolicy Bypass -NoProfile -File $loginScript -Quiet
+            $lc = $LASTEXITCODE
+            Write-OkkiLog "OKKI-ENSURE: 自动登录退出码 = $lc"
+            if ($lc -eq 0) {
+                $state2 = Invoke-OkkiCdpEval (Get-OkkiLoginStateJs)
+                $obj2 = $state2 | ConvertFrom-Json
+                if ($obj2.loggedIn) { Exit-With 0 "OK(autologin) url=$($obj2.host)$($obj2.path)" }
+            }
+            if ($lc -eq 10) { Exit-With 2 "NEED_LOGIN(2FA) url=$($obj.host)$($obj.path) 需人工处理验证码/短信" }
+            if ($lc -eq 11) { Exit-With 2 "NEED_LOGIN(COOLDOWN) url=$($obj.host)$($obj.path) 自动登录限流中" }
+        }
         Exit-With 2 "NEED_LOGIN url=$($obj.host)$($obj.path) reason=$($obj.reason)"
     }
     Exit-With 5 "UNKNOWN url=$($obj.host)$($obj.path) reason=$($obj.reason)"
