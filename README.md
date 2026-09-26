@@ -239,7 +239,7 @@ Get-NoReplySummary                   # → 当前人工接管白名单(2): john 
 
 ## 📁 目录结构
 
-**部署根 `D:\Agent_work\` —— 只放代码与配置（2026-09-26 起）**：
+**部署根 `<部署根>\` —— 只放代码与配置（2026-09-26 起）**：
 
 ```
 alibaba-auto-reply/
@@ -287,10 +287,10 @@ alibaba-auto-reply/
 └── tests\                    ← 主仓库回归测试（16 文件 436 断言，fixtures 虚构数据）
 ```
 
-**运行时数据根 `D:\Agent_work-runtime\` —— 不进版本控制（2026-09-26 由部署根迁出）**：
+**运行时数据根 `<部署根>-runtime\` —— 不进版本控制（2026-09-26 由部署根迁出）**：
 
 ```
-D:\Agent_work-runtime\
+<部署根>-runtime\
 ├── chrome-profile\           ← Chrome 登录态（1036 MB；配置键 chrome_profile）
 ├── chrome-profile-okki\      ← OKKI(小满 CRM) 登录态（240 MB；配置键 okki_profile）
 ├── specs\                    ← 过程记录：全部 spec / REPORT / KNOWN_EXCEPTIONS.md
