@@ -334,7 +334,26 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 - 登录页滑块验证码无法自动通过：刷新页面通常可消除，不要反复点提交
 - 监控为单实例：多实例会操作同一页面互相干扰
 - 修改 `reply_rules.json` / `reply_agent_prompt.md` 后立即生效，无需重启
-- **人工接管白名单**：企微向机器人发「白名单 添加 <客户名>」→ 该买家不再自动回复（只读快照 + [NEW-INQUIRY] 提醒；报价/唤醒免打扰）；「白名单 删除」即恢复；名单存 `data\manual_override.json`（损坏/缺失=空名单，热生效≤10s，无需重启 monitor）
+- **人工接管白名单**（2026-09-26 恢复）：**名单买家不自动回复**（LLM/规则/图片模板/QUICK 全跳过，只读留痕 + `[NEW-INQUIRY]` 提醒），
+  且报价提醒与沉睡唤醒对其跳过。名单存 `data\manual_override.json`（本机 PII，不入库），热生效。
+
+  ```powershell
+  # 确定性 CLI（不经 LLM）：增 / 删 / 查
+  powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 列表'
+  powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 添加 John Smith'
+  powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 删除 John Smith'
+  ```
+
+  **企微指令要靠一个执行端**：DSH agent（`control-agent` 自 2026-09-26 起停用）。给 agent 的指令模板：
+
+  > 当用户从企微发来形如 `白名单 添加|删除|列表 <客户名>` 的消息时，执行
+  > `powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command "<原样指令>"`
+  > 并把该命令的单行输出原样回发给用户。**不要**自行编辑 `data\manual_override.json`。
+
+  > **历史**：写侧原在 `tools\control-agent\agent_bridge.js::handleWhitelistCmd`（同为确定性处理），
+  > 依赖已停用的本地桥 `127.0.0.1:19886`。现已搬到 `scripts\lib\no_reply.ps1` + `scripts\whitelist.ps1`；
+  > **读侧（monitor/nudge/quote）一行未改**；写出的文件与 JS 侧 `JSON.stringify(list,null,2)+'\n'` 逐字节一致，
+  > 由 `tests\no_reply_write.tests.ps1`（36 断言）守护。
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
 - **告警通道二选一**：同一企微机器人**只能有一条长连接**（`exit_on_kicked_offline`）。当前默认走 dsh-im 投递，

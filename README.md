@@ -163,11 +163,41 @@ curl -X POST http://127.0.0.1:<dsh-host-port>/api/dsh-im/delivery/messages \
 
 ## 📵 人工接管白名单（不自动回复客户）
 
-企微向机器人发指令（owner 专属）：`白名单 添加 John Smith` / `白名单 列表` / `白名单 删除 John Smith`（≤10s 生效）。
+**名单买家不触发任何自动回复**（LLM/规则/图片模板/QUICK 全跳过）；只读留痕（快照 + 档案）并照常 `[NEW-INQUIRY]` 提醒人工接管。
+报价提醒与沉睡唤醒对名单买家跳过；豁免期不写去重状态，移出后自动恢复。
 
-- **行为**：名单买家新消息不触发任何自动回复（LLM/规则/图片模板/QUICK 全跳过）；只读留痕（快照 + 档案）并照常 [NEW-INQUIRY] 提醒人工接管。
-- **联动**：报价提醒与沉睡唤醒对名单买家跳过；豁免期不写去重状态，移出后自动恢复。
-- **存储**：`data\manual_override.json`（本机 PII 不入库）；按会话显示名匹配（大小写/空格/下划线容错）。
+**名单文件**：`data\manual_override.json`（JSON 字符串数组，**本机 PII，gitignore 不入库**）。
+
+**三种操作方式（等价，都是确定性字符串操作，不经 LLM）**：
+
+```powershell
+# ① CLI（推荐：人和 agent 都用它）
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 列表'
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 添加 John Smith'
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 删除 John Smith'
+# 也支持 whitelist add|remove|list / 参数式 -Action add -Name 'John Smith'
+
+# ② 库函数（脚本内调用）
+. scripts\config.ps1; . scripts\lib\no_reply.ps1
+Add-NoReplyBuyer 'John Smith'        # → ADDED:john smith | ALREADY | BAD_NAME
+Remove-NoReplyBuyer 'John Smith'     # → REMOVED:john smith | NOT_FOUND | BAD_NAME
+Get-NoReplySummary                   # → 当前人工接管白名单(2): john smith、maria gomez
+
+# ③ 企微发指令（经 DSH agent 执行上面的 CLI；见下）
+#    白名单 添加 John Smith / 白名单 删除 John Smith / 白名单 列表
+```
+
+**匹配语义**：会话显示名经同一归一化后**精确相等**（trim → 小写 → `_`→空格 → 压空白）。
+所以 `John Smith` / `JOHN_SMITH` / `john  smith` 视为同一人；`John Smiths`、`Smith John` **不会**误伤。
+
+> **历史说明**：写侧原先只在 `tools\control-agent\agent_bridge.js::handleWhitelistCmd`（也是确定性处理），
+> 靠轮询本地桥 `127.0.0.1:19886` 收指令；该桥 2026-09-26 停用后失效。
+> 现已在 `scripts\lib\no_reply.ps1` 内置写侧并配 `scripts\whitelist.ps1` CLI，**读侧（monitor/nudge/quote）一行未改**。
+> 写出的文件与 `agent_bridge.js` 的 `JSON.stringify(list,null,2)+'\n'` **逐字节一致**（LF + 2 空格缩进 + 无 BOM），
+> 有回归测试 `tests\no_reply_write.tests.ps1`（36 断言）守着这个契约。
+
+**企微指令要真正生效，需要一个执行端**——当前由 DSH agent 承担（control-agent 自 2026-09-26 起停用）。
+给 agent 的指令模板见部署手册「人工接管白名单」一节。
 
 ## 🔌 Accio 网关（可选，读取增强）
 
