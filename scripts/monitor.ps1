@@ -1234,7 +1234,13 @@ function Invoke-ScanRound($ctx) {
         $script:pageDownStreak++
         Write-Log "PAGE-DOWN ($($script:pageDownStreak)x) reason=$($pageHealth.Reason) items=$($pageHealth.Items) spin=$($pageHealth.Spinner)"
     } else {
-        if ($script:pageDownStreak -gt 0) { Write-Log "PAGE-RECOVERED after $($script:pageDownStreak) down round(s)" }
+        if ($script:pageDownStreak -gt 0) {
+            Write-Log "PAGE-RECOVERED after $($script:pageDownStreak) down round(s)"
+            # [FIX-ALERTPAIR 2026-09-26] 数据面恢复即清掉 page_data_plane 告警：原实现只在
+            #   'alert-only' 分支 Write-LocalAlert，恢复时无配对 Clear ⇒ 该告警永不消解。
+            #   必须留在本 if 内部：只有"曾 down 过"才需要清（无条件调用等于每轮空转）。
+            Clear-LocalAlert 'page_data_plane'
+        }
         $script:pageDownStreak = 0
     }
     # [FIX-THROTTLE 2026-09-26] 分级自愈（带静默期/退避/上限，取代原来的 `% 3` 无退避写法）

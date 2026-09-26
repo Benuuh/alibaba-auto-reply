@@ -84,7 +84,8 @@ function Get-CleanEnvSnapshot {
 #     + 异步排空(ReadToEndAsync)。实测：带重定向可正常启动、exitCode 正确、stdout 可取回，
 #     且因为一开始就异步排空，不会出现"子进程写满管道缓冲区后死锁"。
 #     输出在子进程退出后（或等待超时后已排空完成时）以 UTF-8(无 BOM) 落盘，
-#     使 agent_start / wecom_start / lib\doc 等"读子进程输出文件"的调用点行为不变。
+#     使 lib\doc / health_check / watchdog 等"读子进程输出文件"的调用点行为不变。
+#     （原列举的 agent_start / wecom_start 两个启动器已于 2026-09-26 随退休告警桥移除，见 E-24）
 #   ⚠️ 本函数**不做**单实例/幂等判断——调用点必须自行保留原有的 pid/幂等语义。
 #   返回 System.Diagnostics.Process；调用方负责 WaitForExit / Dispose。
 #   绝不打印环境变量的值（其中含代理地址等本机信息）。

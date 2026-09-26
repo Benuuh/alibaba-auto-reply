@@ -59,30 +59,28 @@ if (Test-Path $cdFile) {
 } else {
     StatusLine "WATCHDOG COOLDOWN" $true "无"
 }
-# control-agent(企微自然语言远程控制桥,由 watchdog 保活)
-$agentRoot = Join-Path (Get-SkillPath "") "tools\control-agent"
-$agentProc = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -match [regex]::Escape((Join-Path $agentRoot "agent_bridge.js")) })
-$agentFlag = Join-Path $agentRoot "data\control-agent.disabled"
-if ($agentProc.Count -eq 0 -and (Test-Path $agentFlag)) {
-    StatusLine "control-agent" $true "DISABLED(停用标记)"
-} elseif ($agentProc.Count -gt 0) {
-    $agentLog = Join-Path $agentRoot "logs\agent.log"
-    $agentAge = "无日志"
-    if (Test-Path $agentLog) { $agentAge = "$([int]((Get-Date) - (Get-Item $agentLog).LastWriteTime).TotalSeconds)s 前" }
-    StatusLine "control-agent" $true "PID=$($agentProc[0].ProcessId), agent.log $agentAge"
-} else {
-    StatusLine "control-agent" $false "DOWN(保活将在下轮拉起)"
-}
+# control-agent 检查已于 2026-09-26 移除：该组件连同 tools\control-agent 目录一并物理删除。
+#   原实现探测 node 进程 + agent_bridge.js 命令行 + 停用标记，删除后恒为 DOWN ⇒ 会变成永不消解的假红字。
+#   复活路径见 docs\KNOWN_EXCEPTIONS.md E-20（代码从 git 历史取回）。
 
-# 企微通道(长连接连通性,与 health_check 的 wecom_connected 同判据)
-$wcOk = $false; $wcDetail = "SERVICE_DOWN"
-try { $h = Invoke-RestMethod 'http://127.0.0.1:19886/health' -TimeoutSec 3
-      $wcOk = ($h.connected -eq $true)
-      if ($wcOk) { $s = Invoke-RestMethod 'http://127.0.0.1:19886/status' -TimeoutSec 3
-                   $wcDetail = "connected, uptime $($s.uptime_sec)s, msg_count $($s.msg_count)" }
-      else { $wcDetail = "进程在但长连接未建立(保活将在 ≤90s 自愈)" } } catch { $wcDetail = "19886 不可达" }
-StatusLine "企微通道" $wcOk $wcDetail
+# 告警出口(dsh-im 主动投递；2026-09-26 起唯一出口，旧企微桥已退休，见 E-24)
+#   URL 一律从 config 读取，不硬编码（硬编码绝对路径会被 .githooks\sanitize_check.ps1 判为敏感内容）
+$dshimUrl = ''
+try { $dshimUrl = [string]$cfg.dshim_delivery_url } catch { $dshimUrl = '' }
+$acOk = $false; $acDetail = 'unreachable'
+if (-not $dshimUrl) {
+    $acDetail = 'config 缺 dshim_delivery_url'
+} else {
+    try {
+        try { Invoke-WebRequest $dshimUrl -Method Get -TimeoutSec 4 -UseBasicParsing | Out-Null; $acDetail = 'unexpected 200' }
+        catch {
+            $code = 0; try { $code = [int]$_.Exception.Response.StatusCode } catch { $code = 0 }
+            if ($code -eq 405) { $acOk = $true; $acDetail = 'dsh-im delivery 在线(405=只收 POST)' }
+            else { $acDetail = "HTTP $code" }
+        }
+    } catch { $acDetail = 'unreachable' }
+}
+StatusLine "告警出口(dsh-im)" $acOk $acDetail
 
 # 未恢复告警(企微不可达时的唯一可观测入口)
 . (Join-Path $PSScriptRoot "lib\alert_local.ps1")

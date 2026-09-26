@@ -1,13 +1,15 @@
 ﻿# lib/no_reply.ps1 - 人工接管白名单(指定买家不自动回复)统一读取与匹配
 # 名单文件: data\manual_override.json(JSON 字符串数组,条目为已归一买家名;本机 PII,gitignore 不入库)
-# 归一化契约: 与 tools\control-agent\agent_bridge.js 的 normCustomer 逐字同构
-#   (trim → ToLowerInvariant → '_'→' ' → 连续空白压单空格),改动需双侧同步,否则企微添加的客户在 PS 侧匹配失败
+# 归一化契约: trim → ToLowerInvariant → '_'→' ' → 连续空白压单空格(顺序冻结,勿改)。
+#   原先与 tools\control-agent\agent_bridge.js 的 normCustomer 逐字同构;该组件已于 2026-09-26
+#   退休并**物理移除**(见 docs\KNOWN_EXCEPTIONS.md E-20/E-24)⇒ 本文件即名单读写侧的**唯一实现**,
+#   不再有"双侧同步"的对象。改动归一化顺序会使既有名单(已归一买家名)全部失配。
 # 容错: 文件缺失/损坏/非数组 → 视为空名单,绝不抛错(每路径 WARN 一次)
 # 用法: . lib\no_reply.ps1; Test-NoReplyBuyer 'John Smith'
 # 依赖: 本库不强制 dot-source config.ps1;Get-SkillPath 可用时经其取 data 目录,
 #       否则回退 <部署根>\data(由 PSScriptRoot=scripts\lib 推导)
 
-# 归一化: trim → 小写 → '_'→' ' → 连续空白压单空格(顺序与 agent_bridge.js normCustomer 一致)
+# 归一化: trim → 小写 → '_'→' ' → 连续空白压单空格(原与已移除的 agent_bridge.js normCustomer 一致，顺序冻结)
 function ConvertTo-NoReplyKey([string]$s) {
     if ([string]::IsNullOrEmpty($s)) { return "" }
     $t = $s.Trim()
@@ -97,8 +99,10 @@ function Test-NoReplyBuyer([string]$Name, [string]$Path = "") {
 #   它靠轮询旧企微桥 127.0.0.1:19886 收指令。该桥已于 2026-09-26 停用（与 dsh-im 抢同一
 #   企微机器人会互踢）⇒ **写侧随之失效，但读侧匹配一直在 monitor/nudge/quote 里正常工作**。
 #   本段把写侧搬到 PowerShell 侧，读侧一行未动，因此**不影响任何自动回复判定**。
+#   [2026-09-26 收口] agent_bridge.js 及其所在目录已随两套退休告警桥一并**物理移除**
+#   （见 docs\KNOWN_EXCEPTIONS.md E-20/E-24）⇒ 本段是名单读写侧的**唯一实现**。
 #
-# 与 agent_bridge.js 的契约（改动需双侧同步）：
+# 历史契约（agent_bridge.js 已移除 ⇒ 不再有"双侧同步"对象，下列映射仅作溯源，格式与顺序冻结勿改）：
 #   normCustomer  → ConvertTo-NoReplyKey        （trim → lower → '_'→' ' → 压空白）
 #   写文件        → Save-NoReplyList            （JSON 数组；**LF + 2 空格缩进 + 结尾 \\n + 无 BOM**）
 #   指令正则      → 见 scripts\whitelist.ps1    （^(白名单|whitelist) (添加|删除|列表|add|remove|list) …）
@@ -107,7 +111,7 @@ function Test-NoReplyBuyer([string]$Name, [string]$Path = "") {
 #    与 JSON.stringify(list,null,2)+'\\n' 不同（实测 43B vs 36B）⇒ 必须做换行与缩进归一。
 # ============================================================================
 
-# 写名单（内部）:与 agent_bridge.js saveWhitelist 逐字节同格式
+# 写名单（内部）:与已移除的 agent_bridge.js saveWhitelist 逐字节同格式（格式冻结，勿改）
 function Save-NoReplyList([string]$Path, [string[]]$List) {
     if (-not $Path) { throw "Save-NoReplyList: Path required" }
     $dir = Split-Path $Path -Parent

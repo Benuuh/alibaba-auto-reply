@@ -1,5 +1,5 @@
 ﻿# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
-# Checks: monitor process + log freshness / watchdog process / cooldown / control-agent / CDP + page login.
+# Checks: monitor process + log freshness / watchdog process / cooldown / CDP + page login / scheduled tasks.
 # Alerts via dsh-im with 30-min dedup per check (1-min tolerance: lib\alert_dedup.ps1); writes logs\health.log. Always exits 0 unless fatal.
 param([string]$LogDir = "")
 

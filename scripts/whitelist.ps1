@@ -2,8 +2,10 @@
 #
 # 用途：给"人"和"执行 agent"提供**确定性**的名单增删查入口。
 #   背景：名单读侧一直在 scripts\lib\no_reply.ps1（monitor / nudge / quote 三处判定），
-#   但写侧原先只在 tools\control-agent\agent_bridge.js 里、靠轮询旧企微桥 19886 收指令；
-#   该桥 2026-09-26 停用后写侧失效。本脚本把写侧搬到 PowerShell，读侧一行未动。
+#   但写侧原先只在 tools\control-agent\agent_bridge.js 里（该组件已于 2026-09-26 退休并**物理移除**，
+#   见 docs\KNOWN_EXCEPTIONS.md E-20/E-24）、靠轮询旧企微桥 19886 收指令；
+#   该桥 2026-09-26 停用后写侧失效。本脚本把写侧搬到 PowerShell，读侧一行未动；
+#   移除后本脚本是名单增删查的**唯一入口**。
 #
 # 用法（三选一，等价）：
 #   powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 列表'
@@ -27,7 +29,7 @@ $ErrorActionPreference = "Stop"
 # 名单文件：优先显式 -Path（供测试注入），否则走 config 的 data 目录（与读侧同一路径来源）
 if (-not $Path) { $Path = Join-Path (Get-SkillPath "data") "manual_override.json" }
 
-# 指令解析：与 agent_bridge.js L68 的正则同构
+# 指令解析：与已移除的 agent_bridge.js L68 正则同构（正则冻结，勿改）
 #   ^(?:白名单|whitelist)\s+(添加|删除|列表|add|remove|list)\s*(.*)$
 $WL_RE = '^(?:白名单|whitelist)\s+(添加|删除|列表|add|remove|list)\s*(.*)$'
 

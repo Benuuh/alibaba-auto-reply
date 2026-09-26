@@ -31,7 +31,7 @@ CDP 控制本机 Chrome 登录 OneTalk 卖家消息中心：监控询盘、按�
 
 ## B. 健康检查与维护
 - B1 `scripts\status.ps1`：无 `[!!]` 且敏感审计 `[OK]`。
-- B2 守护与任务：`watchdog.ps1` 运行中（30s 检查，**四重守护：进程/日志/CDP/企微保活**；另有 Accio 轻量探测，网关不可达记 `WATCHDOG-ACCIO` 日志）；计划任务 5 项：Summary/Quality/Optimize/Weekly（Ready）+ Watchdog（登录自启 + **每分钟重复触发**，常驻 Running；`watchdog_process` 判据为 **pid 存活 + TimeTrigger/PT1M**，仅登录触发一律 FAIL）。**Weekly 自 2026-09-26 起改为每日 08:00 + `StartWhenAvailable` 补跑**（原"每周一 08:00"在关机时整周消失），由 `data\weekly_state.json` 按 ISO 周键保证一周只真跑一次（其余触发输出 `WEEKLY-SKIP`、不重复生成也不重复 nudge）。**control-agent 已于 2026-09-26 退休**（保活块已从 watchdog 删除，守护由五重降为四重）：它曾由 watchdog 每 30s 幂等调用 `scripts\agent_start.ps1` 保活，停用/恢复用 `bin\control-agent.ps1 -Action stop/start`（标记 `data\control-agent.disabled`）—— **这些入口现已不再被自动调用**。企微远程控制能力改由 **DSH agent** 承担。复活前必须先接 dsh-im 新通道并清掉 `owner_userid` 占位符；详见 `docs\KNOWN_EXCEPTIONS.md` E-20。
+- B2 守护与任务：`watchdog.ps1` 运行中（30s 检查，**三重守护：进程/日志/CDP**；另有 Accio 轻量探测，网关不可达记 `WATCHDOG-ACCIO` 日志）。计划任务 5 项：Summary/Quality/Optimize/Weekly（Ready）+ Watchdog（登录自启 + **每分钟重复触发**，常驻 Running；`watchdog_process` 判据为 **pid 存活 + TimeTrigger/PT1M**，仅登录触发一律 FAIL）。**Weekly 自 2026-09-26 起改为每日 08:00 + `StartWhenAvailable` 补跑**（原"每周一 08:00"在关机时整周消失），由 `data\weekly_state.json` 按 ISO 周键保证一周只真跑一次（其余触发输出 `WEEKLY-SKIP`、不重复生成也不重复 nudge）。**⛔ 启守护一律 `Start-ScheduledTask -TaskName 'AlibabaAutoReply*'`，禁止 `Start-Process`**（从代理会话用 WMI/`Start-Process` 启动的常驻进程会被回收 —— `docs\KNOWN_EXCEPTIONS.md` E-12；`-RedirectStandard*` 在本机必抛 —— E-18）。**2026-09-26 收口已物理移除**：两套退休告警桥 `tools\wecom-connector\`、`tools\control-agent\`，连带启动器 `scripts\wecom_start.ps1`（守护原第四重"企微保活"）与 `scripts\agent_start.ps1`（control-agent 保活）⇒ 守护为**三重**，**告警只剩 dsh-im 单通道**（`DSH Desktop` 未运行时哑火属已知风险）；企微远程控制能力由 **DSH agent** 承担。复活路径见 `docs\KNOWN_EXCEPTIONS.md` **E-24**（原 E-20 已改写指向 E-24；`control-agent` 复活必须先接 dsh-im 新通道并清掉 `owner_userid` 占位符）。
 - B3 镜像：`scripts\sync.ps1 -Status` 无 DIFFERS/ONLY-WORK，否则 `-Push`；镜像目录 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`。
 - B4 发布：`backup.ps1 -Snapshot` → 改代码（UTF-8 BOM）→ `status.ps1` → `sync.ps1 -Push` → git commit/push（`.githooks\` 自动脱敏，[BLOCK] 必须整改，禁止 `--no-verify`）→ 观察 24h；改 `monitor.ps1` 需低询盘时段重启。
 
@@ -75,10 +75,10 @@ CDP 控制本机 Chrome 登录 OneTalk 卖家消息中心：监控询盘、按�
 
 ## 启停命令
 ```powershell
-# 启动 monitor（必须重定向）
-Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -File ...\scripts\monitor.ps1 -Action start" -WindowStyle Hidden -RedirectStandardOutput "...\logs\monitor_out.log" -RedirectStandardError "...\logs\monitor_err.log"
-# 启动 watchdog（通常由 AlibabaAutoReplyWatchdog 任务/Health 自动拉起，无需手动）
-Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -File ...\scripts\watchdog.ps1 -Action start" -WindowStyle Hidden
+# ⛔ 启守护/常驻进程：一律走计划任务（E-12：从代理会话用 WMI/Start-Process 启的常驻进程会被回收；
+#    E-18：Start-Process -RedirectStandard* 在本机必抛）
+Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'   # 拉起 watchdog（它再带起 monitor）
+Start-ScheduledTask -TaskName 'AlibabaAutoReplyHealth'     # 需要时由 Health 兜底拉起
 # 停 watchdog / monitor：一律按 pid 文件精确停（禁止 -Action stop，历史自杀式匹配缺陷 F6 未修）
 $wp=(Get-Content ...\scripts\watchdog.pid -Raw).Trim(); if($wp -match '^\d+$'){ Stop-Process -Id ([int]$wp) -Force }
 $mp=(Get-Content ...\scripts\monitor.pid -Raw).Trim(); if($mp -match '^\d+$'){ Stop-Process -Id ([int]$mp) -Force }
@@ -91,7 +91,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File ...\scripts\sync.ps1 -Status
 
 ## 参考文件（按需阅读）
 - 规则/字段/模板：`scripts\reply_rules.json`；规则引擎：`scripts\reply_engine.ps1`；LLM 提示词：`scripts\reply_agent_prompt.md`
-- 部署/架构/机制/工具：`README_部署说明.md`；企微组件：`tools\wecom-connector\README.md`、`tools\control-agent\README.md`
+- 部署/架构/机制/工具：`README_部署说明.md`；企微告警出口：`scripts\lib\wecom.ps1`（实为 dsh-im 投递适配层，名字是历史命名）；告警单通道与复活路径见 `docs\KNOWN_EXCEPTIONS.md` **E-24**（两套退休桥 `tools\wecom-connector\`、`tools\control-agent\` 已物理移除，其 README 已随之删除）
 - 报告推送：`scripts\lib\report_push.ps1`（quality/weekly 生成后自动推企微摘要；开关 config `report_push_enabled`；去重 `data\report_push_state.json`）
 - 附件识别：`scripts\lib\vision.ps1`（图片/提取/sidecar）、`scripts\lib\doc.ps1`（下载/临时文件）、`tools\doc-reader\README.md`（PDF/xlsx/csv/docx 解析）
 - Accio 网关（可选读取增强）：`tools\accio-client\README.md`（Node CLI）、`scripts\lib\accio.ps1`（适配层）、`tools\accio-client\shadow_compare.ps1`（影子对比）

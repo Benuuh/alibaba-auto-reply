@@ -72,6 +72,8 @@
 - **影响**：**不能拿 `WECOM-START-FAIL` 当"旧通道没起来"的证据**；反过来说，"启动器返回失败"会让 watchdog 在下一轮继续尝试启动，叠加 `exit_on_kicked_offline: true` 就是**反复互踢**的燃料。
 - **不要误判为**：① "报 FAIL ⇒ 通道是死的"；② "报 FAIL ⇒ 与 dsh-im 不冲突"。
 - **下游处置**：列为后续 spec 输入（核查 `wecom_start.ps1` 的启动成功判定与其返回码语义）。本轮**未改该文件**。
+- **[2026-09-26 收口作废] 本条已作废**：`scripts\wecom_start.ps1` 与 `tools\wecom-connector\` 已于当日随两套退休
+  告警桥一并**物理移除**（见 **E-24**）⇒ 该返回码语义问题**不再有对象**，后续 spec 无需再核查。仅作历史留痕。
 
 ---
 
@@ -341,8 +343,11 @@
     `OK` 而 detail 是 `disabled by flag` ⇒ **"OK"读起来像"工作正常"，会误导排查**。
   - `scripts\watchdog.ps1`：删除 control-agent 保活块，守护由**五重**降为**四重**
     （monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活）；启动横幅同步。
-  - `tools\control-agent\` 与 `scripts\agent_start.ps1` **保留在仓库**（同旧企微桥的处理方式：
-    代码留存、不再被自动拉起），但 README / SKILL 已标注退休。
+    （**[2026-09-26 收口更新]** 该"第四重「企微保活」"已于同日随双桥物理移除 ⇒ **现状为三重**
+    （monitor 进程 / 日志新鲜度 / CDP 兜底），见 **E-24**。）
+  - `tools\control-agent\` 与 `scripts\agent_start.ps1` 原为"**保留在仓库**"（代码留存、不再被自动拉起），
+    但 README / SKILL 已标注退休。**[2026-09-26 收口更新] 二者已改为物理移除** —— 见 **E-24**；
+    取回方式：`git -C <部署根> log --diff-filter=D -- tools/control-agent`。
 - **不要误判为**：① "`health.log` 里 `control_agent=OK` ⇒ 它在正常工作"（**错**，那是"已按标记停用"）；
   ② "企微发指令这条路断了"（**错**，能力由 **DSH agent** 承接，见 README）；
   ③ "填一个 `owner_userid` 总比留空好"（**错**：**填一个错的比留空更糟** —— 留空会自动认人，填错则永久拒收）。
@@ -426,3 +431,39 @@
 - **失败取向**：状态文件读坏/写失败一律 **fail-open**（`ConvertFrom-Json` 失败视为"未跑过"；写失败记 `WEEKLY-GUARD-WRITE-FAIL`），
   宁可同周多跑一次也不冒"整周不生成"的风险。若 `monitor.log` 出现 `WEEKLY-GUARD-WRITE-FAIL` ⇒ 每天都会重跑周报**并重复 nudge**，
   属**对真实买家的风险**，优先处置。
+
+## E-24 两套退休告警桥已**物理移除**：告警只剩 dsh-im **单通道**（2026-09-26 新增）
+
+- **本轮动作（spec「精简与收口_20260926」，用户裁决 D1/D2/D3）**：把**两套已退休告警桥**从仓库中
+  **物理删除**（`git rm`，靠 git 历史可完整回退；未另存副本）：
+  - `tools\control-agent\`（含 `agent_bridge.js` 等全部已跟踪文件）
+  - `tools\wecom-connector\`（旧企微长连接桥 19886）
+  - 连带启动器 `scripts\agent_start.ps1`（全仓零引用）与 `scripts\wecom_start.ps1`
+  - 连带清理：`scripts\watchdog.ps1` 的**企微保活块 + 交接门**（守护由四重降为**三重**）、
+    `scripts\status.ps1` 的 19886 探活与 control-agent 死检查段。
+- **⚠️ 已知风险（这是 D3 的既定决策，不是缺陷）**：两套桥都删掉后 **告警只剩 dsh-im 一条路**。
+  规划会话曾建议保留 `wecom-connector` + `wecom_start.ps1` 作为兜底（交接门有"`DSH Desktop` 不在 ⇒
+  恢复保活旧桥"的逃生分支），**用户明确选择删除并接受后果**：
+  **`DSH Desktop` 未运行（关闭/重启/崩溃）期间若恰好出事 ⇒ 告警完全哑火**（正是 E-14 记录的形态）。
+  因此**不得**以"失去兜底"为由恢复这些代码或另建告警通道；若确需兜底，须**另立 spec** 评审。
+- **不要误判为**：
+  ① "`tools\wecom-connector\` 还在磁盘上 ⇒ 组件还在"（**错**：`git rm` 只删**已跟踪**文件；部署根可能残留
+     gitignore 的运行数据 —— `config.json` / `data\` / `logs\` / `node_modules\`，它们**没有可执行代码**，
+     且 §4-2 明令禁止 `git clean` ⇒ 残留属预期，不构成复活路径）；
+  ② "`status.ps1` 不再报 `企微通道 19886 不可达` ⇒ 旧桥修好了"（**错**：是把恒假红字**删掉**了）；
+  ③ "`watchdog.log` 不再出现 `WATCHDOG-WECOM` ⇒ 交接门在正常工作"（**错**：是保活块整体移除，
+     不再有交接门这个概念）；
+  ④ "删了 `wecom_start.ps1` ⇒ `Send-WecomMessage` 告警出口也没了"（**错**：出口是 `scripts\lib\wecom.ps1`，
+     已改为 **dsh-im 投递适配层**，`RESTART-STORM-ALERT` 仍走它，一行未动 —— 见 E-14/E-15）。
+- **复活路径（唯一）**：从 git 历史取回，**不要**凭记忆重写。
+  - 查删除提交：`git -C <部署根> log --diff-filter=D --oneline -- tools/control-agent tools/wecom-connector`
+  - 取回单文件：`git -C <部署根> checkout <该提交>~1 -- tools/control-agent/<path>`
+  - 整体回退本轮：`git -C <部署根> revert --no-edit <本轮提交>`
+  - 复活 `control-agent` **必须先接 dsh-im 新通道并清掉 `owner_userid` 占位符**（见 E-20）。
+- **恢复旧桥的前置禁令**：**禁止**以任何形式启动 19886 桥（它与 dsh-im 抢同一企微机器人，
+  `exit_on_kicked_offline=true` ⇒ 互相顶下线）；也**禁止**重建 `AlibabaAutoReplyWeComCmd` 计划任务。
+- **本地未提交残留（已知，非遗漏）**：部署根的 `docs\文档权威约定.md` 有一处**规划期遗留的未提交改动**
+  （新增一行含本机绝对路径），会被 `.githooks\sanitize_check.ps1` 的 `D:\\alibaba-auto-reply` 规则判为
+  `[BLOCK]`，故本轮**未纳入提交**（保持原样、未被回滚）。与本条同时产生的 `README_部署说明.md` 中的
+  同类字面路径已在提交前改写为不含绝对路径的表述。
+- **相关**：E-04 / E-07（已作废）/ E-14 / E-16 / E-20。

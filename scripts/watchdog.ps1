@@ -1,5 +1,6 @@
-# watchdog.ps1 - 常驻守护(四重): monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活。
-#   （原为五重，含 control-agent 保活；该组件 2026-09-26 已退休，见 docs\KNOWN_EXCEPTIONS.md E-20）
+# watchdog.ps1 - 常驻守护(三重): monitor 进程 / 日志新鲜度 / CDP 兜底。
+#   （原为五重：含 control-agent 保活，该组件 2026-09-26 已退休；原第四重「企微保活」已随两套
+#    退休告警桥物理移除 —— 见 docs\KNOWN_EXCEPTIONS.md E-20 / E-24）
 param(
     [string]$Action = "start",
     [string]$LogDir = "",
@@ -176,7 +177,7 @@ function Start-Watchdog {
         } catch {}
     }
     try { Set-Content -Path $pidFile -Value $PID -Encoding ASCII } catch {}
-    Write-Log "=== Watchdog started (PID $PID, 四重守护: 进程/日志/CDP/企微, check every ${CheckIntervalSec}s, stale threshold ${LogStaleSec}s, storm ${script:stormCount}/${script:stormWindowMin}m) ==="
+    Write-Log "=== Watchdog started (PID $PID, 三重守护: 进程/日志/CDP, check every ${CheckIntervalSec}s, stale threshold ${LogStaleSec}s, storm ${script:stormCount}/${script:stormWindowMin}m) ==="
     # P2.5 CDP 兜底:monitor 自愈失败时(CDP 连续不可达)由 watchdog 直接跑 chrome_ensure
     $cdpFailStreak = 0
     # Accio 网关降级状态(仅进程轻量探测;连续不可达 N 轮记一次日志,避免刷屏)
@@ -246,33 +247,14 @@ function Start-Watchdog {
                     Start-Sleep -Seconds 30
                 }
             }
-            # B 系列:企微机器人长连接服务监管(幂等启动,node 进程死亡自动拉起)
-            # [HANDOVER 2026-09-26] 交接前置门：与 scripts\wecom_start.ps1 的 Get-WecomHandoverSkip 同语义。
-            #   为什么要在这里再判一次：wecom_start.ps1 里的门禁虽然能挡住"启动旧通道"，但每 30s 仍会
-            #   spawn 一个 PowerShell 进程只为打印一行 skip（11:28-11:31 实测：日志每 30s 一行 + 进程开销）。
-            #   在这里短路后，watchdog 连 spawn 都不做。逃生门与判定条件完全一致：marker 不在 或
-            #   新通道宿主不在 ⇒ 退回原逻辑（继续保活，绝不静默失守）。
-            #   [PORTABLE 2026-09-26] marker 路径不再硬编码绝对路径：与 L87 同款走 Get-SkillPath "data"
-            #   （硬编码会让脚本不可移植，且被 .githooks\sanitize_check.ps1 的 'D:\\Agent_work' 规则判为敏感内容）。
-            $wecomHandoverMarker = Join-Path (Get-SkillPath "data") 'alert-channel.handover.json'
-            $wecomHandover = $false
-            if ($env:WECOM_FORCE_RUN -ne '1' -and (Test-Path $wecomHandoverMarker)) {
-                try { $wecomHandover = @(Get-Process -Name 'DSH Desktop' -ErrorAction SilentlyContinue).Count -gt 0 } catch { $wecomHandover = $false }
-            }
-            $wecomStart = Join-Path $LogDir "wecom_start.ps1"
-            if ($wecomHandover) {
-                # 已交接：不 spawn、不记日志（watchdog.log 已有 wecom_start 侧的首条 HANDOVER-SKIP 留痕）
-            } elseif (Test-Path $wecomStart) {
-                $ws = powershell -ExecutionPolicy Bypass -NoProfile -File $wecomStart 2>&1
-                if ($ws -match 'WECOM-STARTED') {
-                    Write-Log "WATCHDOG-WECOM: $($ws -join ' ')"
-                } elseif ($ws -match 'WECOM-NO-CREDS|WECOM-START-FAIL') {
-                    Write-Log "WATCHDOG-WECOM: issue - $($ws -join ' ')"
-                }
-            }
+            # [RETIRE-WECOM 2026-09-26] 企微保活块已随两套退休告警桥物理移除（用户裁决 D3，见 E-24）。
+            #   历史实现（交接门 Get-WecomHandoverSkip / spawn wecom_start.ps1 / WATCHDOG-WECOM 分支）
+            #   见 git 历史（本提交之前）。守护由「四重」降为「三重」：monitor 进程 / 日志新鲜度 / CDP 兜底。
+            #   告警出口 lib\wecom.ps1（dsh-im 投递）不受影响，仍是 RESTART-STORM-ALERT 的通道。
             # [RETIRE-CONTROLAGENT 2026-09-26] control-agent 保活已移除。该组件已退休（唯一收信入口
             #   旧企微桥 19886 于 2026-09-26 退役，且它未迁移到 dsh-im 新通道），保活每轮只会拿到
-            #   CONTROL-DISABLED。守护由「五重」降为「四重」：monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活。
+            #   CONTROL-DISABLED。（当时守护由「五重」降为「四重」——其中第四重「企微保活」已于同日
+            #   随两套退休告警桥物理移除，现状为「三重」；见上方 RETIRE-WECOM。）
             #   若要复活该组件（需先接新通道），见 docs\KNOWN_EXCEPTIONS.md E-20。
             #   历史实现（Start-ProcessClean + agent_start.ps1 + CONTROL-* 分支）见 git 历史 cb2103e 之前。
             # Accio 桌面应用健康探测(轻量:仅进程;网关不可达时监控侧自动回退 CDP,不重启桌面应用)

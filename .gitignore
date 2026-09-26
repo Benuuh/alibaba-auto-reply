@@ -110,5 +110,6 @@ scripts/last_sync.json
 # 一次性验收工具（对应 spec 已归档；如需再跑可从 git 历史或仓库外的"已移除归档"目录取回）
 /tools/status-verify/
 # 仓库外的"已移除归档"目录若被误复制回部署根，排除之（归档目录名 Agent_work-removed_<时间戳>）
+# 注：归档目录是 2026-09-26 部署根改名前的产物，实际名仍为 Agent_work-*，此处按真实名排除
 /Agent_work-removed_*/
 
