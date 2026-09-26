@@ -66,14 +66,10 @@ try {
     if ($cdActive) { $cdDetail = "COOLDOWN until " + $cdUntil }
     Add-Check "watchdog_cooldown" (-not $cdActive) $cdDetail
 
-
-    $caProcs = @(Get-CimByCmd 'agent_bridge\.js')
-    $caDisabled = Test-Path (Join-Path (Split-Path $PSScriptRoot -Parent) "tools\control-agent\data\control-agent.disabled")
-    $caOk = ($caProcs.Count -gt 0) -or $caDisabled
-    $caDetail = "down and not disabled"
-    if ($caProcs.Count -gt 0) { $caDetail = "running" } elseif ($caDisabled) { $caDetail = "disabled by flag" }
-    Add-Check "control_agent" $caOk $caDetail
-
+    # [RETIRE-CONTROLAGENT 2026-09-26] The control_agent check was removed. The component is retired:
+    #   its only inbound channel (the legacy WeCom bridge on 19886) was decommissioned on 2026-09-26 and
+    #   it was never migrated to the dsh-im outlet, so the check could only ever return OK
+    #   ("disabled by flag") - which read like "healthy" and misled readers. See docs/KNOWN_EXCEPTIONS.md E-20.
     $cdpOk = Test-CdpReady
     $cdpDetail = "reachable"
     if (-not $cdpOk) { $cdpDetail = "unreachable" }

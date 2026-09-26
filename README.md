@@ -20,11 +20,11 @@
 | 🌍 **多语言买家** | 中/英/西/葡/法买家消息识别，统一美式英文回复 |
 | 📦 **信息收集** | 自动追问缺失货物信息（总重/尺寸/图片/收货地址），同字段最多追问 2 次，买家承诺提供后不再追问 |
 | 📱 **企微告警推送** | 出口为 **dsh-im 主动投递**（`POST 127.0.0.1:<dsh-host-port>/api/dsh-im/delivery/messages`，字段严格为 `botId`+`targetId`+`text`）；推送出口统一收敛在 `scripts\lib\wecom.ps1` 一处，7 个调用点共用；数据齐全（重量+尺寸+地址）实时推送（24h 节流） |
-| 🎛️ **自然语言远程控制** | 企微发任意自然语言指令，`control-agent` 经 owner 校验 + 确认闸门后派发外部执行 agent 执行并回发结果 |
+| 🎛️ **自然语言远程控制** | 企微发任意自然语言指令，经 owner 校验 + 确认闸门后派发执行 agent 执行并回发结果。**2026-09-26 起由 DSH agent 承担**（原 `control-agent` 已退休，见 `docs\KNOWN_EXCEPTIONS.md` E-20） |
 | 📊 **质量闭环** | 每日质量报告 → 规则自动提炼（40 条上限 + 阈值自动合并）→ 周报（含国别分布）+ 沉睡买家唤醒；**质量报告/周报生成后自动推企微摘要**（统计+重点项+文件名，可开关） |
 | 🖼️ **附件识别** | 买家图片/文档（PDF/Excel/CSV/Word）自动识别：图片走视觉多模态、文档解析文本或渲染扫描件；明确可见的重量/尺寸/箱数/单号机会性提取入货物档案（带来源标记，不臆造） |
 | 📈 **数据看板** | `dashboard.ps1` 手动生成无 PII 的 HTML 聚合看板（回复量/LLM 成功率/来源分布） |
-| 🧩 **组件可复用** | `wecom-connector`（HTTP 桥）与 `control-agent`（远程控制桥）独立成目录、独立测试 |
+| 🧩 **组件可复用** | `wecom-connector`（HTTP 桥，保活已被交接门阻断）、`control-agent`（远程控制桥，**已退休**）、`doc-reader`、`accio-client`、`email-verify` 各自独立成目录、独立测试 |
 | 🛡️ **安全设计** | 凭据唯一文件（`credentials.md`）、目录隔离、`status.ps1` 敏感审计、`pre-commit/pre-push` 扫描、PII 仅存本机 |
 | 🔍 **买家档案** | 自动抓取买家国家/注册时间，注入 LLM 上下文个性化回复 |
 | 🔕 **人工接管白名单** | 企微发"白名单 添加 <客户名>"即不再自动回复该客户：只读留快照+新消息提醒，报价/唤醒免打扰，移出即恢复 |
@@ -51,15 +51,13 @@
        │                            │  dsh-im 插件 → 企微长连接     │
        │                            └──────────────────────────────┘
        │
-┌──────▼──────────────── watchdog.ps1 (30s) 五重守护 ────────────────┐
+┌──────▼──────────────── watchdog.ps1 (30s) 四重守护 ────────────────┐
 │ ① monitor 进程  ② 日志新鲜度(240s)  ③ CDP 兜底(chrome_ensure)      │
 │ ④ 企微保活(wecom_start.ps1) —— **已加交接门**：交接标记存在且新通道  │
 │    宿主在 ⇒ 主动让路、连 spawn 都不做（避免把 dsh-im 顶下线）        │
-│ ⑤ control-agent 保活(agent_start.ps1)                              │
 └───────────────────────────────────────────────────────────────────┘
-┌────────────── control-agent (Node 常驻, 由 watchdog 保活) ─────────┐
-│ 企微消息 → owner 校验 → 60s 节流 → 确认闸门 → 外部执行 agent → 回发 │
-└─────────────────────────────────────────────────────────────────────┘
+（原第 ⑤ 项 control-agent 保活已于 2026-09-26 移除；该组件已退休，
+  企微远程控制能力现由 DSH agent 承担 —— 见 docs\KNOWN_EXCEPTIONS.md E-20）
 ```
 
 **页面判据（2026-09-26）**：`Test-PageHealth` 的判定抽成纯函数 `Get-PageHealthVerdict`，新增**可见性维度**——
@@ -101,7 +99,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 | `llm_config.json` | LLM 非敏感配置（model=`deepseek-v4-flash` / temperature / max_tokens / timeout / endpoint / `thinking:disabled`，**不存 key**） |
 | `data\alert-channel.handover.json` | **告警通道交接标记**（存在 ⇒ 旧企微长连接保活让路；删除即回滚到旧通道，见上节） |
 | `tools\wecom-connector\config.json` | HTTP 桥 host/port/数据目录（凭据走环境变量注入）；**2026-09-26 起默认不再被自动拉起** |
-| `tools\control-agent\config.json` | owner/projects/executor/节流等（`owner_userid` 留空首条消息自动锁定） |
+| `tools\control-agent\config.json` | **（该组件已退休，2026-09-26）** owner/projects/executor/节流等。⚠️ `owner_userid` **必须留空**才会自动认人；**填了错的比留空更糟** —— 本轮实测它被填成占位符 `owner1`，导致所有指令被静默丢弃（`docs\KNOWN_EXCEPTIONS.md` E-20） |
 
 ## 🧠 工作原理
 
@@ -123,7 +121,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 - **wecom-connector**：Node 常驻，官方 WebSocket 长连接，HTTP 桥 `127.0.0.1:19886`（`/health /send /messages /cursor /receiver /status`）；多消费者游标持久化；凭据仅环境变量注入；自带测试 63 例（node 46 + PS 17）。详见 `tools\wecom-connector\README.md`。
   ⚠️ **自 2026-09-26 起其保活被"交接门"阻断**（见下节），`19886` 默认不再监听。
-- **control-agent（由 watchdog 保活）**：企微自然语言指令 → owner 校验 → 节流 → 确认闸门（白名单文件免确认、高风险回发 4 位确认码）→ 外部执行 agent（默认 dsh）→ ≤200 字回发；测试 46 例。保活：watchdog 每 30s 幂等调用 `scripts\agent_start.ps1`（启动失败 5 分钟冷却）；手动停用用 `bin\control-agent.ps1 -Action stop`（建停用标记 `data\control-agent.disabled`，保活跳过），`-Action start` 恢复。详见 `tools\control-agent\README.md`。
+- **control-agent（已退休，2026-09-26）**：~~由 watchdog 保活~~ 保活已于本轮移除（守护由五重降为四重）。它曾把企微自然语言指令 → owner 校验 → 节流 → 确认闸门（白名单文件免确认、高风险回发 4 位确认码）→ 外部执行 agent（默认 dsh）→ ≤200 字回发；测试 46 例。**失效三层**：① 唯一入口旧企微桥 `19886` 已退役；② 未迁移到 dsh-im 新通道（全目录搜 `dshim` 命中 0）；③ `owner_userid` 被填成占位符 `owner1` ⇒ **所有指令被判"非本人"静默丢弃**（实测 `history.jsonl` 6 条：09-07 两条成功，09-14 起四条全 `ignored-non-owner`）。**该能力现由 DSH agent 承担**。代码保留在仓库、不再被自动拉起（同旧企微桥的处理方式）。详见 `docs\KNOWN_EXCEPTIONS.md` E-20 与 `tools\control-agent\README.md`。
 
 ## 🔀 告警推送出口与"交接门"（2026-09-26）
 
@@ -265,9 +263,9 @@ alibaba-auto-reply/
 │   ├── config.json.example   ← 路径配置模板（仓库里唯一的 schema 记录）
 │   ├── chrome_ensure.ps1     ← Chrome 自愈 + 自动登录（按 profile 精确匹配）
 │   ├── cdp.ps1 / lib\cdp.ps1 ← 见下方「两份 cdp.ps1 的关系」
-│   ├── watchdog.ps1          ← 五重守护（进程/日志/CDP/企微/control-agent 保活 + 交接门）
+│   ├── watchdog.ps1          ← 四重守护（进程/日志/CDP/企微保活 + 交接门）
 │   ├── wecom_start.ps1       ← 企微保活启动器 v3（幂等三段 + **交接门**）
-│   ├── agent_start.ps1       ← control-agent 保活启动器（幂等，停用标记感知）
+│   ├── agent_start.ps1       ← control-agent 保活启动器（**已随该组件退休，保留备查**）
 │   ├── status.ps1            ← 一键健康检查（含敏感审计）
 │   ├── backup.ps1 / sync.ps1 / consolidate_prompt.ps1 ← 快照/镜像/红线归档
 │   ├── summarize.ps1 / analyze_replies.ps1 / auto_optimize.ps1 ← 报告/质量/规则提炼
@@ -283,7 +281,7 @@ alibaba-auto-reply/
 │   ├── wecom-connector\      ← 企微 HTTP 桥（Node，63 例测试；**保活已由交接门阻断**）
 │   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
 │   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例 + shadow_compare.ps1）
-│   ├── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试；**已停用**，摘引用另立 spec）
+│   ├── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试；**2026-09-26 退休**，引用已摘净，代码保留备查 —— `docs\KNOWN_EXCEPTIONS.md` E-20）
 │   └── email-verify\         ← 邮箱可投递性验证（MX/SMTP 探测，Node 零依赖）
 └── tests\                    ← 主仓库回归测试（16 文件 436 断言，fixtures 虚构数据）
 ```

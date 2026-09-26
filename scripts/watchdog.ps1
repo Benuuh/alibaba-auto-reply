@@ -1,4 +1,5 @@
-﻿# watchdog.ps1 - 常驻守护(五重): monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活 / control-agent 保活。
+# watchdog.ps1 - 常驻守护(四重): monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活。
+#   （原为五重，含 control-agent 保活；该组件 2026-09-26 已退休，见 docs\KNOWN_EXCEPTIONS.md E-20）
 param(
     [string]$Action = "start",
     [string]$LogDir = "",
@@ -175,11 +176,9 @@ function Start-Watchdog {
         } catch {}
     }
     try { Set-Content -Path $pidFile -Value $PID -Encoding ASCII } catch {}
-    Write-Log "=== Watchdog started (PID $PID, 五重守护: 进程/日志/CDP/企微/control-agent, check every ${CheckIntervalSec}s, stale threshold ${LogStaleSec}s, storm ${script:stormCount}/${script:stormWindowMin}m) ==="
+    Write-Log "=== Watchdog started (PID $PID, 四重守护: 进程/日志/CDP/企微, check every ${CheckIntervalSec}s, stale threshold ${LogStaleSec}s, storm ${script:stormCount}/${script:stormWindowMin}m) ==="
     # P2.5 CDP 兜底:monitor 自愈失败时(CDP 连续不可达)由 watchdog 直接跑 chrome_ensure
     $cdpFailStreak = 0
-    # control-agent 启动失败冷却截止时间(成功/失败状态变化才写日志,避免 30s 刷屏)
-    $script:agentRetryAfter = [datetime]::MinValue
     # Accio 网关降级状态(仅进程轻量探测;连续不可达 N 轮记一次日志,避免刷屏)
     $script:accioDownStreak = 0
     # F3:冷却期循环计数(用于"每分钟留一行"节流)
@@ -271,35 +270,11 @@ function Start-Watchdog {
                     Write-Log "WATCHDOG-WECOM: issue - $($ws -join ' ')"
                 }
             }
-            # control-agent 保活（冷却 5 分钟；仅状态变化/失败记日志；DISABLED/ALREADY-RUNNING 静默）
-            $agentStart = Join-Path $LogDir "agent_start.ps1"
-            if ((Test-Path $agentStart) -and ((Get-Date) -ge $script:agentRetryAfter)) {
-                # 文件重定向 + 等待结果(不用管道捕获):node 会继承调用方管道句柄,
-                # 管道捕获会导致 watchdog 循环悬挂直到 node 退出(PS 5.1 句柄继承坑,wecom_start 同款教训)
-                # [FIX-ENVBLOCK 2026-09-25] Start-Process 带 -RedirectStandard* 在本机必抛 NO_PROXY 异常,
-                #   改走 Start-ProcessClean(.NET 直启 + 去重环境块,stdout/stderr 由父进程异步排空后落盘)。
-                #   语义等价:仍在 75s 上限内等结果,仍按 CONTROL-* 分支记日志。
-                $asOut = Join-Path $env:TEMP ("wagent_out_" + $PID + ".txt")
-                $asErr = Join-Path $env:TEMP ("wagent_err_" + $PID + ".txt")
-                $asArgList = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', ('"' + $agentStart + '"'))
-                [void](Start-ProcessClean -FilePath 'powershell.exe' -ArgumentList $asArgList -RedirectStandardOutput $asOut -RedirectStandardError $asErr -WaitSeconds 75)
-                $asText = ""
-                if (Test-Path $asOut) {
-                    $asText = (@(Get-Content $asOut -Encoding UTF8 -ErrorAction SilentlyContinue) -join ' ')
-                }
-                Remove-Item $asOut,$asErr -Force -ErrorAction SilentlyContinue
-                if ($asText -match 'CONTROL-') {
-                    if ($asText -match 'CONTROL-STARTED') { Write-Log "WATCHDOG-AGENT: $asText" }
-                    elseif ($asText -match 'CONTROL-START-FAIL') {
-                        Write-Log "WATCHDOG-AGENT: issue - $asText (5 分钟内不重试)"
-                        $script:agentRetryAfter = (Get-Date).AddMinutes(5)
-                    }
-                    # CONTROL-ALREADY-RUNNING / CONTROL-DISABLED → 静默
-                } else {
-                    # 超时无结果:留痕并立即重试(不设冷却)——此前静默会导致首轮失败不可见
-                    Write-Log "WATCHDOG-AGENT: timeout waiting result (will retry next cycle)"
-                }
-            }
+            # [RETIRE-CONTROLAGENT 2026-09-26] control-agent 保活已移除。该组件已退休（唯一收信入口
+            #   旧企微桥 19886 于 2026-09-26 退役，且它未迁移到 dsh-im 新通道），保活每轮只会拿到
+            #   CONTROL-DISABLED。守护由「五重」降为「四重」：monitor 进程 / 日志新鲜度 / CDP 兜底 / 企微保活。
+            #   若要复活该组件（需先接新通道），见 docs\KNOWN_EXCEPTIONS.md E-20。
+            #   历史实现（Start-ProcessClean + agent_start.ps1 + CONTROL-* 分支）见 git 历史 cb2103e 之前。
             # Accio 桌面应用健康探测(轻量:仅进程;网关不可达时监控侧自动回退 CDP,不重启桌面应用)
             $accioUp = @(Get-Process -Name Accio -ErrorAction SilentlyContinue).Count -gt 0
             if (-not $accioUp) {

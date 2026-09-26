@@ -1,5 +1,27 @@
 # control-agent（企微远程 vibe coding 控制桥，单设备）
 
+> ## ⛔ 本组件已于 2026-09-26 退休（RETIRED）
+>
+> **它现在不工作，且不会工作。** 保留代码仅供查阅，**不再被自动拉起**（与旧企微桥 `wecom-connector` 的处理方式相同）。
+>
+> **失效三层**（一层比一层早）：
+> 1. 2026-09-26 10:37 被显式停用（标记 `data\control-agent.disabled`），进程不再运行。
+> 2. 重启也无用：它收指令的**唯一**入口是每 5 秒轮询旧企微桥 `127.0.0.1:19886`
+>    （`lib\config.js` 的 `wecom_base_url`），而该桥已于当日 11:28:47 退役；
+>    **全目录搜 `dshim`/`dsh-im`/`43120` = 0 命中** ⇒ 它完全不知道新通道的存在。
+> 3. **更早就已经瞎了**：`config.json` 的 `owner_userid` 被填成占位符 `owner1`。
+>    `agent_bridge.js:109` 只在 `owner_userid` **留空**时才自动认人 ⇒ 填了值就永久拒收。
+>    实测 `data\history.jsonl` 共 6 条：`09-07` 两条成功，`09-14` 起四条全部 `ignored-non-owner`。
+>
+> **配套改动**：`scripts\watchdog.ps1` 的保活块已删除（守护由五重降为四重）；
+> `scripts\health_check.ps1` 的 `control_agent` 检查已删除（它恒返回 `OK` + detail `disabled by flag`，
+> 读起来像"工作正常"）。企微远程控制能力现由 **DSH agent** 承担。
+>
+> **若要复活**：① 先把它接到 dsh-im 新通道；② 把 `owner_userid` 清空（**留空**才会自动认人）；
+> ③ 再从 `docs\KNOWN_EXCEPTIONS.md` 的 E-20 更新状态。**只删停用标记不算修好。**
+>
+> 完整记录见 `docs\KNOWN_EXCEPTIONS.md` **E-20**。
+
 把用户在企微发的**任意自然语言指令**变成远程执行任务：常驻 Node 桥负责消息收发与安全闸门，智能执行交给**可插拔的外部执行 agent**（默认 dsh，备选 opencode / claude / 自定义命令），结果回发企微。**无固定命令、无规则匹配**——全部消息统一走"确认闸门 → 派发执行"流程，符合 vibe coding 工作流。
 
 ## 架构
