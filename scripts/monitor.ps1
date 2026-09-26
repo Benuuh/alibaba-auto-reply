@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Action = "start",
     [string]$LogDir = "",
     # [Phase3 2026-09-26] 仅用于自测: 验证 pending_retry.json 读写闭环, 不启动主循环(见文件末 SelfTestRetry 分支)
@@ -24,6 +24,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\quote.ps1")
 . (Join-Path $PSScriptRoot "lib\no_reply.ps1")
 . (Join-Path $PSScriptRoot "lib\vision.ps1")
+# [2026-09-26 更像真人销售 S1] 消息来源判定(唯一判定处): @@TS = 机器人, 无标记的 [ME] = 人工
+. (Join-Path $PSScriptRoot "lib\msg_source.ps1")
 . (Join-Path $PSScriptRoot "lib\doc.ps1")
 . (Join-Path $PSScriptRoot "lib\accio.ps1")
 . (Join-Path $PSScriptRoot "log_rotate.ps1")
@@ -824,6 +826,38 @@ function Invoke-ConvoItem($ctx, $item) {
     Add-Content -Path $msgLog -Value $msgs -Encoding UTF8
     $cdpLines = @($msgs -split "`n") | Where-Object { $_ -notmatch '在Alibaba|平台聊天和交易|由阿里翻译提供|翻译提示|已读$|反馈$|举报$|自动接待' }
     $lines = $cdpLines
+    # ===== [2026-09-26 更像真人销售 S2] 防抢话: 老板已亲自回过的会话, 机器人不再插话 =====
+    # 依据: @@TS 只出现在机器人消息上; 人工在 OneTalk 手打的消息不带任何标记(实测 1812/1812)。
+    # 判据方向(spec §4-15): 宁可少发, 不可抢话 —— 尾部我方消息判为人工时一律不自动发送。
+    # 位置: 发送前最靠前的闸门(发送链路真正的会话名校验 ABORT_WRONG_CONVO 在 lib\send.ps1 L73,
+    #       在 Send-OneTalkMessage 内部、每次发送都会执行, 未能被"提前", 故本闸门设在其上游必经处)。
+    # 取 $cdpLines 而非 $lines: 后者可能被 Accio 网关行替换, 网关行是否携带 @@TS 无契约保证,
+    #       一旦不带会被误判成人工 ⇒ 机器人永久不回复(§8-R1 风险)。CDP 行是本判定的权威数据面。
+    $hj = Get-HumanInterjectionGate @($cdpLines)
+    if ($hj.Action -eq 'SKIP') {
+        if (-not $ctx.humanPending[$key]) {
+            # 告警只在"让路开始"时写一次, 避免每轮刷新
+            Write-LocalAlert 'human_interjection' "$($key) 人工已插话, 自动回复已让路" 'local-only' | Out-Null
+        }
+        $ctx.humanPending[$key] = $true
+        Write-Log "HUMAN-REPLIED-SKIP $($key): 人工已回复,本轮不自动发送 (reason=$($hj.Reason) lastMe=human idx=$($hj.HumanIndex))"
+        # 该买家若已在补发表中, 一并撤下: 老板已回, 机器人补发等于抢话(同样遵循"宁可少发")
+        try {
+            $rtNow = Read-RetryTable
+            if ($rtNow.items -and $rtNow.items.ContainsKey($key.ToLower())) { Remove-PendingRetry $key }
+        } catch { Write-Log "HUMAN-REPLIED-SKIP $($key): retry-table check failed - $($_.Exception.Message)" }
+        # 短冷却只为省页面负担(不写去重账本): 冷却期内不再重复打开该会话
+        $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
+        return
+    }
+    $humanWasPending = [bool]$ctx.humanPending[$key]
+    if ($humanWasPending) {
+        # 情形解除: 买家又说新话或机器人重新接管(尾部已是我方非人工) ⇒ 配对清告警(不得只写不清)
+        $ctx.humanPending.Remove($key)
+        $stillPending = @($ctx.humanPending.Keys | Where-Object { $ctx.humanPending[$_] }).Count
+        if ($stillPending -eq 0) { Clear-LocalAlert 'human_interjection' | Out-Null }
+        Write-Log "HUMAN-REPLIED-RESUME $($key): 人工让路已解除(lastMe=$($hj.LastMeSource))"
+    }
     # Accio 影子/读取切换（开关默认关；任何失败自动回退 CDP）。
     # 去重/最新买家消息基准始终取 CDP，避免网关行文本差异导致 hash 突变→重复回复。
     if ($script:accioFlags.shadow -or $script:accioFlags.read) {
@@ -1362,6 +1396,7 @@ function Start-Monitor {
         noReplyPreview = @{}
         sendFailCount = @{}
         failAlertAt = @{}
+        humanPending = @{}   # [2026-09-26 S2] 买家 -> $true: 该会话"我方尾部是人工消息", 自动回复正让路中
         lastActivity = Get-Date
     }
     while ($true) {
