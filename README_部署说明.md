@@ -250,12 +250,9 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 
 计划任务 `AlibabaAutoReplyHealth` 每 15 分钟运行 `scripts\health_check.ps1`，独立于 watchdog 检查整栈健康；异常时经企微推送告警（**每项检查 30 分钟去重**，恢复时推送 `RECOVERED`），每轮结果写入 `logs\health.log`，去重状态写入 `data\health_state.json`（可安全删除，删除后下一轮重新告警）。
 
-检查项（缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`wecom_connected`（19886 /health connected=true）、`control_agent`（agent_bridge.js 进程存在，或有 `data\control-agent.disabled` 停用标记）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
+检查项（共 7 项，缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`control_agent`（agent_bridge.js 进程存在，或有 `data\control-agent.disabled` 停用标记）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
 
-> ⚠️ **2026-09-26 起 `wecom_connected` 会持续为 FAIL**：它探的是旧桥 `19886`，而该桥已按 Phase L 停用。
-> 这是**预期状态**，不是故障——**推送出口已改走 dsh-im**，`health.log` 里会出现
-> "判据 FAIL + 推送 `SENT_OK`"的组合。**不要**为了让这一项变绿而放宽判据或重启旧桥
-> （那会与 dsh-im 互踢）。若要消除这条噪音，应另立改动把该检查改为探 dsh-im 通道。
+> ✅ **2026-09-26 起已移除 `wecom_connected` 检查**：它探的旧桥 `19886` 已按 Phase L 停用，该检查永久 FAIL、只能产生噪声，故按决策删除。旧桥相关判据仍在 `scripts\status.ps1` 中（未改，属遗留项）。
 
 排障：`Get-Content logs\health.log -Tail 20`（每行 `HEALTH: name=OK|FAIL ...`）；任务状态 `Get-ScheduledTaskInfo -TaskName AlibabaAutoReplyHealth`（LastTaskResult 应为 0）。
 
@@ -317,7 +314,7 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 | **推送 `400 bad-request`** | 请求体多/少字段（接口用严格等值校验）；空白 `text` 同样被拒（出口封装已本地拦为 `NO_RECEIVER`） |
 | **推送中文乱码** | PS 5.1 字符串 body 按 GBK 编码 ⇒ 必须 `[System.Text.Encoding]::UTF8.GetBytes($body)` 再发送 |
 | **机器人在两个程序间反复掉线** | 两条通道抢同一机器人（`exit_on_kicked_offline`）⇒ 只保留一条；用 `data\alert-channel.handover.json` 交接标记 + 清对面配置 |
-| **health 一直报 `wecom_connected FAIL`** | **预期**（它探的是已停用的 19886）。看 `health.log` 里推送是否 `SENT_OK`；不要为此重启旧桥 |
+| **重启旧桥 / 改回该检查** | **禁止**：旧桥与 dsh-im 抢同一个企微机器人（E-04）。要确认告警是否真的到达，看 `health.log` 里告警行的**结尾返回码**是否为 `SENT_OK` |
 | **改了 `lib\cdp.ps1` 但行为没变** | monitor 只在启动时 dot-source 一次 ⇒ **必须重启 monitor**；重启后仍无变化再查是否 BOM 丢失 |
 | **.ps1 改完中文全失效/判据恒真** | 编辑工具**剥掉了 UTF-8 BOM** ⇒ PS 5.1 按 ANSI 解码 ⇒ 中文字面量静默失配。复验前三字节是否 `239,187,191`，丢了用 `[System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($true)))` 写回 |
 | **/health connected=false（旧桥）** | Bot ID/Secret 注入是否正确；`bin\wecom-connector.ps1 -Action start` 自愈重启应用凭据 |

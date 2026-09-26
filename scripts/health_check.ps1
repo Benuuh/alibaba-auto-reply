@@ -1,6 +1,6 @@
 # health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
-# Checks: monitor process + log freshness / watchdog process / cooldown / wecom / control-agent / CDP + page login.
-# Alerts via WeCom with 30-min dedup per check; writes logs\health.log. Always exits 0 unless fatal.
+# Checks: monitor process + log freshness / watchdog process / cooldown / control-agent / CDP + page login.
+# Alerts via dsh-im with 30-min dedup per check (1-min tolerance: lib\alert_dedup.ps1); writes logs\health.log. Always exits 0 unless fatal.
 param([string]$LogDir = "")
 
 $ErrorActionPreference = "Continue"
@@ -9,6 +9,7 @@ $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "lib\wecom.ps1")
 . (Join-Path $PSScriptRoot "lib\alert_local.ps1")
 . (Join-Path $PSScriptRoot "lib\cdp.ps1")
+. (Join-Path $PSScriptRoot "lib\alert_dedup.ps1")
 . (Join-Path $PSScriptRoot "lib\deadman.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:logsDir = Get-SkillPath "logs"
@@ -65,11 +66,6 @@ try {
     if ($cdActive) { $cdDetail = "COOLDOWN until " + $cdUntil }
     Add-Check "watchdog_cooldown" (-not $cdActive) $cdDetail
 
-    $wcOk = $false
-    try { $wcOk = ((Invoke-RestMethod 'http://127.0.0.1:19886/health' -TimeoutSec 5).connected -eq $true) } catch { }
-    $wcDetail = "connected"
-    if (-not $wcOk) { $wcDetail = "19886 not connected" }
-    Add-Check "wecom_connected" $wcOk $wcDetail
 
     $caProcs = @(Get-CimByCmd 'agent_bridge\.js')
     $caDisabled = Test-Path (Join-Path (Split-Path $PSScriptRoot -Parent) "tools\control-agent\data\control-agent.disabled")
@@ -122,7 +118,7 @@ foreach ($c in $checks) {
         if ($prev -and ($prev.PSObject.Properties.Name -contains 'lastAlert') -and $prev.lastAlert) {
             try { $lastAlert = [datetime]::Parse([string]$prev.lastAlert) } catch { }
         }
-        if (-not $lastAlert -or ($now - $lastAlert).TotalMinutes -ge 30) {
+        if (Test-AlertDue -Now $now -LastAlert ([string]$prev.lastAlert) -WindowMin 30 -ToleranceMin 1) {
             [void]$alerts.Add("[HEALTH] " + $c.name + " FAIL: " + $c.detail)
             $state[$c.name] = @{ ok = $false; lastAlert = $now.ToString('yyyy-MM-dd HH:mm:ss') }
         } else {
@@ -172,7 +168,7 @@ try {
         if ($healPrev -and ($healPrev.PSObject.Properties.Name -contains 'lastHeal') -and $healPrev.lastHeal) {
             try { $lastHeal = [datetime]::Parse([string]$healPrev.lastHeal) } catch { }
         }
-        if (-not $lastHeal -or ($now - $lastHeal).TotalMinutes -ge 30) {
+        if (Test-AlertDue -Now $now -LastAlert ([string]$healPrev.lastHeal) -WindowMin 30 -ToleranceMin 1) {
             if (Test-PidAlive (Join-Path $LogDir "watchdog.pid") 'watchdog\.ps1') {
                 # already running (started between check and heal) - no action, no throttle update
             } else {
