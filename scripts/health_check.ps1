@@ -10,6 +10,7 @@ $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "lib\alert_local.ps1")
 . (Join-Path $PSScriptRoot "lib\cdp.ps1")
 . (Join-Path $PSScriptRoot "lib\alert_dedup.ps1")
+. (Join-Path $PSScriptRoot "lib\heartbeat.ps1")
 . (Join-Path $PSScriptRoot "lib\deadman.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:logsDir = Get-SkillPath "logs"
@@ -151,6 +152,25 @@ foreach ($r in $recovers) {
         Write-Log ("HEALTH-RECOVER-LOCAL: " + $cn + " -> " + $lr)
     } catch { }
 }
+
+# Daily "I am alive" heartbeat (2026-09-26). Why: after the failing check was removed every check is
+# green by design, so the alert path has NO routine traffic - a broken outlet would go unnoticed
+# (the very channel that should tell you is the one that is down). Send ONE message per day and only
+# when every check passed. The CJK message body is composed inside lib\heartbeat.ps1 on purpose:
+# this file has no BOM, so Chinese string literals here would be silently mangled (KNOWN_EXCEPTIONS E-10).
+try {
+    $hbHour = 9
+    $hbCfg = Get-SkillConfig
+    if ($hbCfg.PSObject.Properties.Name -contains 'heartbeat_hour') { $hbHour = [int]$hbCfg.heartbeat_hour }
+    $hbFailed = @($checks | Where-Object { -not $_.ok }).Count
+    if ($hbFailed -eq 0) {
+        if (Test-HeartbeatDue -Now $now -LastSent (Get-HeartbeatLastSent) -Hour $hbHour) {
+            $hbRes = Send-DailyHeartbeat -CheckCount $checks.Count -Now $now
+            Write-Log ("HEARTBEAT: " + $hbRes)
+            if ($hbRes -eq 'SENT_OK') { Save-HeartbeatSent $now }
+        }
+    }
+} catch { Write-Log ("HEARTBEAT-ERR: " + $_.Exception.Message) }
 
 # F8b watchdog auto-heal (2026-09-18): start watchdog detached when watchdog_process fails.
 # Idempotent (pid file + command line double-check); heal attempts throttled to one per 30 min via state key

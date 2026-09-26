@@ -20,6 +20,7 @@
 | 🌍 **多语言买家** | 中/英/西/葡/法买家消息识别，统一美式英文回复 |
 | 📦 **信息收集** | 自动追问缺失货物信息（总重/尺寸/图片/收货地址），同字段最多追问 2 次，买家承诺提供后不再追问 |
 | 📱 **企微告警推送** | 出口为 **dsh-im 主动投递**（`POST 127.0.0.1:<dsh-host-port>/api/dsh-im/delivery/messages`，字段严格为 `botId`+`targetId`+`text`）；推送出口统一收敛在 `scripts\lib\wecom.ps1` 一处，7 个调用点共用；数据齐全（重量+尺寸+地址）实时推送（24h 节流） |
+| 💓 **每日通道心跳** | **每天一条**"系统正常：N 项检查全部通过"推企微（`heartbeat_hour`，缺省 9 点；由 15 分钟健康 tick 触发 ⇒ 当天首个 ≥ 该点的 tick 送达）。**只在全部检查 OK 时发**；有故障时由既有告警路径负责。**它存在的意义是"该来没来"**：通道断掉时，通知你的那条路本身就是断的那条（2026-09-26 加，见 `docs\KNOWN_EXCEPTIONS.md` E-17 残留风险） |
 | 🎛️ **自然语言远程控制** | 企微发任意自然语言指令，经 owner 校验 + 确认闸门后派发执行 agent 执行并回发结果。**2026-09-26 起由 DSH agent 承担**（原 `control-agent` 已退休，见 `docs\KNOWN_EXCEPTIONS.md` E-20） |
 | 📊 **质量闭环** | 每日质量报告 → 规则自动提炼（40 条上限 + 阈值自动合并）→ 周报（含国别分布）+ 沉睡买家唤醒；**质量报告/周报生成后自动推企微摘要**（统计+重点项+文件名，可开关） |
 | 🖼️ **附件识别** | 买家图片/文档（PDF/Excel/CSV/Word）自动识别：图片走视觉多模态、文档解析文本或渲染扫描件；明确可见的重量/尺寸/箱数/单号机会性提取入货物档案（带来源标记，不臆造） |
@@ -93,7 +94,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 | 文件 | 作用 |
 |---|---|
-| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）+ Accio 开关 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（缺省全 false）+ **告警出口 `dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`**；经 `scripts\config.ps1` 统一读取 |
+| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）+ `heartbeat_hour`（每日心跳时点，缺省 9）+ Accio 开关 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（缺省全 false）+ **告警出口 `dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`**；经 `scripts\config.ps1` 统一读取。**模板是仓库里唯一的 schema 记录** ⇒ 增删键必须先改 `.example`（由 `tests\docs_consistency.tests.ps1` 强制） |
 | `scripts\reply_rules.json` | 语料库：品牌/价格准则/收集字段/模板/规则（编辑后立即生效） |
 | `scripts\reply_agent_prompt.md` | LLM 提示词：意图识别 + 质量红线（编辑后立即生效） |
 | `llm_config.json` | LLM 非敏感配置（model=`deepseek-v4-flash` / temperature / max_tokens / timeout / endpoint / `thinking:disabled`，**不存 key**） |
