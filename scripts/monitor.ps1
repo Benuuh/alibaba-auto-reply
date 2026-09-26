@@ -399,9 +399,39 @@ function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest,
 }
 
 
+# [2026-09-27 FIX-DEDUP2] 去重账本的"可读性"必须与"内容是空"区分开。
+# 背景(实测事故): 2026-09-27 00:43 前后出现"买家没说新话却被重复回复"5 例, 且 INQUIRY-ALERT 对账本里
+#   早有记录的老买家误发。用程序自己的 Test-DedupHit 复现这 5 例, 全部返回 True(本应 SKIP) ⇒ 现场那一刻
+#   读不到账本记录。危险放大器是 Set-StateHash 原本的第一行:
+#       if (-not $ctx.state -or -not $ctx.state.replied) { $ctx.state = [pscustomobject]@{ replied = @{} } }
+#   它把"读取失败(返回 $null)"和"首次创建(确实没有账本)"当成同一件事 ⇒ 一次读取失败后,
+#   下一次发送成功就会把**整本账本重置成 1 条**, 并由 Set-RepliedState 连**备份一起覆盖** ⇒
+#   此后所有老会话都被判成"首次问询"而重发。这正是本轮要堵的洞。
+# 处置方向与 spec §4-15 一致: 宁可少发, 不可重复打扰; 判据不确定时偏向不发, 且必须留日志(不得静默)。
+function Get-RepliedStateFileSize {
+    try { if (Test-Path $script:stateFile) { return [long](Get-Item $script:stateFile).Length } } catch { }
+    return [long]0
+}
+
+# 账本是否可用于去重判定。返回 @{ Ok=<bool>; Count=<int>; Bytes=<long>; Reason=<string> }
+#   Ok=$false 的三种情形: 文件存在但解析失败 / 解析成功但 replied 为空而文件仍有可观内容 / 主备都不可读
+function Test-RepliedStateUsable($state) {
+    $bytes = Get-RepliedStateFileSize
+    $cnt = 0
+    if ($state -and $state.replied) { $cnt = @($state.replied.PSObject.Properties.Name).Count }
+    if (-not $state) {
+        if ($bytes -gt 100) { return @{ Ok = $false; Count = 0; Bytes = $bytes; Reason = 'state-parse-failed-or-null' } }
+        return @{ Ok = $true; Count = 0; Bytes = $bytes; Reason = 'no-ledger-yet' }
+    }
+    if ($cnt -eq 0 -and $bytes -gt 100) {
+        return @{ Ok = $false; Count = 0; Bytes = $bytes; Reason = 'state-empty-but-file-substantial' }
+    }
+    return @{ Ok = $true; Count = $cnt; Bytes = $bytes; Reason = 'ok' }
+}
+
 function Get-RepliedState {
-    if (Test-Path $stateFile) {
-        try { return Get-Content $stateFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
+    if (Test-Path $script:stateFile) {
+        try { return Get-Content $script:stateFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
     }
     # 主文件缺失时回退到备份
     $bak = Join-Path $LogDir "state.json.bak"
@@ -409,6 +439,25 @@ function Get-RepliedState {
         try { return Get-Content $bak -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
     }
     return $null
+}
+
+# [FIX-DEDUP2] 账本修复: 主文件不可解析时, 用备份覆盖主文件(而不是反过来)。
+# 绝不"重建为空账本" —— 那等于把买家回复历史丢掉, 必然导致重发。
+function Repair-RepliedState {
+    $bak = Join-Path $LogDir "state.json.bak"
+    if (-not (Test-Path $bak)) { return $false }
+    try {
+        $j = Get-Content $bak -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $j -or -not $j.replied) { return $false }
+        $n = @($j.replied.PSObject.Properties.Name).Count
+        if ($n -lt 1) { return $false }
+        Copy-Item -Path $bak -Destination $script:stateFile -Force
+        Write-Log "STATE-REPAIRED: state.json restored from backup ($n entries)"
+        return $true
+    } catch {
+        Write-Log "STATE-REPAIR-FAIL: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 
@@ -423,6 +472,22 @@ function Set-RepliedState([object]$state) {
 # 注意:首次创建时 replied 是 @{} (IDictionary),PSObject.Properties 会枚举 CLR 内部属性污染 state.json,
 # 必须按类型分流:IDictionary 用 Keys,反序列化的 PSCustomObject 用 Properties。
 function Set-StateHash($ctx, [string]$skey, [string]$hash) {
+    # [FIX-DEDUP2] 关键保护: 账本"读取失败"**绝不允许**走"首次创建"分支。
+    #   原实现 `if (-not $ctx.state -or -not $ctx.state.replied) { $ctx.state = @{replied=@{}} }`
+    #   会把读取失败当成新账本 ⇒ 落盘时把 135 条历史覆盖成 1 条(连备份一起) ⇒ 之后所有老会话被判成
+    #   "首次问询"而重发。实测事故见 D-21。这里改为: 先在内存里尝试修复, 仍不可用则**拒绝写入**并告警。
+    $usable = Test-RepliedStateUsable $ctx.state
+    if (-not $usable.Ok) {
+        Write-Log "STATE-WRITE-SKIP $skey : refused (ledger unusable: $($usable.Reason), bytes=$($usable.Bytes)) - not overwriting the reply ledger"
+        $rep = Repair-RepliedState
+        $ctx.state = Get-RepliedState
+        $usable2 = Test-RepliedStateUsable $ctx.state
+        if (-not $usable2.Ok) {
+            Write-LocalAlert 'dedup_ledger' ("reply ledger unusable ($($usable2.Reason), bytes=$($usable2.Bytes)); refused to overwrite it for $skey") 'local-only' | Out-Null
+            return
+        }
+        Write-Log "STATE-WRITE-RESUME $skey : ledger usable again after repair=$rep (entries=$($usable2.Count))"
+    }
     if (-not $ctx.state -or -not $ctx.state.replied) { $ctx.state = [pscustomobject]@{ replied = @{} } }
     $rep = @{}
     $src = $ctx.state.replied
@@ -929,8 +994,13 @@ function Invoke-ConvoItem($ctx, $item) {
             # [FIX-ALERTNOISE 2026-09-26] 移到这里：本分支 = $already 为假 = **买家确实说了新的、
             #   且尚未回复过**（dedup 用"归一化原文 hash + 买家消息条数"判定，是权威判据）。
             #   条件与旧位置逐字相同，只是挪到信息更全的位置 ⇒ 已读/无新消息的会话不再打扰主人。
-            if (-not $ctx.state -or -not $ctx.state.replied -or ($ctx.state.replied.PSObject.Properties.Name -notcontains $skey)) {
+            #   [FIX-DEDUP2] 补前置: 账本必须可读。本轮开头已保证(不可读则整轮跳过), 此处再挡一道,
+            #   避免把"账本读不到"误报成"首次问询"(实测 2026-09-27 00:43 对老买家误发 3 次)。
+            $ledgerReadable = (Test-RepliedStateUsable $ctx.state).Ok
+            if ($ledgerReadable -and (-not $ctx.state -or -not $ctx.state.replied -or ($ctx.state.replied.PSObject.Properties.Name -notcontains $skey))) {
                 Send-NewInquiryAlert $key $item.preview
+            } elseif (-not $ledgerReadable) {
+                Write-Log "INQUIRY-ALERT-SKIP $key : ledger unreadable, suppressed 'new inquiry' alert (avoid false first-contact alert)"
             }
             $rules = Get-Rules
             $reply = $null
@@ -1217,6 +1287,31 @@ function Invoke-ScanRound($ctx) {
             $script:emptyStreak = 0
             $ctx.lastActivity = Get-Date
             $ctx.state = Get-RepliedState
+            # [FIX-DEDUP2] 账本不可用 ⇒ **本轮一律不处理会话**(宁可少发, 不可重复打扰)。
+            #   理由: 没有账本就无法判定"是否已回复过"; 若照常发送, 每个会话都会被当成首次问询而重发
+            #   (这正是 2026-09-27 00:43 事故的形态)。先尝试用备份修复, 再决定是否跳过本轮。
+            $led = Test-RepliedStateUsable $ctx.state
+            if (-not $led.Ok) {
+                Write-Log "STATE-UNUSABLE: ledger unreadable ($($led.Reason), bytes=$($led.Bytes)) - skipping this round (no sends) to avoid re-replying"
+                $repaired = Repair-RepliedState
+                $ctx.state = Get-RepliedState
+                $led2 = Test-RepliedStateUsable $ctx.state
+                if ($led2.Ok) {
+                    Write-Log "STATE-UNUSABLE-RECOVERED: repair=$repaired entries=$($led2.Count) - resuming normal processing"
+                    Clear-LocalAlert 'dedup_ledger'
+                } else {
+                    Write-LocalAlert 'dedup_ledger' ("reply ledger unreadable ($($led2.Reason), bytes=$($led2.Bytes)); auto-reply paused this round to avoid duplicate replies") 'local-only' | Out-Null
+                    Write-Log "Scan cycle done (ledger-unusable skip)"
+                    return @{ Action = 'Normal' }
+                }
+            } else {
+                # 配对清除: 上一轮若因账本不可用而告警, 本轮恢复即清(不复发"只写不清")
+                Clear-LocalAlert 'dedup_ledger'
+                if ($led.Count -gt 0 -and $led.Count -lt 3 -and $led.Bytes -gt 1000) {
+                    # 文件很大却只剩极少数条目 ⇒ 疑似曾被覆盖, 显式留痕供人工确认
+                    Write-Log "STATE-SUSPECT: ledger has only $($led.Count) entries but file is $($led.Bytes) bytes"
+                }
+            }
             foreach ($item in $snap) {
                 if (-not $item.name) { continue }
                 Invoke-ConvoItem $ctx $item
