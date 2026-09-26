@@ -1,4 +1,4 @@
-# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
+﻿# health_check.ps1 - F8 health heartbeat (2026-09-16). ASCII-only on purpose.
 # Checks: monitor process + log freshness / watchdog process / cooldown / control-agent / CDP + page login.
 # Alerts via dsh-im with 30-min dedup per check (1-min tolerance: lib\alert_dedup.ps1); writes logs\health.log. Always exits 0 unless fatal.
 param([string]$LogDir = "")
@@ -50,9 +50,36 @@ try {
     $age = Get-MonLogAgeSec
     Add-Check "monitor_log_fresh" ($age -lt 600) ("log age " + $age + "s (limit 600s)")
 
-    $wdOk = Test-PidAlive (Join-Path $LogDir "watchdog.pid") 'watchdog\.ps1'
-    $wdDetail = "alive"
-    if (-not $wdOk) { $wdDetail = "watchdog NOT running" }
+    # [2026-09-26] watchdog_process 判据由"pid 存活"升级为"pid 存活 + 任务已武装"。
+    # 守护存活 = pid 存活 + 任务已武装(有时间触发器且每 PT1M 重复)。
+    # 幂等: 允许外部(如 S4 的有界验证)临时改写 watchdog.pid 指向另一进程而不误报。
+    function Test-WatchdogAlive {
+        $pidFile = Join-Path $LogDir "watchdog.pid"
+        if (-not (Test-Path $pidFile)) { return $false }
+        $v = 0
+        try { $v = [int]((Get-Content $pidFile -Raw -ErrorAction SilentlyContinue).Trim()) } catch { return $false }
+        if ($v -le 0) { return $false }
+        if (-not (Get-CimInstance Win32_Process -Filter "ProcessId=$v" -ErrorAction SilentlyContinue)) { return $false }
+        $t = Get-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog' -ErrorAction SilentlyContinue
+        if (-not $t) { return $false }
+        try { $x = [xml](Export-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog') } catch { return $false }
+        foreach ($n in @($x.Task.Triggers.ChildNodes)) {
+            if ($n.LocalName -ne 'TimeTrigger') { continue }
+            foreach ($en in @($n.SelectNodes('.//*[local-name()="Enabled"]'))) {
+                if ($en.InnerText -ne 'true') { return $false }
+            }
+            foreach ($iv in @($n.SelectNodes('.//*[local-name()="Interval"]'))) {
+                if ($iv.InnerText -eq 'PT1M') { return $true }
+            }
+        }
+        # 兜底: 仍保留登录触发器时不算"未武装",但明确暴露状态
+        foreach ($n in @($x.Task.Triggers.ChildNodes)) { if ($n.LocalName -eq 'LogonTrigger') { return $true } }
+        return $false
+    }
+
+    $wdOk = Test-WatchdogAlive
+    $wdDetail = "alive + task armed(PT1M)"
+    if (-not $wdOk) { $wdDetail = "pid dead or task not armed (no TimeTrigger/PT1M)" }
     Add-Check "watchdog_process" $wdOk $wdDetail
 
     $cdActive = $false; $cdUntil = ""
@@ -93,6 +120,46 @@ try {
         $phDetail = "pageDown=$($ph.PageDown) reason=$($ph.Reason) items=$($ph.Items) spin=$($ph.Spinner)"
         Add-Check "page_logged_in" $pageOk ("$st | $phDetail")
     }
+
+    # --- 计划任务新鲜度自检 (2026-09-26) --------------------------------------
+    # 依据: TaskScheduler/Operational 日志在本机未启用(IsEnabled=False),故不得用 Event ID;
+    #       只用 Get-ScheduledTaskInfo 的 LastRunTime / LastTaskResult(普通权限可读)。
+    # 硬编码阈值而不入 config.json: 见 spec §2 D8(避免 config.example 与 docs_consistency 连锁改动)。
+    # 名单只护"每日/每周型"任务;"每分钟型"的 Watchdog 不靠 LastRunTime 判定
+    #   (由上面的 Test-WatchdogAlive 断言 pid 存活 + TimeTrigger/PT1M 已武装)。
+    function Get-TaskFreshness {
+        # maxAge 的算法: 距该任务「下一次应运行」的最坏间隔 + 宽限(容忍关机/休眠/离线)。
+        $spec = @(
+            @{ n='AlibabaAutoReplyHealth';   maxAge=36000;  desc='每15分钟 + 10小时宽限' },
+            @{ n='AlibabaAutoReplySummary';  maxAge=28800;  desc='每4小时 + 8小时宽限' },
+            @{ n='AlibabaAutoReplyQuality';  maxAge=97200;  desc='每日05:00 + 27小时宽限' },
+            @{ n='AlibabaAutoReplyOptimize'; maxAge=97200;  desc='每日05:30 + 27小时宽限' },
+            @{ n='AlibabaAutoReplyWeekly';   maxAge=259200; desc='每周一08:00 + 3天宽限' }
+        )
+        $now = Get-Date
+        $stale = New-Object System.Collections.ArrayList
+        $missing = New-Object System.Collections.ArrayList
+        foreach ($s in $spec) {
+            $t = Get-ScheduledTask -TaskName $s.n -ErrorAction SilentlyContinue
+            if (-not $t) { [void]$missing.Add($s.n); continue }
+            # 禁用状态本身即"该任务不会再被触发" ==> 直接算陈旧
+            if ($t.State.ToString() -eq 'Disabled') { [void]$stale.Add("$($s.n):Disabled"); continue }
+            $info = $t | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
+            if (-not $info -or -not $info.LastRunTime -or $info.LastRunTime -le [datetime]'2000-01-01') {
+                [void]$stale.Add("$($s.n):never"); continue
+            }
+            $age = [int]($now - $info.LastRunTime).TotalSeconds
+            if ($age -gt $s.maxAge) { [void]$stale.Add("$($s.n):age=${age}s>lim$($s.maxAge)s") }
+        }
+        $d = 'all fresh'
+        if ($stale.Count -gt 0) { $d = ($stale -join ';') }
+        elseif ($missing.Count -gt 0) { $d = 'missing:' + ($missing -join ',') }
+        [pscustomobject]@{ Stale = $stale; Missing = $missing; Detail = $d }
+    }
+
+    $tf = Get-TaskFreshness
+    Add-Check "scheduled_tasks_fresh" (($tf.Stale.Count -eq 0) -and ($tf.Missing.Count -eq 0)) $tf.Detail
+    # ------------------------------------------------------------------------
 } catch { Write-Log ("HEALTH-ERR: " + $_.Exception.Message) }
 
 $state = @{}

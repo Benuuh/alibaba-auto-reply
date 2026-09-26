@@ -348,3 +348,41 @@
   ③ "填一个 `owner_userid` 总比留空好"（**错**：**填一个错的比留空更糟** —— 留空会自动认人，填错则永久拒收）。
 - **下游处置**：若要复活该组件，**必须先把它接到 dsh-im 新通道**，再清掉 `owner_userid` 占位符
   （留空以触发自动认人）。**不要**只把停用标记删掉就当修好了。
+
+## E-21 **Watchdog 计划任务"事实性停摆"**：任务不再被触发时，守护只能靠 Health 自愈兜住（2026-09-26 新发现，本轮已修）
+
+- **现象**：`AlibabaAutoReplyWatchdog` 任务的触发器**只剩** `<LogonTrigger><Delay>PT30S</Delay>`（**无** `TimeTrigger`、**无** `Repetition`），
+  结果是任务定义上**根本没有周期性**：`Get-ScheduledTaskInfo` 实测 `LastRunTime = 2026-09-26 12:27:04`、
+  `LastTaskResult = 4294967295`（`0xFFFFFFFF`，任务结果不可用）、**`NextRunTime` 为空**（`Next=[]`）——即**任务自 12:27 起再未被触发**。
+  当天两只 watchdog（`18:25:06` 起的 `2960`、更早的一只）**都不是任务拉起的**：`watchdog.log` 的启动横幅证明它们是
+  `HEALTH-HEAL` 自愈路径（`health_check.ps1` L177-222）拉起的，且**向上追父链已断**（`2960` 的 `ParentProcessId=3568`，
+  `Get-CimInstance -Filter "ProcessId=3568"` 返回空）⇒ 拉它的那个宿主进程早已不存在，守护处于"**无人再能自动拉起的孤儿态**"：
+  它一旦死掉，就只剩 Health 每 15 分钟一次的自愈，而 Health 自身也依赖计划任务。
+- **与 E-12 的关系**：**同一类风险的两个面**。E-12 说"**非计划任务通道**启动的常驻守护不可靠（会被静默回收）"；
+  E-21 说"**计划任务通道自己也可能是停的**" ⇒ 只要落到"守护由某个临时宿主进程拉起"这条路上（无论宿主是谁），
+  从那一刻起守护就**同时**失去了两条可靠通道。二者合起来的硬结论：**守护必须由计划任务的周期触发器持续拉起**，
+  并且"任务是否还在被触发"必须**有判据、有告警**（本轮补的 `scheduled_tasks_fresh` 就是这条判据）。
+- **不要误判为**：
+  ① "`watchdog.pid` 有内容 ⇒ 守护活着"（**错**，pid 文件可能指向死进程或陈旧值；**必须** `Get-Process -Id` / `Test-PidAlive` 复核）；
+  ② "`status.ps1` 显示 `Ready` ⇒ 任务在工作"（**错**，`Ready` 只表示**当前没有实例在跑**，与"会不会再被触发"无关；
+  本轮之前 `status.ps1` 还会把这种 `NextRunTime` 为空的状态美化成"登录时触发"，见下方"本轮动作"）。
+- **取证边界**：本机 `Microsoft-Windows-TaskScheduler/Operational` 日志 **`IsEnabled = False`** ⇒
+  **读不到** Event ID 201（"任务已完成"）等调度器留痕，**故不得把 201 当证据**；普通权限下唯一可靠的判据是
+  `Get-ScheduledTaskInfo` 的 `LastRunTime` / `LastTaskResult` / `NextRunTime` 三个字段。另：非管理员读不到 Security `4689`，
+  **"谁杀的守护"仍不可确证**（与 E-12 同一取证边界）。
+- **本轮动作（2026-09-26，已实测）**：
+  - `AlibabaAutoReplyWatchdog` 任务以 XML 直注重注册，恢复为**双触发器**：`LogonTrigger`（`PT30S` 延迟，原样保留）
+    + `TimeTrigger`（`<Repetition><Interval>PT1M</Interval>` + `<RestartOnFailure><Interval>PT1M</Interval><Count>3</Count>`）；
+    `StartBoundary` 取**过去时点** ⇒ 注册即触发，无需等下一个整点。`MultipleInstancesPolicy` 仍为 `IgnoreNew`。
+  - 实测（M1）：**重注册不会终止正在运行的 watchdog**（旧 pid `2960` 在注册后仍存活）⇒ 每个新触发实例都会被
+    既有单实例保护立刻 `exit 0` 并写 `Another watchdog instance already running (PID ...) - exiting`，**这不等于拉起失败**：
+    `LastTaskResult=0` + 该日志行即为"任务确实执行了"的证据。
+  - 实测（M2）：`Interval=PT1M` 下每次触发**确实刷新 `LastRunTime`**（采样 `19:00:01 → 19:01:01 → 19:02:01`，最大 age `50s`）；
+    但 `LastTaskResult` 在实例运行的约 2 秒内会显示 `267009`（`0x00041301` = 任务正在运行），**采样瞬间不同读数会跳**，判读时勿误认为失败。
+  - `scripts\health_check.ps1` 新增第 7 项检查 `scheduled_tasks_fresh`（6 个 `AlibabaAutoReply*` 任务里护 5 个"每日/每周型"的
+    `LastRunTime` 新鲜度）；`scripts\status.ps1` 删除 `L208` 的 `未排程 ⇒ '登录时触发'` 旁路（它会把"触发器真的被摘掉"
+    美化成"登录时触发"，正是本条事故的掩盖剂）。
+- **已知盲区（如实记录）**：`AlibabaAutoReplyWeekly` 自 `2026-09-21 20:01:39` 起未成功运行（`LastTaskResult=2147946720`），
+  而 `scheduled_tasks_fresh` 对它的 `maxAge=259200s`（3 天）⇒ 它只在**逾 3 天未跑**后才被这条自检抓到，
+  在此之前**不会**产生告警。修 Weekly 不在本轮范围。另：`PT1M` 触发会让 `watchdog.log` **每分钟增加一行**
+  `Another watchdog instance already running` —— 属该设计的固有代价，用于换取"≤1 分钟"的拉起窗口。

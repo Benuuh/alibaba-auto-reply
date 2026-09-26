@@ -250,7 +250,7 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 
 计划任务 `AlibabaAutoReplyHealth` 每 15 分钟运行 `scripts\health_check.ps1`，独立于 watchdog 检查整栈健康；异常时经企微推送告警（**每项检查 30 分钟去重**，恢复时推送 `RECOVERED`），每轮结果写入 `logs\health.log`，去重状态写入 `data\health_state.json`（可安全删除，删除后下一轮重新告警）。
 
-检查项（共 6 项，缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
+检查项（共 7 项，缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）、`scheduled_tasks_fresh`（计划任务新鲜度 —— 6 个 `AlibabaAutoReply*` 任务的 `LastRunTime` 均在各自周期余量内，用于发现"任务不再被触发"这类静默停摆）。
 
 > ✅ **2026-09-26 起已移除 `wecom_connected` 检查**：它探的旧桥 `19886` 已按 Phase L 停用，该检查永久 FAIL、只能产生噪声，故按决策删除。旧桥相关判据仍在 `scripts\status.ps1` 中（未改，属遗留项）。
 >

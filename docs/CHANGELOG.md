@@ -2,6 +2,10 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-26 - 守护可靠启动：Watchdog 任务恢复周期拉起（PT1M）+ 计划任务新鲜度自检
+
+- `AlibabaAutoReplyWatchdog` 任务恢复时间触发器（`Interval=PT1M` 每分钟重复 + 失败重试 `PT1M`×3），静默无守护窗口由最长约 30 分钟压到 ≤1 分钟；`health_check.ps1` 新增第 7 项检查 `scheduled_tasks_fresh`（5 个"每日/每周型"任务的 `LastRunTime` 新鲜度，Watchdog 改由 `Test-WatchdogAlive` 断言"pid 存活 + `TimeTrigger`/`PT1M` 已武装"），`status.ps1` 删除"未排程 ⇒ 登录时触发"过时旁路；详见 `docs\KNOWN_EXCEPTIONS.md` E-21。
+
 ## 2026-09-18 - P0 优化：守护加固（任务修正 + Health 自动拉起）/ 重复发送修复 / 日志与 PII 治理 / 死信心跳
 
 **背景**：09-16 watchdog 被任务空闲条件终止（0xC000013A）后未再运行；14 天日志分析发现 725 次发送中 141 对同买家同文案、间隔 ≤600s（≈19%）的重复发送；`ACCIO-PARSE-ERR` 因保留 JSON 换行产生多行日志；工作区残留 13 条含 PII 的未跟踪案卷。用户二次拍板取消 WinSW 服务化，改为任务修正 + Health 自动拉起（全程无需 Windows 密码）。

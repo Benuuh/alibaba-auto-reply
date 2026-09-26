@@ -205,7 +205,8 @@ foreach ($tn in @("AlibabaAutoReplySummary", "AlibabaAutoReplyQuality", "Alibaba
             $info = $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
             if ($info -and $info.NextRunTime -and $info.NextRunTime -ne [datetime]::MaxValue) { $next = $info.NextRunTime.ToString("yyyy-MM-dd HH:mm") }
         } catch { }
-        if ($tn -eq 'AlibabaAutoReplyWatchdog' -and $next -eq '未排程') { $next = '登录时触发' }
+        # [2026-09-26] Watchdog 任务现为"登录触发 + 每分钟重复"双触发器,故 NextRunTime 不再为空;
+        #   原"未排程 ⇒ 登录时触发"的旁路已失效(留着会掩盖"触发器真的被摘掉"这种故障),故删除。
         # Watchdog 为常驻守护任务:Ready(未登录/未启动)与 Running(守护中)均为正常态
         $ok = ($st -eq 'Ready' -or ($tn -eq 'AlibabaAutoReplyWatchdog' -and $st -eq 'Running'))
         StatusLine $tn $ok "状态=$st, 下次=$next"

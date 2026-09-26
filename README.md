@@ -367,9 +367,11 @@ powershell -ExecutionPolicy Bypass -NoProfile -File .githooks\sanitize_check.ps1
 
 **守护加固（2026-09-18 P0）**：Watchdog/Health 任务 `StopOnIdleEnd=false`；Health 发现 watchdog 死亡时自动拉起（`HEALTH-HEAL pid=<new>`，30 分钟节流）；去重判定改为 ts 归一化（`Test-AlreadyReplied`）+ 发送后 3 分钟冷却；死信心跳 `deadman_ping_url`（healthchecks.io，仅 ping 无 PII，默认空=不发）。
 
-**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（周一 08:00 周报 + nudge）、Watchdog（登录自启，常驻守护）、Health（每 15 分钟健康心跳 + 自动拉起 watchdog）。
+**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（周一 08:00 周报 + nudge）、Watchdog（登录自启 + **每分钟重复触发**，常驻守护）、Health（每 15 分钟健康心跳 + 自动拉起 watchdog）。
 
-> ⚠️ **Watchdog 任务只有"登录自启"触发器**（无时间触发器）⇒ 机器重启后若无人登录，守护不会自动起来。
+> [2026-09-26] 守护启动通道已回到计划任务（`Interval=PT1M` 每分钟重复触发 + 失败重试），
+> 静默无守护的窗口由"最长约 30 分钟"压到 **≤1 分钟**；任务是否仍被触发另由健康心跳的
+> `scheduled_tasks_fresh` 检查项看护（见 `README_部署说明.md`）。
 > 另：重启 DSH Desktop 可能连带终止 watchdog（控制台关闭事件，`0xC000013A`），
 > 之后用 `Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'` 补拉即可（让 watchdog 自己去拉起 monitor）。
 
