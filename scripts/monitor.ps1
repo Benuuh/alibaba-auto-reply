@@ -604,10 +604,11 @@ function Invoke-ConvoItem($ctx, $item) {
     $key = $item.name.Trim()
     $skey = Get-StateKey $key
     Write-Log "PROCESS convo from pending-list: $($key) | $($item.preview)"
-    # A1: new inquiry alert (24h throttle)
-    if (-not $ctx.state -or -not $ctx.state.replied -or ($ctx.state.replied.PSObject.Properties.Name -notcontains $skey)) {
-        Send-NewInquiryAlert $key $item.preview
-    }
+    # A1 新询盘通知已下移 —— 见下方"确认买家有新消息"处 [FIX-ALERTNOISE 2026-09-26]。
+    #   旧位置的问题：只看"会话在不在待回复列表 + 该买家 24h 内是否通知过"，
+    #   **完全不看买家有没有说新话** ⇒ 已读会话（预览往往还是我方最后发出那句）也照发通知。
+    #   实测事故 2026-09-26 18:34：74 秒内连发 9 条，用户判定为"乱发"。
+    #   故移到 dedup 判定（$already）之后：只有"买家确实说了新的、且还没回过"才通知。
     # A5 人工接管白名单(NO-REPLY):名单买家不自动回复(LLM/规则/图片模板/QUICK 全跳过,不发送);
     # 只读留痕(买家档案+msgs 快照)且不写 replied 去重状态 → 移出名单后自动恢复正常;
     # 新消息仍由上方 A1 提醒主人(24h 节流);预览不变时后续轮免打扰跳过
@@ -764,6 +765,13 @@ function Invoke-ConvoItem($ctx, $item) {
             if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
             $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = $count }   # [FIX-DUP 2026-09-25]
         } else {
+            # A1 new inquiry alert (24h throttle)
+            # [FIX-ALERTNOISE 2026-09-26] 移到这里：本分支 = $already 为假 = **买家确实说了新的、
+            #   且尚未回复过**（dedup 用"归一化原文 hash + 买家消息条数"判定，是权威判据）。
+            #   条件与旧位置逐字相同，只是挪到信息更全的位置 ⇒ 已读/无新消息的会话不再打扰主人。
+            if (-not $ctx.state -or -not $ctx.state.replied -or ($ctx.state.replied.PSObject.Properties.Name -notcontains $skey)) {
+                Send-NewInquiryAlert $key $item.preview
+            }
             $rules = Get-Rules
             $reply = $null
             $src = 'RULE'
