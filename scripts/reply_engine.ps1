@@ -582,6 +582,85 @@ function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
     return ($buyerCount -le $savedCount)
 }
 
+# [FIX-DUP-ORDER 2026-09-27] 判据不再依赖消息在列表中的位置(修"重复发送"根因)。
+#   依据(实测, 见 REPORT_修重复发送根因_20260927.md):
+#     1) 消息列表顺序不稳定 —— 同一抓取器在相隔数十秒的两份真实快照上产出**相反**的顺序
+#        (msgs_20260927_021045.txt 新在上 / msgs_20260927_021141.txt 旧在上);
+#        同一时刻的"待回复"会话列表也整体反序(02:10-02:12 那一轮是 00:41-00:44 那一轮的倒序)。
+#     2) 原判定取 $buyerMsgs[0] 当"最新" ⇒ 顺序一漂, 算出的文本 hash 就变 ⇒ Test-DedupHit 判成
+#        "买家说了新话" ⇒ 对已回复过的会话重发同一句话(对外可见的骚扰)。
+#     3) @@TS 不可用于判最新: 快照里全部 @@TS 挤在抓取时刻的同一毫秒区间内(310 份快照实测
+#        最大跨度 34ms, 231 份 ≤10ms) ⇒ 它是**抓取时刻的合成值**, 不是消息真实发送时间。
+#   判据(与位置无关, 从强到弱回退):
+#     1) 条数增加 ⇒ 一定有新消息;
+#     2) 条数不变/减少 ⇒ 没有新消息(顺序怎么漂都不影响 count);
+#     3) 条数不可解析(旧格式键或缺失) ⇒ 退回文本 hash 相同即视为已回复(保守, 宁可少发);
+#     4) 条数为负(哨兵: 该分支尚未算出条数) ⇒ 视为无新消息(保守, 宁可少发)。
+#   本函数为纯函数: 无副作用、不读文件、不碰页面。返回 $true = 有新买家消息(应回复);
+#   $false = 无新消息(不得发送)。$BuyerLines 的元素为抓取行(可含 @@TS/@@OT 标记)。
+function Test-NewBuyerMessage {
+    [CmdletBinding()]
+    param(
+        [string[]]$BuyerLines,
+        [string]$SavedKey,
+        [string]$CurrentHash
+    )
+    $arr = @($BuyerLines)
+    $count = 0
+    foreach ($l in $arr) { if ($l -match '^\[BUYER\]') { $count++ } }
+    # 账本缺失/为空: 无法证明"已回复过", 按首次问询处理(与 Test-DedupHit 同一取向)
+    if ([string]::IsNullOrWhiteSpace($SavedKey)) { return $true }
+    $parts = $SavedKey -split '\|', 2
+    $savedHash = [string]$parts[0]
+    # 第 2 段既可能是"买家消息条数", 也可能是**旧格式的 epoch 毫秒时间戳**(13 位) ——
+    # 后者绝不能直接 [int] 转换(会抛 Int32 溢出异常; 实测键 ...|1789826752752 触发)。故先限长再 TryParse。
+    $savedCount = $null
+    if ($parts.Count -gt 1) {
+        $seg = ([string]$parts[1]).Trim()
+        if ($seg -match '^\d{1,9}$') {
+            $parsed = 0
+            if ([int]::TryParse($seg, [ref]$parsed)) { $savedCount = $parsed }
+        }
+    }
+    # 无条数可用(旧格式键/超长段/非法段): 退回"文本 hash 相同即已回复" —— 顺序漂移下 hash 可能不同,
+    # 故此路径仍可能重发; 这是既有行为, 不在本轮扩大改动面。
+    if ($null -eq $savedCount) {
+        if ([string]::IsNullOrWhiteSpace($CurrentHash)) { return $false }
+        return ($savedHash -ne $CurrentHash)
+    }
+    # 哨兵负值(未知): 保守判"无新消息"
+    if ($savedCount -lt 0) { return $false }
+    return ($count -gt $savedCount)
+}
+
+# [FIX-DUP-ORDER 2026-09-27] 不依赖位置地挑出"我们上一次回复所针对的那条买家消息"(纯函数)。
+#   用途: 日志与 LLM 输入口显示的 latest 必须是我们真正回复过的那条, 而不是恰好排在位置 0 的那条
+#   —— 顺序不稳定时位置 0 可能是最旧的消息(实测 02:11:41 的日志就把 6 小时前的旧消息当成了 latest)。
+#   判据: 账本 hash 与候选消息的 hash(归一化原文)相同者胜出; 旧格式账本只有 hash, 缺条数, 走同一条路。
+#   取不到(首次问询/文本已变/账本为空) -> 返回最后一条(沿用既有"最后一条=最新"的假设, 不引入新判据)。
+#   同样为纯函数: 无副作用、不读文件、不碰页面。
+function Select-LatestBuyerLine {
+    [CmdletBinding()]
+    param(
+        [string[]]$BuyerLines,
+        [string]$SavedKey
+    )
+    $arr = @($BuyerLines)
+    if ($arr.Count -eq 0) { return '' }
+    $savedHash = ''
+    if (-not [string]::IsNullOrWhiteSpace($SavedKey)) { $savedHash = [string](($SavedKey -split '\|', 2)[0]) }
+    if (-not [string]::IsNullOrWhiteSpace($savedHash)) {
+        foreach ($l in $arr) {
+            $ot = $l
+            $m = [regex]::Match($l, '@@OT:([A-Za-z0-9+/=]+)')
+            if ($m.Success) { try { $ot = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($m.Groups[1].Value)) } catch { $ot = $l } }
+            $plain = ($ot -replace '^\[BUYER\]\s*', '' -replace '@@TS:.*$', '' -replace '@@OT:[A-Za-z0-9+/=]+', '').Trim()
+            if ((Get-StableHash (Get-NormalizedMsgText $plain)) -eq $savedHash) { return $l }
+        }
+    }
+    return $arr[$arr.Count - 1]
+}
+
 # 发送前禁词检测（纯函数；monitor 发送前拦截与回归测试共用定义，避免复制）：
 # 大小写不敏感；ASCII 词按词边界匹配并容忍复数/'s 后缀；中文按子串命中；长词先匹配避免短词抢先命中长词。
 # 词表主源在 reply_rules.json banned_phrases；$bannedList 缺省/$null 时回退本函数内置默认表（同语料词表）。返回命中词或 $null。

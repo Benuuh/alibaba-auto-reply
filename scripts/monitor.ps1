@@ -941,7 +941,15 @@ function Invoke-ConvoItem($ctx, $item) {
     }
     $buyerMsgs = @($cdpLines | Where-Object { $_ -match '^\[BUYER\]' })
     if ($buyerMsgs.Count -gt 0) {
-        $latest = ($buyerMsgs[0] -replace '^\[BUYER\] ','')
+        # [FIX-DUP-ORDER 2026-09-27] 位置 0 不再是"最新"的来源(spec §7-A8)。
+        #   选中"我们上一次回复所针对的那条"(按账本 hash 内容匹配), 取不到则退最后一条。
+        #   注意: 本变量只供日志/LLM 输入; 去重判定已改为与位置无关的条数判据(见下方 $isNew)。
+        $savedForLatest = ''
+        if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
+            $savedForLatest = [string]$ctx.state.replied.$skey
+        }
+        $latestRaw = Select-LatestBuyerLine -BuyerLines $buyerMsgs -SavedKey $savedForLatest
+        $latest = ($latestRaw -replace '^\[BUYER\] ','')
         if ($latest.Trim().Length -eq 0) {
             Write-Log "SKIP $($key): empty latest message"
             # [FIX-DUP 2026-09-25] buyers=-1 表示"未知"（该分支尚未计算买家条数），判定侧按"不解除冷却"处理
@@ -961,17 +969,30 @@ function Invoke-ConvoItem($ctx, $item) {
         # [FIX-DUP 2026-09-25] LLM/规则输入必须剥离 @@OT（否则提示词里会出现 B64 垃圾）
         $lines = $lines | ForEach-Object { $_ -replace '@@TS:.*?$','' -replace '@@OT:[A-Za-z0-9+/=]+','' }
         Write-Log "Latest buyer msg: $latestClean"
-        # [FIX-DUP 2026-09-25] 去重键 = 归一化原文 hash + 买家消息条数，不再使用合成 @@TS
+        # [FIX-DUP 2026-09-25] 去重键 = 归一化原文 hash + 买家消息条数（hash 仅作留痕/兼容，见下）
         $normText = Get-NormalizedMsgText $latestOrig
         $hText = Get-StableHash $normText
         $buyerCount = @($buyerMsgs).Count
         $newKey = Get-DedupKey $normText $buyerCount
+        # [FIX-DUP-ORDER 2026-09-27] 判定"是否已回复"不再依赖 $buyerMsgs[0] 的位置:
+        #   消息列表顺序不稳定(实测两份快照方向相反), 位置一漂 hash 就变 ⇒ 旧判据会把已回复的会话
+        #   判成"买家说了新话"而重发。改为条数判据(Test-NewBuyerMessage, 纯函数), 与位置无关。
+        #   注意 $newKey 的格式(hash|count)保持不变, 只改"怎么判"。
         $already = $false
         $saved = ''
+        $isNew = $true
         if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
             $saved = [string]$ctx.state.replied.$skey
-            $already = Test-DedupHit $saved $hText $buyerCount
+            $isNew = Test-NewBuyerMessage -BuyerLines $buyerMsgs -SavedKey $saved -CurrentHash $hText
+            $already = -not $isNew
         }
+        $savedCountSeg = '-'
+        if ($saved) { $sp = $saved -split '\|', 2; if ($sp.Count -gt 1) { $savedCountSeg = $sp[1] } }
+        Write-Log "DEDUP-JUDGE $($key): savedCount=$savedCountSeg nowCount=$buyerCount isNew=$isNew (order-independent)"
+        # [FIX-DUP-ORDER 2026-09-27] 兜底闸门(spec §6-F1 判据优先级 3): 判据说"没有新消息"时一律不发送,
+        #   且冷却照常升级 —— 宁可少发, 不可重复打扰。正常情况下 $already 已等价于 (-not $isNew),
+        #   此闸门是独立于 $already 赋值的第二道保险: 将来若有人改错 $already, 也不会漏出重复发送。
+        if (-not $isNew) { $already = $true }
         if ($already) {
             Write-Log "SKIP $($key): already replied (dedup text=$($hText.Substring(0,8)) buyers=$buyerCount)"
             # [FIX-DUP 2026-09-25] removed DEDUP-UPGRADE (key no longer carries ts)
@@ -979,8 +1000,13 @@ function Invoke-ConvoItem($ctx, $item) {
             if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
             $count = 1
             if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
-            # [Phase3] 冷却键一致性诊断(F10: 冷却升级从未发生, 需确认是否为键不一致)
-            Write-Log ("COOLDOWN-KEYCHECK key=[$key] prevFound=$([bool]$prev) prevCount=$(if($prev){$prev.count}else{'-'})")
+            # [FIX-COOLDOWN-NOISE 2026-09-27] 原实现每轮都写 COOLDOWN-KEYCHECK, 且恒为 prevFound=False
+            #   (该函数与预热 TEMP-SKIP 路径不共享 skipCooldown, 故必然取不到 prev) ⇒ 刷屏且误导运维
+            #   以为冷却在生效。现改为: **仅在冷却真的升级时**写一行(每会话每轮最多一行),
+            #   并直接给出冷却升级结论; 非升级轮次只保留 ALREADY-REPLIED-WAIT 一行。
+            if ($count -gt 1) {
+                Write-Log ("COOLDOWN-KEYCHECK key=[$key] prevFound=$([bool]$prev) escalated count=$($prev.count)->$($count) (quiet-round logging removed)")
+            }
             # [Phase3] 已回复且无新消息: 冷却按 3/6/12/15 分钟递增(既有设计意图),并标明等待状态,
             #   避免每 9 秒刷一行 TEMP-SKIP 让运维误判为"漏回"。
             $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview
