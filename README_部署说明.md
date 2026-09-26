@@ -1,6 +1,11 @@
-﻿# 阿里国际站自动回复系统 - 部署说明
+# 阿里国际站自动回复系统 - 部署说明
 
-> 本文档是**部署与运维手册**；项目总览、特性与原理见根 `README.md`。内容对应 2026-09 结构（monitor/watchdog 主程序 + wecom-connector/control-agent 企微组件）。
+> 本文档是**部署与运维手册**；项目总览、特性与原理见根 `README.md`。内容对应 2026-09 结构（monitor/watchdog 主程序 + dsh-im 告警出口 + wecom-connector/control-agent 企微组件）。
+>
+> **2026-09-26 重要变更**：告警推送出口已从 `wecom-connector` 的本地长连接桥（`127.0.0.1:19886`）迁到
+> **dsh-im 主动投递 HTTP 接口**，并用"交接门"阻断旧桥的保活。原因是两者会抢同一个企微机器人
+> （`exit_on_kicked_offline: true`）而互相顶下线，且旧启动器曾悬死 17 分钟把 watchdog 整体堵停。
+> **部署方式见 Phase L**；想回到旧通道的做法见 Phase E 末尾与「五、回滚」。
 
 ## 一、部署目录结构
 
@@ -17,8 +22,8 @@
 │   ├── reply_engine.ps1 / reply_rules.json / reply_agent_prompt.md ← 回复引擎/语料/提示词（后两者可热编辑）
 │   ├── cdp.ps1             ← CDP 桥接
 │   ├── chrome_ensure.ps1   ← Chrome 自愈（重启+复用登录态+自动登录）
-│   ├── watchdog.ps1        ← 守护（monitor 死亡/僵死重启；CDP 连不可达 10 次自动 chrome_ensure；防风暴）
-│   ├── wecom_start.ps1     ← 企微保活启动器 v2（幂等三段，watchdog 每 30s 调用）
+│   ├── watchdog.ps1        ← 守护（monitor 死亡/僵死重启；CDP 连不可达自动 chrome_ensure；防风暴；**企微保活带交接门**）
+│   ├── wecom_start.ps1     ← 企微保活启动器 v3（幂等三段 + **交接门**；marker 存在且新通道宿主在 ⇒ 主动让路）
 │   ├── agent_start.ps1     ← control-agent 保活启动器（幂等，停用标记感知，watchdog 每 30s 调用）
 │   ├── status.ps1          ← 一键健康检查（进程/CDP/日志/去重/任务/敏感审计）
 │   ├── backup.ps1 / sync.ps1 / consolidate_prompt.ps1 ← 快照/镜像同步/红线归档
@@ -26,10 +31,17 @@
 │   ├── weekly_report.ps1 / nudge.ps1 / quote_remind.ps1 ← 周报+唤醒 / 报价提醒 CLI
 │   ├── dashboard.ps1       ← 数据看板（手动工具，按需运行）
 │   ├── state.json(+bak)    ← 已回复去重状态（双写）
-│   └── lib\                ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push）
+│   └── lib\                ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push/accio/alert_local/deadman）
+│       └── wecom.ps1       ← **告警推送唯一出口**（7 个调用点共用；2026-09-26 起内部改走 dsh-im 投递）
+├── data\
+│   └── alert-channel.handover.json ← **告警通道交接标记**（存在 ⇒ 旧企微桥保活让路；删除即回滚旧通道）
 ├── tools\
 │   ├── wecom-connector\    ← 企微 HTTP 桥（Node 常驻 127.0.0.1:19886；bin\wecom-connector.ps1 启停）
+│   │                          ⚠️ 2026-09-26 起其**保活被交接门阻断**，19886 默认不再监听
 │   ├── doc-reader\         ← 买家文档解析（PDF 文本/扫描渲染、xlsx/csv/docx → 文本或 PNG；node --test）
+│   ├── email-verify\       ← 邮箱可投递性验证（MX/SMTP 探测；Node 零依赖，无 npm install）
+│   ├── status-verify\      ← 状态核实工具（verify_all.ps1）
+│   └── control-agent\      ← 企微自然语言远程控制桥（Node 常驻；bin\control-agent.ps1 启停）
 │   │   ├── config.json     ← 由 config.json.example 复制（host/port/data_dir/receiver_file/log_dir，无凭据）
 │   │   ├── client\wecom-client.ps1   ← PowerShell 客户端库（Conn-* 系列，零依赖可复用）
 │   │   └── data\ / logs\ / tests\    ← 游标与接收方缓存 / 日志 / 63 例测试
@@ -49,9 +61,10 @@
 |---|---|---|
 | Windows | 10+ | 全脚本 PowerShell 5.1 |
 | Chrome | 默认安装路径 | `C:\Program Files\Google\Chrome\Application\chrome.exe`（config.json 可改） |
-| Node.js | ≥ 18（实测 24） | 仅企微通道需要（wecom-connector / control-agent） |
+| Node.js | ≥ 18（实测 24） | 企微通道需要（wecom-connector / control-agent）；`tools\email-verify` 也需要 |
 | git | 可选 | 克隆与镜像同步 |
-| dsh | 可选 | control-agent 默认外部执行 agent：`npm.cmd install -g @deepseek-ai/dsh` |
+| dsh | **推荐** | ① control-agent 默认外部执行 agent：`npm.cmd install -g @deepseek-ai/dsh`；② **告警出口 dsh-im 的宿主**（见 Phase L） |
+| ▸ 本机执行策略 | Restricted 时 | 所有 `.ps1` 用 `powershell -ExecutionPolicy Bypass -NoProfile -File <路径>`；`npm` 必须用 `npm.cmd`（`npm.ps1` 会被策略拦下） |
 
 ## 三、首次部署（分阶段）
 
@@ -92,7 +105,72 @@ Get-Content <部署根>\logs\monitor.log -Tail 20
 ```
 监控为**单实例**：启动前检查 `scripts\monitor.pid`；`-Action stop` 正常停止。
 
-### Phase E：企微通道（wecom-connector 必须；control-agent 可选/当前未运行）
+### Phase E：告警推送出口（**推荐：dsh-im 主动投递**，2026-09-26 起取代旧 Phase E）
+
+> **先说结论**：新部署**只做本节即可，不要起旧的企微长连接桥**。两者会抢同一个企微机器人并互相顶下线。
+> 旧桥的部署与回滚见 Phase L（**仅在你选择"旧通道为准"时才做**）。
+
+**E-1 准备 dsh-im 与投递目标**（在 DSH Desktop 图形界面里，一次性）：
+
+1. 安装并启用 `@xmanrui/dsh-im` 插件（DSH 设置 → 插件市场 / 或 profile 级安装）
+2. 接入**企业微信**渠道，扫码授权该机器人 → 确认长连接已建立（可给机器人发一条消息，收到回复即通）
+3. 进入该机器人的齿轮设置 → **「新建目标」** → 从已聊会话里选你自己 → 点**「测试」**（手机应收到 `DSH-IM 主动投递测试成功。`）→ **「保存目标」**
+4. 点**「复制调用参数」**，得到 `{ botId, targetId }`（形如 `wecom_xxxx` / `tgt_xxxxxxxxxxxxxxxx`）
+   - `botId` = 该机器人的**调用标识**（不是机器人名称、不是平台 App ID）
+   - `targetId` = 你为该目标起的稳定别名；**保存后不可修改**，调用方长期使用同一个 `botId + targetId`
+
+**E-2 写入配置**（`scripts\config.json`，三个新键；**不得给该文件加 BOM**）：
+
+```jsonc
+"dshim_delivery_url":  "http://127.0.0.1:<DSH Host 端口>/api/dsh-im/delivery/messages",
+"dshim_bot_id":        "<上一步的 botId>",
+"dshim_target_id":     "<上一步的 targetId>"
+```
+> DSH Host 端口以启动时显示的地址为准（Web profile 默认 `3080`；本机实测为 `43120`）。
+> 校验：`Get-NetTCPConnection -State Listen -LocalPort <端口>` 应有监听。
+
+**E-3 落交接标记**（让旧桥保活永久让路）：
+
+```powershell
+$m = Join-Path (Get-SkillPath "data") 'alert-channel.handover.json'   # 或直接写 <部署根>\data\alert-channel.handover.json
+[pscustomobject]@{ channel='dsh-im'; since=(Get-Date).ToString('yyyy-MM-dd HH:mm:ss'); note='legacy 19886 bridge retired' } |
+  ConvertTo-Json | Set-Content -Path $m -Encoding UTF8
+```
+
+**E-4 停掉旧桥**（若它正在跑；`19886` 有监听才需要）：
+
+```powershell
+# 走组件自带的精确匹配停机（内部按 server.js 命令行匹配 node，不是按名称杀）
+powershell -ExecutionPolicy Bypass -NoProfile -File tools\wecom-connector\bin\wecom-connector.ps1 -Action stop
+```
+> ⚠️ **顺序很重要**：必须先落 E-3 的标记**再**停旧桥。否则 watchdog 每 30s 会把它拉回来，又变成互踢。
+
+**E-5 端到端验证**（会真的给目标发消息）：
+
+```powershell
+. <部署根>\scripts\config.ps1; . <部署根>\scripts\lib\wecom.ps1
+Test-WecomService            # 期望 True（405 = 接口在且只收 POST）
+Send-WecomMessage '部署验证：告警出口已接通。'   # 期望 SENT_OK
+```
+
+**E-6 契约与坑（实测）**：
+
+| 现象 | 含义 / 处置 |
+|---|---|
+| `{"sent":true}` / `SENT_OK` | 成功 |
+| `404 unknown-bot` | `botId` 与 dsh-im 设置页不一致 |
+| `404 unknown-target` | `targetId` 没配、被改名或被删（改配置即可，不用改代码） |
+| `400 bad-request` | 字段**必须恰好** `botId`+`targetId`+`text`（可选 `format`）——**多一个键也会 400**；空白 `text` 同样 400（出口封装已在本地拦为 `NO_RECEIVER`） |
+| 中文乱码 | PS 5.1 字符串 body 按 GBK 编码 ⇒ 必须 `[System.Text.Encoding]::UTF8.GetBytes($body)` 再发 |
+| 接口可达性 | 官方文档明示该接口**不含鉴权**，只应在本机使用，**不要暴露到公网** |
+
+**E-7 出问题时怎么回到旧通道**：见「五、回滚」——
+删掉 `data\alert-channel.handover.json` → **清空 `config.json` 的三个 `dshim_*` 键**（否则出口仍走新路径）→ 起旧桥（下面 Phase L 第 1 步）→ 确认 `curl http://127.0.0.1:19886/health` 返回 `{"connected":true}`。
+
+### Phase L：旧企微通道（wecom-connector；**仅在你选择"旧通道为准"时才部署**）
+
+> 2026-09-26 起默认**不部署**。保留本节是因为：① 想用旧通道时仍需它；② 它是 dsh-im 出问题时的回滚路径（回滚步骤见「五、回滚」与 Phase E-7）。
+
 ```powershell
 # 1. 启动 HTTP 桥（凭据经环境变量注入：WX_BOT_ID/WX_BOT_SECRET；启动器自动注入）
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\wecom-connector\bin\wecom-connector.ps1 -Action start
@@ -103,9 +181,13 @@ curl http://127.0.0.1:19886/health   # {"connected":true}
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\control-agent.ps1 -Action start
 
 # 3. owner 绑定：config.json 的 owner_userid 留空时，向机器人发第一条消息即自动锁定并回写
-# 4. 保活：watchdog 每 30s 调用 scripts\wecom_start.ps1（幂等三段，无风暴）
+# 4. 保活：watchdog 每 30s 调用 scripts\wecom_start.ps1（幂等三段）
+#    ⚠️ 但若 data\alert-channel.handover.json 存在且 DSH Desktop 进程在跑，保活会主动让路（WECOM-HANDOVER-SKIP）
+#       强制跑旧通道：设环境变量 WECOM_FORCE_RUN=1
 ```
 - 消费方（monitor / quote_remind / nudge 经 `scripts\lib\wecom.ps1`）端点同构，零额外配置
+- **与 dsh-im 互斥**：两者接入同一个机器人时，`exit_on_kicked_offline=true` 会让后连的一方把先连的顶下线；
+  实测旧桥 `AUTH-OK` 后 87 秒即被 `KICKED-OFFLINE`
 - control-agent 已由 watchdog 保活（每 30s 幂等调用 `scripts\agent_start.ps1`，启动失败 5 分钟冷却）；手动停用：`bin\control-agent.ps1 -Action stop`（建停用标记 `data\control-agent.disabled`，保活跳过），`-Action start` 删除标记并恢复
 - 无凭据时 HTTP 桥也可启动（`connected=false`，/send 返回 503），便于联调
 
@@ -171,6 +253,11 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 
 检查项（缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`wecom_connected`（19886 /health connected=true）、`control_agent`（agent_bridge.js 进程存在，或有 `data\control-agent.disabled` 停用标记）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
 
+> ⚠️ **2026-09-26 起 `wecom_connected` 会持续为 FAIL**：它探的是旧桥 `19886`，而该桥已按 Phase L 停用。
+> 这是**预期状态**，不是故障——**推送出口已改走 dsh-im**，`health.log` 里会出现
+> "判据 FAIL + 推送 `SENT_OK`"的组合。**不要**为了让这一项变绿而放宽判据或重启旧桥
+> （那会与 dsh-im 互踢）。若要消除这条噪音，应另立改动把该检查改为探 dsh-im 通道。
+
 排障：`Get-Content logs\health.log -Tail 20`（每行 `HEALTH: name=OK|FAIL ...`）；任务状态 `Get-ScheduledTaskInfo -TaskName AlibabaAutoReplyHealth`（LastTaskResult 应为 0）。
 
 ### Phase K：守护加固 P0（2026-09-18，取消服务化，无需密码）
@@ -193,14 +280,18 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 |---|---|
 | 健康检查 | `scripts\status.ps1` |
 | 查看运行状态 | `Get-Content logs\monitor.log -Tail 20` |
-| 停止/启动监控 | `scripts\monitor.ps1 -Action stop/start` |
-| 企微桥状态 | `tools\wecom-connector\bin\wecom-connector.ps1 -Action status`（control-agent 同款） |
+| 停止/启动监控 | `scripts\monitor.ps1 -Action stop/start`（**改完 `lib\cdp.ps1` 等库文件必须重启 monitor 才生效**——它只在启动时 dot-source 一次） |
+| **告警出口自检** | `. scripts\config.ps1; . scripts\lib\wecom.ps1; Test-WecomService`（期望 True）→ `Send-WecomMessage '测试'`（期望 `SENT_OK`） |
+| **交接标记状态** | `Test-Path data\alert-channel.handover.json`（在 ⇒ 旧桥保活让路）；回滚见「五、回滚」 |
+| 旧企微桥状态（仅回滚时用） | `tools\wecom-connector\bin\wecom-connector.ps1 -Action status` |
 | control-agent 保活/停用 | `scripts\agent_start.ps1`（幂等保活启动器）；停用 `tools\control-agent\bin\control-agent.ps1 -Action stop`（建标记 `data\control-agent.disabled`），恢复用 `-Action start`（删标记） |
 | 代码快照（发布前必做） | `scripts\backup.ps1 -Snapshot` |
 | 镜像同步 | `scripts\sync.ps1 -Status` / `scripts\sync.ps1 -Push`（默认镜像 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`，`-MirrorRoot` 可覆盖） |
 | 报价提醒手动触发 | `scripts\quote_remind.ps1` |
 | Accio 网关状态/影子对比 | `status.ps1`（Accio 状态行）；`tools\accio-client\shadow_compare.ps1`（只读对比）；开关见 config.json 的 `accio_*` |
-| 发送测试消息 | 见 `tools\wecom-connector\client\wecom-client.ps1`（Conn-SendMessage） |
+| **发布前脱敏自检** | `powershell -File .githooks\sanitize_check.ps1 -Mode staged`（与 pre-commit/pre-push 同款；exit 1 = 阻断） |
+| **推送后历史核查** | 泄漏是永久的 ⇒ 扫全历史而非只看本次 diff：`git log --all --pretty=format: --name-only --diff-filter=ACMRT \| Sort-Object -Unique` |
+| **守护被回收后补拉** | `Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'`（**常驻守护只许走计划任务**；让 watchdog 自己去拉起 monitor） |
 
 **配置热更新**：改 `scripts\reply_rules.json` / `reply_agent_prompt.md` 立即生效，无需重启；改 config.json 类路径/凭据后需重启对应进程。
 
@@ -210,18 +301,33 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 - **配置回滚**：`reply_rules.json.pre` / `reply_agent_prompt.md.pre` / 各 `.prev` 还原（backup.ps1 自动留 .pre）
 - **状态回滚**：`state.json.bak` 还原（注意：去重记录丢失可能造成重复回复，需人工评估）
 - **凭据回滚**：credentials.md 由人工保管，任何备份均不含凭据
+- **告警出口回滚（2026-09-26 起，两条路互斥，必须成套做）**：
+  1. **回到旧企微桥**：删 `data\alert-channel.handover.json` → **清空 `config.json` 的 `dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`**（否则出口仍走新路径）→ 起旧桥（Phase E 第 1 步）→ `curl http://127.0.0.1:19886/health` 应为 `{"connected":true}` → 给机器人发条消息确认
+  2. **回到 dsh-im 投递**：恢复上面三个键 → 落回 `data\alert-channel.handover.json` → 停旧桥（`bin\wecom-connector.ps1 -Action stop`）
+  > ⚠️ **严禁**让两条通道同时"活着"：同一机器人 + `exit_on_kicked_offline=true` ⇒ 反复互踢，且旧启动器曾在互踢中悬死 17 分钟把 watchdog 堵停。
+  > ⚠️ 顺序：**先改配置/标记，再停对面的进程**。反了会被 watchdog 每 30s 拉回来。
 
 ## 六、故障排查
 
 | 现象 | 排查 |
 |---|---|
-| status [!!] 双实例 | 检查 monitor.pid，停止多余实例；写锁 `lib\lock.ps1` 兜底 |
+| status [!!] 双实例 | 检查 monitor.pid，停止多余实例；写锁 `lib\lock.ps1` 兜底。**注意 pid 文件可能是陈旧的** ⇒ 一律 `Get-Process -Id (Get-Content <pid文件>)` 双向核对 |
 | 滑块验证码 | 刷新页面消除，勿反复提交；必要时人工登录一次 |
-| /health connected=false | Bot ID/Secret 注入是否正确；`bin\wecom-connector.ps1 -Action start` 自愈重启应用凭据 |
+| **告警推不出去（`SERVICE_DOWN`）** | 出口仍指向已停用的 `19886`：检查 `config.json` 的三个 `dshim_*` 键是否齐全；`Test-WecomService` 应为 True |
+| **推送 `404 unknown-target`** | dsh-im 里没建投递目标，或目标被改名/删除 ⇒ 在 dsh-im 设置页重建目标并把新 `targetId` 写回配置（**不用改代码**） |
+| **推送 `400 bad-request`** | 请求体多/少字段（接口用严格等值校验）；空白 `text` 同样被拒（出口封装已本地拦为 `NO_RECEIVER`） |
+| **推送中文乱码** | PS 5.1 字符串 body 按 GBK 编码 ⇒ 必须 `[System.Text.Encoding]::UTF8.GetBytes($body)` 再发送 |
+| **机器人在两个程序间反复掉线** | 两条通道抢同一机器人（`exit_on_kicked_offline`）⇒ 只保留一条；用 `data\alert-channel.handover.json` 交接标记 + 清对面配置 |
+| **health 一直报 `wecom_connected FAIL`** | **预期**（它探的是已停用的 19886）。看 `health.log` 里推送是否 `SENT_OK`；不要为此重启旧桥 |
+| **改了 `lib\cdp.ps1` 但行为没变** | monitor 只在启动时 dot-source 一次 ⇒ **必须重启 monitor**；重启后仍无变化再查是否 BOM 丢失 |
+| **.ps1 改完中文全失效/判据恒真** | 编辑工具**剥掉了 UTF-8 BOM** ⇒ PS 5.1 按 ANSI 解码 ⇒ 中文字面量静默失配。复验前三字节是否 `239,187,191`，丢了用 `[System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($true)))` 写回 |
+| **/health connected=false（旧桥）** | Bot ID/Secret 注入是否正确；`bin\wecom-connector.ps1 -Action start` 自愈重启应用凭据 |
 | LLM 全失败/回退规则 | 检查 credentials.md api_key、llm_config endpoint；看 monitor.log |
 | 计划任务超龄 | 运行 `scripts\status.ps1` 查看任务状态与下次运行时间；检查 schtasks 是否被禁用/权限 |
+| **守护"自己消失"且无日志** | ① 从代理/脚本会话直接建进程会被回收；② 控制台被关闭（`0xC000013A`，重启 DSH Desktop 会发生）⇒ **只走计划任务**：`Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'` |
+| **看到"两个 watchdog"** | 多为**自匹配假阳性**（命令自身的命令行含 `watchdog\.ps1`）⇒ 排除自身 PID 或用 `-File .*watchdog\.ps1` 匹配 |
 | monitor 日志乱码 | .ps1 必须 UTF-8 带 BOM 保存（无 BOM 中文按 GBK 解析） |
-| 控制台输出重定向失败 | monitor 启动必须带 -RedirectStandardOutput/-RedirectStandardError |
+| 控制台输出重定向失败 | monitor 启动必须带 -RedirectStandardOutput/-RedirectStandardError；注意 `Start-Process` 带重定向在本机某些环境会抛 `NO_PROXY / no_proxy` 重复键异常，改用 `.NET ProcessStartInfo` 或组件自带的 `Start-ProcessClean` |
 
 ## 七、注意事项与变更记录
 
@@ -231,7 +337,14 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 - **人工接管白名单**：企微向机器人发「白名单 添加 <客户名>」→ 该买家不再自动回复（只读快照 + [NEW-INQUIRY] 提醒；报价/唤醒免打扰）；「白名单 删除」即恢复；名单存 `data\manual_override.json`（损坏/缺失=空名单，热生效≤10s，无需重启 monitor）
 - **敏感信息铁律**：账号/密码/API key/Bot 凭据只存 credentials.md（企微组件凭据走环境变量）；日志/报告/备份不得出现；status.ps1 与 .githooks 双重审计
 - **脚本编码**：所有 .ps1 必须 UTF-8 带 BOM
+- **告警通道二选一**：同一企微机器人**只能有一条长连接**（`exit_on_kicked_offline`）。当前默认走 dsh-im 投递，
+  旧桥由 `data\alert-channel.handover.json` 交接标记阻断保活；**不要**为了"多一条路更保险"而同时开两条
+- **常驻守护只走计划任务**：从脚本/代理会话直接建进程会被静默回收；重启 DSH Desktop 也可能连带终止 watchdog
+  ⇒ 之后用 `Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'` 补拉
+- **`AlibabaAutoReplyWatchdog` 只有"登录自启"触发器**：机器重启后若无人登录，守护不会自动起来
+  （如需开机即跑，应另加开机触发器并保留单实例保护）
 - 变更记录（详见 docs\CHANGELOG.md）：
+  - **2026-09-26：告警通道交接 + dsh-im 主动投递出口 + 页面判据修复**——旧企微长连接桥（`127.0.0.1:19886`）与 dsh-im 插件抢同一机器人而互踢（实测旧桥 `AUTH-OK` 后 87 秒被 `KICKED-OFFLINE`，且旧启动器曾悬死 17 分钟把 watchdog 堵停）；新增**交接门**（`data\alert-channel.handover.json` + 新通道宿主存在才让路，`WECOM_FORCE_RUN=1` 逃生门）阻断旧桥保活；`lib\wecom.ps1::Send-WecomMessage` 内部改走 dsh-im 投递 HTTP 接口（**函数名与返回码契约不变 ⇒ 7 个调用点一行未改**）；`Test-PageHealth` 判定抽成纯函数 `Get-PageHealthVerdict` 并新增**可见性维度**（陈旧 tip 被容器折叠时不再误判 `PageDown`，此前导致每 10 分钟无谓重启 Chrome）；新增测试 `page_health_verdict` / `page_health` / `page_select` / `page_heal_throttle` / `daemon_launch` / `env_block`（主仓库回归由 8 文件 296 断言增至 **14 文件 390 断言**）；新增 `scripts\okki`、`scripts\waimao`、`tools\email-verify`、`tools\status-verify`、`clean-c`
   - 2026-09-18：P0 优化——守护加固（任务 `StopOnIdleEnd=false` + Health 自动拉起 watchdog，取消 WinSW 服务化）、重复发送修复（ts 归一化去重 + 发送后 3 分钟冷却）、日志/PII 治理（ACCIO-PARSE-ERR 单行化、日志轮转、快照保留、案卷归档）、死信心跳（healthchecks.io ping 接口就绪）
   - 2026-09-12（3）：报告企微推送（`lib\report_push.ps1`，quality/weekly 生成后自动推摘要，`report_push_enabled` 开关 + 去重）+ 模型切换 `deepseek-v4-flash`（`thinking:disabled`）+ 附件识别（`lib\vision.ps1`/`lib\doc.ps1` + `tools\doc-reader` 组件；monitor 图片多模态/文档解析/机会性提取 → `data\vision_extract\`；goods 合并 sidecar）
   - 2026-09-12（2）：control-agent 保活并入 watchdog（五重守护，agent_start.ps1，启动失败 5 分钟冷却）+ 停用标记机制（bin stop/start 自动维护）+ 注册 `AlibabaAutoReplyWatchdog` 登录自启任务（+30s/Hidden/不限时）+ status 纳入 control-agent 与第 5 项任务
