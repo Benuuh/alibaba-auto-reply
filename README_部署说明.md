@@ -250,9 +250,13 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 
 计划任务 `AlibabaAutoReplyHealth` 每 15 分钟运行 `scripts\health_check.ps1`，独立于 watchdog 检查整栈健康；异常时经企微推送告警（**每项检查 30 分钟去重**，恢复时推送 `RECOVERED`），每轮结果写入 `logs\health.log`，去重状态写入 `data\health_state.json`（可安全删除，删除后下一轮重新告警）。
 
-检查项（共 7 项，缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`control_agent`（agent_bridge.js 进程存在，或有 `data\control-agent.disabled` 停用标记）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
+检查项（共 6 项，缺一不可）：`monitor_process`（monitor.pid 对应进程存活且命令行为 monitor.ps1）、`monitor_log_fresh`（monitor.log 静默 < 600s）、`watchdog_process`（watchdog.pid 存活）、`watchdog_cooldown`（无未到期风暴冷却）、`cdp_9222`（CDP 可达）、`page_logged_in`（页面存在 `textarea.send-textarea`，用于发现"CDP 通但未登录/空白"的静默空转）。
 
 > ✅ **2026-09-26 起已移除 `wecom_connected` 检查**：它探的旧桥 `19886` 已按 Phase L 停用，该检查永久 FAIL、只能产生噪声，故按决策删除。旧桥相关判据仍在 `scripts\status.ps1` 中（未改，属遗留项）。
+>
+> ✅ **2026-09-26 起已移除 `control_agent` 检查**：该组件已退休（唯一收信入口旧企微桥退役、未迁移到 dsh-im、且 `owner_userid` 被填成占位符导致指令全被静默丢弃）。它原恒返回 `OK` + detail `disabled by flag`，读起来像"工作正常"，会误导排查。企微远程控制能力现由 **DSH agent** 承担；`watchdog` 守护同步由五重降为**四重**（进程/日志/CDP/企微）。详见 `docs\KNOWN_EXCEPTIONS.md` **E-20**。
+>
+> 📌 **本节是检查项清单的唯一权威定义处**。清单可由 `scripts\health_check.ps1` 的 `Add-Check` 调用自动派生；口径见 `docs\文档权威约定.md`，并由 `tests\docs_consistency.tests.ps1` 自动校验。
 
 排障：`Get-Content logs\health.log -Tail 20`（每行 `HEALTH: name=OK|FAIL ...`）；任务状态 `Get-ScheduledTaskInfo -TaskName AlibabaAutoReplyHealth`（LastTaskResult 应为 0）。
 
@@ -359,7 +363,7 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 - **`AlibabaAutoReplyWatchdog` 只有"登录自启"触发器**：机器重启后若无人登录，守护不会自动起来
   （如需开机即跑，应另加开机触发器并保留单实例保护）
 - 变更记录（详见 docs\CHANGELOG.md）：
-  - **2026-09-26：告警通道交接 + dsh-im 主动投递出口 + 页面判据修复**——旧企微长连接桥（`127.0.0.1:19886`）与 dsh-im 插件抢同一机器人而互踢（实测旧桥 `AUTH-OK` 后 87 秒被 `KICKED-OFFLINE`，且旧启动器曾悬死 17 分钟把 watchdog 堵停）；新增**交接门**（`data\alert-channel.handover.json` + 新通道宿主存在才让路，`WECOM_FORCE_RUN=1` 逃生门）阻断旧桥保活；`lib\wecom.ps1::Send-WecomMessage` 内部改走 dsh-im 投递 HTTP 接口（**函数名与返回码契约不变 ⇒ 7 个调用点一行未改**）；`Test-PageHealth` 判定抽成纯函数 `Get-PageHealthVerdict` 并新增**可见性维度**（陈旧 tip 被容器折叠时不再误判 `PageDown`，此前导致每 10 分钟无谓重启 Chrome）；新增测试 `page_health_verdict` / `page_health` / `page_select` / `page_heal_throttle` / `daemon_launch` / `env_block`（主仓库回归由 8 文件 296 断言增至 **15 文件 427 断言**）；新增 `scripts\okki`、`scripts\waimao`、`tools\email-verify`
+  - **2026-09-26：告警通道交接 + dsh-im 主动投递出口 + 页面判据修复**——旧企微长连接桥（`127.0.0.1:19886`）与 dsh-im 插件抢同一机器人而互踢（实测旧桥 `AUTH-OK` 后 87 秒被 `KICKED-OFFLINE`，且旧启动器曾悬死 17 分钟把 watchdog 堵停）；新增**交接门**（`data\alert-channel.handover.json` + 新通道宿主存在才让路，`WECOM_FORCE_RUN=1` 逃生门）阻断旧桥保活；`lib\wecom.ps1::Send-WecomMessage` 内部改走 dsh-im 投递 HTTP 接口（**函数名与返回码契约不变 ⇒ 7 个调用点一行未改**）；`Test-PageHealth` 判定抽成纯函数 `Get-PageHealthVerdict` 并新增**可见性维度**（陈旧 tip 被容器折叠时不再误判 `PageDown`，此前导致每 10 分钟无谓重启 Chrome）；新增测试 `page_health_verdict` / `page_health` / `page_select` / `page_heal_throttle` / `daemon_launch` / `env_block`（主仓库回归由 8 个测试文件增至 15 个 —— **当时快照**：296 → 427 条断言；此处为历史记录，当前值见 `tests\run_tests.ps1` 实时输出，勿据本行判断现状）；新增 `scripts\okki`、`scripts\waimao`、`tools\email-verify`
   - **2026-09-26（清理）**：移除与本项目无关的 `clean-c\`（C 盘缓存清理工具，误入库）与一次性验收工具 `tools\status-verify\`，并清掉 `scripts\` 下的旧备份残留（`reply_agent_prompt.md.bak/.pre`、`reply_rules.json.bak`）；被移除内容已归档到**部署根的上一级**（目录名 `Agent_work-removed_<时间戳>`，含哈希），`clean-c\` 与 `status-verify\` 另可从 git 历史取回。**未删除任何被引用的代码**：静态引用分析显示的"无调用"脚本（`backup.ps1`/`dashboard.ps1`/`quote_remind.ps1`）经核实均为**手动工具**，已在根 README「手动工具」表中登记
   - 2026-09-18：P0 优化——守护加固（任务 `StopOnIdleEnd=false` + Health 自动拉起 watchdog，取消 WinSW 服务化）、重复发送修复（ts 归一化去重 + 发送后 3 分钟冷却）、日志/PII 治理（ACCIO-PARSE-ERR 单行化、日志轮转、快照保留、案卷归档）、死信心跳（healthchecks.io ping 接口就绪）
   - 2026-09-12（3）：报告企微推送（`lib\report_push.ps1`，quality/weekly 生成后自动推摘要，`report_push_enabled` 开关 + 去重）+ 模型切换 `deepseek-v4-flash`（`thinking:disabled`）+ 附件识别（`lib\vision.ps1`/`lib\doc.ps1` + `tools\doc-reader` 组件；monitor 图片多模态/文档解析/机会性提取 → `data\vision_extract\`；goods 合并 sidecar）

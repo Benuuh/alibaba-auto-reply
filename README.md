@@ -192,7 +192,7 @@ Get-NoReplySummary                   # → 当前人工接管白名单(2): john 
 > 靠轮询本地桥 `127.0.0.1:19886` 收指令；该桥 2026-09-26 停用后失效。
 > 现已在 `scripts\lib\no_reply.ps1` 内置写侧并配 `scripts\whitelist.ps1` CLI，**读侧（monitor/nudge/quote）一行未改**。
 > 写出的文件与 `agent_bridge.js` 的 `JSON.stringify(list,null,2)+'\n'` **逐字节一致**（LF + 2 空格缩进 + 无 BOM），
-> 有回归测试 `tests\no_reply_write.tests.ps1`（36 断言）守着这个契约。
+> 有回归测试 `tests\no_reply_write.tests.ps1` 守着这个契约（断言数以实时输出为准）。
 
 **企微指令要真正生效，需要一个执行端**——当前由 DSH agent 承担（control-agent 自 2026-09-26 起停用）。
 给 agent 的指令模板见部署手册「人工接管白名单」一节。
@@ -283,7 +283,8 @@ alibaba-auto-reply/
 │   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例 + shadow_compare.ps1）
 │   ├── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试；**2026-09-26 退休**，引用已摘净，代码保留备查 —— `docs\KNOWN_EXCEPTIONS.md` E-20）
 │   └── email-verify\         ← 邮箱可投递性验证（MX/SMTP 探测，Node 零依赖）
-└── tests\                    ← 主仓库回归测试（16 文件 436 断言，fixtures 虚构数据）
+└── tests\                    ← 主仓库回归测试（fixtures 是虚构数据；**文件数与断言数见
+                                  `run_tests.ps1` 实时输出，此处刻意不写死** —— 见 `docs\文档权威约定.md` §3 规则三）
 ```
 
 **运行时数据根 `<部署根>-runtime\` —— 不进版本控制（2026-09-26 由部署根迁出）**：
@@ -320,7 +321,7 @@ alibaba-auto-reply/
 ## 🧪 开发与运维
 
 ```powershell
-# 主仓库回归测试（16 文件 436 断言，实测全绿）
+# 主仓库回归测试（文件数与断言数以本次输出为准；含文档一致性校验 docs_consistency）
 # 分布：accio 29 / alert_dedup 10 / daemon_launch 10 / env_block 12 / goods_engine 27 / lock 11 /
 #       log_maintenance 22 / no_reply 29 / no_reply_write 36 / page_heal_throttle 15 / page_health 15 /
 #       page_health_verdict 10 / page_select 15 / reply_engine 119 / report_push 33 / vision 43
