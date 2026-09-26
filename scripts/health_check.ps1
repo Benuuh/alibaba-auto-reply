@@ -160,10 +160,12 @@ foreach ($r in $recovers) {
 # this file has no BOM, so Chinese string literals here would be silently mangled (KNOWN_EXCEPTIONS E-10).
 try {
     $hbHour = 9
+    $hbOn = $false
     $hbCfg = Get-SkillConfig
     if ($hbCfg.PSObject.Properties.Name -contains 'heartbeat_hour') { $hbHour = [int]$hbCfg.heartbeat_hour }
+    if ($hbCfg.PSObject.Properties.Name -contains 'heartbeat_enabled') { $hbOn = [bool]$hbCfg.heartbeat_enabled }
     $hbFailed = @($checks | Where-Object { -not $_.ok }).Count
-    if ($hbFailed -eq 0) {
+    if ($hbOn -and $hbFailed -eq 0) {
         if (Test-HeartbeatDue -Now $now -LastSent (Get-HeartbeatLastSent) -Hour $hbHour) {
             $hbRes = Send-DailyHeartbeat -CheckCount $checks.Count -Now $now
             Write-Log ("HEARTBEAT: " + $hbRes)
