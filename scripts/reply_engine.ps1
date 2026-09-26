@@ -216,6 +216,19 @@ function Resolve-IntentEarly($c) {
 }
 
 # 意图族 B(业务咨询):联系方式/计费/流程/时效/电池/砍价/比价/供应商。命中返回文本,未命中返回 $null
+# [2026-09-26 更像真人销售 §12.2 冲突 A]
+# 场景 (b) 的成品话术("我直接联系供应商"): 买家**有**供应商但拿不到尺寸 / 不愿意给联系方式时用。
+# 放在本函数**最前面**是必须的: 实测这两类句子会被更早的分支抢走 ——
+#   "i'd rather not share their contact" 命中 #1(问联系方式) → 回了我们的联系方式模板;
+#   "i can't get the dimensions from them" 命中 #6(砍价) → 回了"要准确尺寸才能报最优价"。
+# 两条都不是本场景该说的话。本分支判据很窄(H1 供应商 且 H2 拿不到/不愿给), 不覆盖既有任何场景。
+$script:SupplierContactAsk = @{
+    en = "If you can share your supplier's contact, I can confirm the cargo details with them directly - that way I get you an accurate quote faster, and you don't have to go back and forth."
+    es = "Si puede compartir el contacto de su proveedor, puedo confirmar los detalles de la carga directamente con ellos: así le doy una cotización precisa más rápido y usted no tiene que ir y venir."
+    pt = "Se puder compartilhar o contato do seu fornecedor, posso confirmar os detalhes da carga diretamente com eles - assim consigo uma cotação precisa mais rápido e você não precisa ficar indo e voltando."
+    fr = "Si vous pouvez partager le contact de votre fournisseur, je peux confirmer les détails de la marchandise directement avec lui - ainsi je vous obtiens un devis précis plus vite, sans allers-retours de votre part."
+}
+
 function Resolve-IntentInfo($c) {
     $latestLower = $c.latestLower
     $ctxAll = $c.ctxAll
@@ -224,6 +237,16 @@ function Resolve-IntentInfo($c) {
     $vars = $c.vars
     $templates = $c.templates
     $dataCollect = $c.dataCollect
+
+    # 0. [§12.2 冲突 A 场景 (b)] 有供应商, 但拿不到尺寸 / 不愿意给联系方式 → 主推"我直接联系供应商"
+    $hasSupplier = $latestLower -match 'supplier|vendor|factory|proveedor|fornecedor|供应商'
+    if ($hasSupplier) {
+        $cantGetDims = $latestLower -match '(can''t|cannot|can not|unable to|no way to|hard to|difficult to|don''t have access).{0,30}(get|obtain|find|measure|know).{0,30}(dimension|size|measurement|spec|尺寸|规格)'
+        $wontShare = $latestLower -match "(rather not|prefer not|not allowed|not permitted|not comfortable|won''t|will not|can''t|cannot|no puedo|nao posso|não posso).{0,30}(share|give|send|provide|pass on|pass along|compartir|dar|enviar|fornecer)"
+        if ($cantGetDims -or $wontShare) {
+            return (Resolve-Template $script:SupplierContactAsk[$lang] $vars)
+        }
+    }
 
     # 1. 客户询问我方联系方式 → 提供（被问到才给）
     if ($latestLower -match 'contact|whatsapp|wechat|phone|number|email|reach you|how to contact|联系方式|telefono|whats') {
@@ -270,7 +293,18 @@ function Resolve-IntentInfo($c) {
         return "We offer full door-to-door service with warehouses across major Chinese cities, our own truck fleet and cargo insurance, which helps avoid extra charges others may add later. If you share your goods details and destination, I'll make sure you get a fair, transparent quote."
     }
     # 8. 买家表示没有供应商/无法联系供应商 → 引导提供货物详情（别套 follow_up_details）
+    #    [2026-09-26 更像真人销售 §12.2 冲突 A] 本句按场景拆分（老板已批准）：
+    #      (a) 买家**真没有**供应商（终端用户 / 货还没定工厂）→ 保留原话（我们并不需要供应商联系方式）
+    #      (b) 买家**有**供应商但拿不到尺寸 → 走"我直接联系供应商"主推说法（替买家干活，
+    #          顺手拿到供应商联系方式，供应商手上有装箱数据）
+    #    注意 (b) 只在"同一句里既提到供应商、又提到给不了尺寸/数据"时命中，改动面尽量小。
     if ($latestLower -match "(no|don't have|dont have|do not have|doesn't have|doesnt have|without|not (have|find)|can't (find|get|reach)|dont (have|find|get|reach)|cannot (find|get|reach)|unable|no tengo|nao tenho|never had).*(supplier|vendor|factory|proveedor|fornecedor|供应商)|没有供应商") {
+        # (b) 有供应商但不给尺寸/给不了数据 —— 话术定义见本文件顶部的 $script:SupplierContactAsk
+        if ($latestLower -match '(supplier|vendor|factory|proveedor|fornecedor|供应商)') {
+            if ($latestLower -match "(dimension|size|measurement|spec|sizes|尺寸|规格)|(can't|cannot|dont|don't|won't|not able to|unable|rather not|prefer not|not allowed|private|confidential).{0,40}(share|give|send|provide|量|给|提供)") {
+                return (Resolve-Template $script:SupplierContactAsk[$lang] $vars)
+            }
+        }
         $noSup = @{
             en = "No problem at all! We don't strictly need supplier contact info - just tell us what you're shipping (goods type, total weight, packaging dimensions L*W*H) and the destination address, and we'll handle the quote and shipping from there."
             es = "¡No hay problema! No necesitamos estrictamente el contacto del proveedor - solo díganos qué mercancía envía, el peso, las dimensiones del embalaje (L*A*H) y la dirección de destino, y desde ahí hacemos la cotización y el envío."
