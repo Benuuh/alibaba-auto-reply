@@ -248,7 +248,8 @@ alibaba-auto-reply/
 ├── README.md                 ← 本文件
 ├── README_部署说明.md        ← 部署与运维手册
 ├── SKILL.md                  ← agent 技能定义（opencode 镜像同步对象）
-├── docs\                     ← 6 个文件：CHANGELOG.md、BrowserSkill使用约定.md，
+├── docs\                     ← 7 个文件：**KNOWN_EXCEPTIONS.md（已知例外登记册 E-01..E-19，
+│                               排查前必读）**、CHANGELOG.md、BrowserSkill使用约定.md，
 │                               外贸主动获客系统_设计文档.md、_详细设计.md、
 │                               _调研与实施方案.md、外贸主动获客_P1投放活动设计.md
 ├── .githooks\                ← pre-commit / pre-push 敏感扫描（sanitize_check.ps1）
@@ -293,8 +294,9 @@ alibaba-auto-reply/
 <部署根>-runtime\
 ├── chrome-profile\           ← Chrome 登录态（1036 MB；配置键 chrome_profile）
 ├── chrome-profile-okki\      ← OKKI(小满 CRM) 登录态（240 MB；配置键 okki_profile）
-├── specs\                    ← 过程记录：全部 spec / REPORT / KNOWN_EXCEPTIONS.md
-│   │                           （178 文件 21 MB）。**不是可丢弃的运行时数据**，只移动不删除
+├── specs\                    ← 过程记录：全部 spec / REPORT（178 文件 21 MB）
+│   │                          **不是可丢弃的运行时数据**，只移动不删除
+│   │                          （已知例外登记册已移入 `docs\KNOWN_EXCEPTIONS.md` 并入库）
 │   └── 归档\                 ← 历史归档
 ├── backups\                  ← 代码快照 zip（13 MB；配置键 backups_dir；保留最近 20 份）
 ├── logs\                     ← 运行日志（配置键 logs_dir）
@@ -305,7 +307,7 @@ alibaba-auto-reply/
 > **路径只有一个来源**：`scripts\config.json` 的路径键（`deploy_root`/`scripts_dir`/`logs_dir`/`data_dir`/`reports_dir`/`chrome_profile`/`okki_profile`/`backups_dir`）。
 > 迁运行时数据**只需要改这一个文件**，代码不动。
 > **反查判据**：若部署根**重新长出** `logs\` / `reports\` 等目录 ⇒ 说明某个路径键没改对（或某处多了硬编码路径），
-> 不是"正常现象"。详见 `specs\KNOWN_EXCEPTIONS.md` **E-17**。
+> 不是"正常现象"。详见 `docs\KNOWN_EXCEPTIONS.md` **E-17**。
 
 **两份 `cdp.ps1` 的关系（刻意拆分，不是待清理的重复文件）**：
 

@@ -2,7 +2,8 @@
 
 > 适用范围：**项目的部署根目录**（下称 `<部署根>`）这套 24/7 阿里卖家自动回复系统的**调试 profile**
 > （`chrome-profile`，`--remote-debugging-port=9222`）。
-> 权威依据：`specs\BrowserSkill接入_20260926.md` §6-S5；风险分析见同 spec §1.1 / §1.6 / §1.7。
+> 权威依据：`<部署根>-runtime\specs\BrowserSkill接入_20260926.md` §6-S5；风险分析见同 spec §1.1 / §1.6 / §1.7。
+> （2026-09-26 起 `specs\` 已随"运行数据外迁"移出部署根，见 `docs\KNOWN_EXCEPTIONS.md` E-17。）
 > **本约定是"约定级"缓解，不是机制级**（见铁律 7）。
 
 ## 铁律
