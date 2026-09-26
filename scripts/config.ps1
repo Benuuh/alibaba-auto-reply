@@ -39,6 +39,7 @@ function Get-SkillPath([string]$name) {
         "logs"    { if ($cfg.logs_dir) { return [string]$cfg.logs_dir } else { return (Join-Path $root "logs") } }
         "data"    { if ($cfg.data_dir) { return [string]$cfg.data_dir } else { return (Join-Path $root "data") } }
         "profile" { if ($cfg.chrome_profile) { return [string]$cfg.chrome_profile } else { return (Join-Path $root "chrome-profile") } }
+        "backups" { if ($cfg.backups_dir) { return [string]$cfg.backups_dir } else { return (Join-Path $root "backups") } }
         "creds"   { if ($cfg.credentials_file) { return [string]$cfg.credentials_file } else { return (Join-Path $root "credentials.md") } }
         "llmcfg"  { if ($cfg.llm_config_file) { return [string]$cfg.llm_config_file } else { return (Join-Path $root "llm_config.json") } }
         "cdp"     { if ($cfg.cdp_script) { return [string]$cfg.cdp_script } else { return (Join-Path $scripts "cdp.ps1") } }

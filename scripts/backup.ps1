@@ -5,8 +5,9 @@ param([switch]$Snapshot)
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "config.ps1")
-$root = Get-SkillPath ""
-$bakDir = Join-Path $root "backups"
+$root = Get-SkillPath ""      # 仍用于下方 scripts\ 与根文件的打包基准（zip 内相对路径）
+$bakDir = Get-SkillPath "backups"
+if (-not $bakDir) { $bakDir = Join-Path $root "backups" }   # 兜底：配置缺失时退回部署根
 if (-not (Test-Path $bakDir)) { New-Item -ItemType Directory -Path $bakDir -Force | Out-Null }
 
 # 排除运行时产物(日志/快照/状态/pid/备份/临时)

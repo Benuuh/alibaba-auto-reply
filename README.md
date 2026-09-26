@@ -239,6 +239,8 @@ Get-NoReplySummary                   # → 当前人工接管白名单(2): john 
 
 ## 📁 目录结构
 
+**部署根 `D:\Agent_work\` —— 只放代码与配置（2026-09-26 起）**：
+
 ```
 alibaba-auto-reply/
 ├── credentials.md            ← 敏感信息唯一文件（不入库）
@@ -246,11 +248,12 @@ alibaba-auto-reply/
 ├── README.md                 ← 本文件
 ├── README_部署说明.md        ← 部署与运维手册
 ├── SKILL.md                  ← agent 技能定义（opencode 镜像同步对象）
-├── docs\
-│   ├── CHANGELOG.md          ← 版本变更记录
-│   ├── BrowserSkill使用约定.md ← BrowserSkill CLI 接入铁律（7 条）
-│   └── 外贸主动获客系统_*.md  ← 主动获客（Leadgen）设计文档
+├── docs\                     ← 6 个文件：CHANGELOG.md、BrowserSkill使用约定.md，
+│                               外贸主动获客系统_设计文档.md、_详细设计.md、
+│                               _调研与实施方案.md、外贸主动获客_P1投放活动设计.md
 ├── .githooks\                ← pre-commit / pre-push 敏感扫描（sanitize_check.ps1）
+├── .opencode\                ← opencode 工具自身的插件依赖（@opencode-ai/plugin，
+│                               3678 文件 / 52.5 MB）。**不属本项目数据、不入库、刻意留在部署根**
 ├── scripts\                  ← 主代码 + 状态 + 规则
 │   ├── monitor.ps1           ← 监控主程序（全自动闭环，单实例）
 │   ├── reply_engine.ps1      ← 规则回复引擎（纯逻辑，可单测）
@@ -258,9 +261,9 @@ alibaba-auto-reply/
 │   ├── reply_rules.json      ← 语料库/模板（可热编辑）
 │   ├── reply_agent_prompt.md ← LLM 提示词（可热编辑）
 │   ├── config.ps1            ← 配置加载器（Get-SkillPath/Get-CdpPort）
-│   ├── config.json.example   ← 路径配置模板
+│   ├── config.json.example   ← 路径配置模板（仓库里唯一的 schema 记录）
 │   ├── chrome_ensure.ps1     ← Chrome 自愈 + 自动登录（按 profile 精确匹配）
-│   ├── cdp.ps1 / lib\cdp.ps1 ← CDP 桥接（navigate/eval）+ 页面判据 Test-PageHealth
+│   ├── cdp.ps1 / lib\cdp.ps1 ← 见下方「两份 cdp.ps1 的关系」
 │   ├── watchdog.ps1          ← 五重守护（进程/日志/CDP/企微/control-agent 保活 + 交接门）
 │   ├── wecom_start.ps1       ← 企微保活启动器 v3（幂等三段 + **交接门**）
 │   ├── agent_start.ps1       ← control-agent 保活启动器（幂等，停用标记感知）
@@ -271,6 +274,7 @@ alibaba-auto-reply/
 │   ├── log_rotate.ps1 / retention.ps1 ← 日志轮转 / 快照保留（90 天归档）
 │   ├── dashboard.ps1         ← 数据看板（手动工具）
 │   ├── state.json(+bak)      ← 已回复去重状态
+│   ├── monitor.pid / watchdog.pid ← 常驻进程 pid（启停一律按它精确停，禁止 -Action stop）
 │   ├── okki\                 ← 小满 CRM(OKKI) 链路：CDP(9223)/登录/商机建档
 │   ├── waimao\               ← 网易外贸(王野)CDP 桥(9224) + 只读侦察
 │   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push/accio/alert_local/deadman）
@@ -278,19 +282,47 @@ alibaba-auto-reply/
 │   ├── wecom-connector\      ← 企微 HTTP 桥（Node，63 例测试；**保活已由交接门阻断**）
 │   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
 │   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例 + shadow_compare.ps1）
-│   ├── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试）
+│   ├── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试；**已停用**，摘引用另立 spec）
 │   └── email-verify\         ← 邮箱可投递性验证（MX/SMTP 探测，Node 零依赖）
-├── tests\                    ← 主仓库回归测试（14 文件 390 断言，fixtures 虚构数据）
-├── logs\  data\  reports\  backups\   ← 运行时数据（均不入库）
-└── chrome-profile\           ← Chrome 登录态（独立 profile，勿删除）
+└── tests\                    ← 主仓库回归测试（16 文件 436 断言，fixtures 虚构数据）
 ```
+
+**运行时数据根 `D:\Agent_work-runtime\` —— 不进版本控制（2026-09-26 由部署根迁出）**：
+
+```
+D:\Agent_work-runtime\
+├── chrome-profile\           ← Chrome 登录态（1036 MB；配置键 chrome_profile）
+├── chrome-profile-okki\      ← OKKI(小满 CRM) 登录态（240 MB；配置键 okki_profile）
+├── specs\                    ← 过程记录：全部 spec / REPORT / KNOWN_EXCEPTIONS.md
+│   │                           （178 文件 21 MB）。**不是可丢弃的运行时数据**，只移动不删除
+│   └── 归档\                 ← 历史归档
+├── backups\                  ← 代码快照 zip（13 MB；配置键 backups_dir；保留最近 20 份）
+├── logs\                     ← 运行日志（配置键 logs_dir）
+├── data\                     ← 买家快照/档案（PII，仅本机；配置键 data_dir）
+└── reports\                  ← 质量/总结/周报（配置键 reports_dir）
+```
+
+> **路径只有一个来源**：`scripts\config.json` 的路径键（`deploy_root`/`scripts_dir`/`logs_dir`/`data_dir`/`reports_dir`/`chrome_profile`/`okki_profile`/`backups_dir`）。
+> 迁运行时数据**只需要改这一个文件**，代码不动。
+> **反查判据**：若部署根**重新长出** `logs\` / `reports\` 等目录 ⇒ 说明某个路径键没改对（或某处多了硬编码路径），
+> 不是"正常现象"。详见 `specs\KNOWN_EXCEPTIONS.md` **E-17**。
+
+**两份 `cdp.ps1` 的关系（刻意拆分，不是待清理的重复文件）**：
+
+| 文件 | 职责 |
+|---|---|
+| `scripts\cdp.ps1` | CLI 入口：可独立命令行调用的包装 |
+| `scripts\lib\cdp.ps1` | 库：被 `monitor.ps1` 等 dot-source，含 `Get-Page` / `Test-PageHealth` 判据 |
+
+> 两者的 `Get-Page` **必须逐字一致**，由 `tests\page_select.tests.ps1` 断言锁住 ⇒ 改一份就必须同步改另一份。
+> 另注：`monitor.ps1` 只在启动时 dot-source 一次 ⇒ 改 `lib\cdp.ps1` 后**必须重启 monitor** 才生效。
 
 ## 🧪 开发与运维
 
 ```powershell
-# 主仓库回归测试（15 文件 427 断言，实测全绿）
-# 分布：accio 29 / daemon_launch 10 / env_block 12 / goods 27 / lock 11 / log_maintenance 22 /
-#       no_reply 29 / no_reply_write 36 / page_heal_throttle 15 / page_health 15 /
+# 主仓库回归测试（16 文件 436 断言，实测全绿）
+# 分布：accio 29 / alert_dedup 10 / daemon_launch 10 / env_block 12 / goods_engine 27 / lock 11 /
+#       log_maintenance 22 / no_reply 29 / no_reply_write 36 / page_heal_throttle 15 / page_health 15 /
 #       page_health_verdict 10 / page_select 15 / reply_engine 119 / report_push 33 / vision 43
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
 
