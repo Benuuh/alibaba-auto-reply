@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Action = "start",
     [string]$LogDir = ""
 )
@@ -15,6 +15,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\send.ps1")
 . (Join-Path $PSScriptRoot "lib\llm.ps1")
 . (Join-Path $PSScriptRoot "lib\lock.ps1")
+# [FIX-PAGEHEALTH 2026-09-25] 数据面断连告警只走既有本地告警通道（文件+弹窗+企微），禁止自建通知路径
+. (Join-Path $PSScriptRoot "lib\alert_local.ps1")
 . (Join-Path $PSScriptRoot "lib\goods.ps1")
 . (Join-Path $PSScriptRoot "lib\wecom.ps1")
 . (Join-Path $PSScriptRoot "lib\quote.ps1")
@@ -156,6 +158,12 @@ function Open-ConvoAndGetMessages([string]$keyword) {
     var rich = w.querySelector('.content-with-translation.text-content, .session-rich-content');
     if (!rich) return;
     var txt = rich.innerText.replace(/\n+/g,' ').trim();
+    // [FIX-DUP 2026-09-25] 原文节点优先：译文是冗余的，且未渲染时会与原文重复导致 hash 突变
+    var richOrig = w.querySelector('.session-rich-content.text')
+                || w.querySelector('.content-with-translation .session-rich-content')
+                || rich;
+    var otxt = (richOrig.innerText || '').replace(/\n+/g,' ').trim();
+    if (!otxt) { otxt = txt; }
     var clean = txt.replace(/翻译中…|反馈|已读|回复|翻译|Revert|由阿里提供|自动接待发送/g,'').trim();
     var hasImg = !!w.querySelector('img[src*="alicdn"], [class*=image] img, [class*=Image] img, [class*=picture]');
     var nameEl0 = w.querySelector('.item-base-info .name');
@@ -190,7 +198,7 @@ function Open-ConvoAndGetMessages([string]$keyword) {
       }
     }
     if (clean.length <= 2) {
-      if (hasImg && (cls.indexOf('item-left') >= 0)) out.push({b:true, t:'[IMG]', ts:'', imgs: imgUrls, file: fileInfo});
+      if (hasImg && (cls.indexOf('item-left') >= 0)) out.push({b:true, t:'[IMG]', ot:'[IMG]', ts:'', imgs: imgUrls, file: fileInfo}); // [FIX-DUP 2026-09-25] ot=原文
       return;
     }
     var buyerName = (nameEl0 && nameEl0.innerText.trim()) || '';
@@ -207,7 +215,7 @@ function Open-ConvoAndGetMessages([string]$keyword) {
       var m2 = baseTxt.match(/(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})/);
       if (m2) ts = m2[1];
     }
-    out.push({b: isBuyer, t: clean.substring(0,1000), ts: ts, imgs: isBuyer ? imgUrls : [], file: isBuyer ? fileInfo : null});
+    out.push({b: isBuyer, t: clean.substring(0,1000), ot: otxt.substring(0,1000), ts: ts, imgs: isBuyer ? imgUrls : [], file: isBuyer ? fileInfo : null}); // [FIX-DUP 2026-09-25] ot=原文,仅用于去重键
   });
   // B2 附件标记挂载: 仅最新买家消息; 最新无标记但含指代词(photo/image/图/文件等) → 回溯最近带标记的买家消息
   var buyerIdx = [];
@@ -226,7 +234,15 @@ function Open-ConvoAndGetMessages([string]$keyword) {
     if (afile) { last.t = last.t + ' @@FILE:' + encodeURIComponent(afile.name) + '|' + (afile.url || ''); }
   }
   var lines = [];
-  out.forEach(function(o){ lines.push((o.b ? '[BUYER] ' : '[ME] ') + o.t + (o.ts ? ' @@TS:' + o.ts : '')); });
+  // [FIX-DUP 2026-09-25] 行尾追加原文标记(@@OT,B64/UTF-8),供 PS 侧构造去重键;@@TS 产出保持不变
+  out.forEach(function(o){
+    var line = (o.b ? '[BUYER] ' : '[ME] ') + o.t + (o.ts ? ' @@TS:' + o.ts : '');
+    if (o.b && o.ot) {
+      var otb = (typeof btoa === 'function') ? btoa(unescape(encodeURIComponent(o.ot))) : '';
+      if (otb) { line += ' @@OT:' + otb; }
+    }
+    lines.push(line);
+  });
   // P3.4 买家档案:抓取客户详情卡片原始文本(国家/注册时间/标签等),PS 侧解析
   var profile = '';
   var card = document.querySelector('.alicrm-customer-detail-card');
@@ -613,24 +629,22 @@ function Invoke-ConvoItem($ctx, $item) {
         Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
         return
     }
-    # dedup 跳过会话进冷却（3→6→12→15 分钟递增），预览变化（买家新消息）立即打破冷却
+    # dedup 跳过会话进冷却（3→6→12→15 分钟递增）
+    # [FIX-DUP 2026-09-25] 方案甲：冷却期内不再"预览变化即提前解除"。列表预览含未读计数/翻译标记等 UI 噪声
+    #   （实测两轮预览只差未读计数 "1"），且我方回复本身就会改变预览 → 原逻辑必然误判为"买家新动态"而提前解除冷却。
+    #   现改为冷却期内一律 TEMP-SKIP，到期后自然处理；买家新消息最晚延迟一个冷却周期（默认 3 分钟）。
     if ($ctx.skipCooldown.ContainsKey($key)) {
         $co = $ctx.skipCooldown[$key]
-        $previewChanged = $co.preview -and ($co.preview -ne $item.preview)
-        if ($previewChanged) {
-            Write-Log "BREAK $($key): preview changed, cooldown lifted"
-            $ctx.skipCooldown.Remove($key)
+        $pkeyNow = Get-NormalizedMsgText $item.preview   # [FIX-DUP 2026-09-25] 归一化预览仅用于日志留痕
+        $skipMins = [int]((Get-Date) - $co.time).TotalMinutes
+        # 冷却随重复命中次数递增（3→6→12→15 分钟封顶）：
+        # 已回复且无新消息的会话不必每 3 分钟重新打开一次，减少页面负担
+        $coolMin = [Math]::Min(3 * [Math]::Pow(2, ([int]$co.count - 1)), 15)
+        if ($skipMins -lt $coolMin) {
+            Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m pkey=[$($co.pkey) -> $pkeyNow] buyers=$($co.buyers)"
+            return
         } else {
-            $skipMins = [int]((Get-Date) - $co.time).TotalMinutes
-            # 冷却随重复命中次数递增（3→6→12→15 分钟封顶）：
-            # 已回复且无新消息的会话不必每 3 分钟重新打开一次，减少页面负担
-            $coolMin = [Math]::Min(3 * [Math]::Pow(2, ([int]$co.count - 1)), 15)
-            if ($skipMins -lt $coolMin) {
-                Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m"
-                return
-            } else {
-                $ctx.skipCooldown.Remove($key)
-            }
+            $ctx.skipCooldown.Remove($key)
         }
     }
     # 已打开失败的会话缓存在 blacklist 中，3 分钟内不重复尝试
@@ -713,37 +727,42 @@ function Invoke-ConvoItem($ctx, $item) {
         $latest = ($buyerMsgs[0] -replace '^\[BUYER\] ','')
         if ($latest.Trim().Length -eq 0) {
             Write-Log "SKIP $($key): empty latest message"
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = 1 }
+            # [FIX-DUP 2026-09-25] buyers=-1 表示"未知"（该分支尚未计算买家条数），判定侧按"不解除冷却"处理
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
             return
         }
-        # 解析消息时间戳（@@TS），并剥掉供 LLM/规则引擎使用；时间戳用于 dedup 区分
-        # "买家重复发送同内容消息"（内容 hash 相同但时间戳不同 → 视为新消息需回复）
+        # 解析消息时间戳（@@TS），并剥掉供 LLM/规则引擎使用
         $ts = ''
         if ($latest -match '@@TS:(.+)$') { $ts = $Matches[1].Trim() }
-        $latestClean = $latest -replace '@@TS:.*?$','' -replace '\s+$',''
-        $lines = $lines | ForEach-Object { $_ -replace '@@TS:.*?$','' }
+        # [FIX-DUP 2026-09-25] 取出原文（@@OT，B64）用于去重键；缺失则回退剥离了标记的文本
+        $otB64 = ''
+        if ($latest -match '@@OT:([A-Za-z0-9+/=]+)') { $otB64 = $Matches[1] }
+        $latestOrig = ''
+        if ($otB64) { try { $latestOrig = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($otB64)) } catch { $latestOrig = '' } }
+        $latestClean = $latest -replace '@@TS:.*?$','' -replace '@@OT:[A-Za-z0-9+/=]+','' -replace '\s+$',''
+        if (-not $latestOrig) { $latestOrig = $latestClean }   # [FIX-DUP 2026-09-25] 兜底：原文缺失时用剥离标记后的文本
+        # [FIX-DUP 2026-09-25] LLM/规则输入必须剥离 @@OT（否则提示词里会出现 B64 垃圾）
+        $lines = $lines | ForEach-Object { $_ -replace '@@TS:.*?$','' -replace '@@OT:[A-Za-z0-9+/=]+','' }
         Write-Log "Latest buyer msg: $latestClean"
-        $hText = Get-StableHash $latestClean
-        # 新格式：文本 hash + 时间戳；无时间戳时回退纯文本 hash（兼容旧 state）
-        $hash = if ($ts) { "$hText|$ts" } else { $hText }
+        # [FIX-DUP 2026-09-25] 去重键 = 归一化原文 hash + 买家消息条数，不再使用合成 @@TS
+        $normText = Get-NormalizedMsgText $latestOrig
+        $hText = Get-StableHash $normText
+        $buyerCount = @($buyerMsgs).Count
+        $newKey = Get-DedupKey $normText $buyerCount
         $already = $false
         $saved = ''
         if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
             $saved = [string]$ctx.state.replied.$skey
-            $already = Test-AlreadyReplied $saved $hText $ts
+            $already = Test-DedupHit $saved $hText $buyerCount
         }
         if ($already) {
-            Write-Log "SKIP $($key): already replied (dedup)"
-            # 旧记录升级:已回复但 saved 为无 ts 旧格式、本次有可解析 ts → 补写规范记录(不发送)
-            if ($ts -and $saved -and ($saved -notmatch '\|') -and ($null -ne (ConvertTo-EpochMs $ts))) {
-                Set-StateHash $ctx $skey $hash
-                Write-Log "DEDUP-UPGRADE $($key) -> $hash"
-            }
+            Write-Log "SKIP $($key): already replied (dedup text=$($hText.Substring(0,8)) buyers=$buyerCount)"
+            # [FIX-DUP 2026-09-25] removed DEDUP-UPGRADE (key no longer carries ts)
             $prev = $null
             if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
             $count = 1
             if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = $count }
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = $count }   # [FIX-DUP 2026-09-25]
         } else {
             $rules = Get-Rules
             $reply = $null
@@ -930,9 +949,10 @@ function Invoke-ConvoItem($ctx, $item) {
                 # 仅发送成功才记录去重；发送失败（ABORT/未发出）不记录，
                 # 否则会话会永久卡在待回复板块且永不重试
                 if ($sendRes -match 'SENT_OK') {
-                    Set-StateHash $ctx $skey $hash
-                    # 发送成功后短冷却:同一会话 3 分钟内不再重复处理(preview 变化自动解除)
-                    $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; count = 1 }
+                    # [FIX-DUP 2026-09-25] 写新格式去重键（归一化原文 hash + 买家消息条数）
+                    Set-StateHash $ctx $skey $newKey
+                    # 发送成功后短冷却:同一会话 3 分钟内不再重复处理（方案甲：冷却期内不再提前解除）
+                    $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }   # [FIX-DUP 2026-09-25]
                     Write-Log "POST-SEND-COOLDOWN $($key) 3min"
                     # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
                     try {
@@ -1028,6 +1048,62 @@ function Invoke-ScanRound($ctx) {
         $script:emptyStreak = 0
         $script:cdpFailStreak = 0
     }
+    # [FIX-PAGEHEALTH 2026-09-25] 数据面连通性判定（与 CDP 错误判定相互独立、互补）
+    #   背景：页面断连时 $snapRaw 返回 '[]'（合法 JSON），既不会进 CDP-ERROR 分支、也不触发 emptyStreak
+    #   之外的任何动作 → 22:24-22:56 业务空转 32 分钟而日志只有 "Scan cycle done"。
+    $pageHealth = Test-PageHealth
+    # [FIX-PAGESELECT 2026-09-26] S1-3 空守卫：Get-Page 无 OneTalk 页时返回 $null，本函数仍返回对象
+    #   （wrong-tab ⇒ PageDown），但异常路径可能返回字符串/数组：直接取 $pageHealth.PageDown 会静默拿到
+    #   $null ⇒ 把"判据失效"伪装成"未断连"（附录 B/C12 同类教训）。这里显式归一化后再判定。
+    if ($pageHealth -is [array]) { $pageHealth = $pageHealth[0] }
+    if ($null -eq $pageHealth -or -not ($pageHealth.PSObject.Properties.Name -contains 'PageDown')) {
+        $pageHealth = [pscustomobject]@{ PageDown=$true; Reason='probe-invalid'; Items=0; Spinner=0; Tab=''; Tip='' }
+    }
+    if ($pageHealth.PageDown) {
+        $script:pageDownStreak++
+        Write-Log "PAGE-DOWN ($($script:pageDownStreak)x) reason=$($pageHealth.Reason) items=$($pageHealth.Items) spin=$($pageHealth.Spinner)"
+    } else {
+        if ($script:pageDownStreak -gt 0) { Write-Log "PAGE-RECOVERED after $($script:pageDownStreak) down round(s)" }
+        $script:pageDownStreak = 0
+    }
+    # [FIX-THROTTLE 2026-09-26] 分级自愈（带静默期/退避/上限，取代原来的 `% 3` 无退避写法）
+    $healSkipped = $false
+    if ($pageHealth.PageDown -and $script:pageDownStreak -ge 2) {
+        Release-AppLock 'onetalk-write'
+        if (-not (Get-AppLock 'onetalk-write' 0)) {
+            $healSkipped = $true
+            Write-Log "PAGE-HEAL-SKIP: onetalk-write held by another process (avoid disturbing an in-flight send)"
+        } else {
+            Release-AppLock 'onetalk-write'
+            $act = Get-PageHealAction -Streak $script:pageDownStreak -Restarts $script:pageHealRestarts -QuietUntil $script:pageHealQuietUntil
+            switch ($act.Action) {
+                'restart' {
+                    Write-Log ("PAGE-HEAL: escalating to chrome_ensure -ForceRestart [$($act.Reason)] quiet=$($act.NextQuietSec)s")
+                    $ensure = powershell -ExecutionPolicy Bypass -NoProfile -File $script:ensureScript -ForceRestart 2>&1
+                    Write-Log "PAGE-HEAL chrome_ensure exit=$LASTEXITCODE result: $(($ensure -join ' | '))"
+                    $script:pageHealRestarts++
+                    if ($act.NextQuietSec -gt 0) { $script:pageHealQuietUntil = (Get-Date).AddSeconds($act.NextQuietSec) }
+                    Write-Log ("PAGE-HEAL: restarts=$($script:pageHealRestarts) quietUntil=" + $(if($script:pageHealQuietUntil){$script:pageHealQuietUntil.ToString('HH:mm:ss')}else{'-'}))
+                }
+                'reload' { Invoke-PageReload "Scheduled page reload (PAGE-DOWN x$($script:pageDownStreak))" }
+                'alert-only' {
+                    if (-not $script:pageHealAlerted) {
+                        $script:pageHealAlerted = $true
+                        Write-Log ("PAGE-HEAL-ALERT-ONLY: $($act.Reason) - 停止自动重启，等待人工介入")
+                        Write-LocalAlert 'page_data_plane' ("OneTalk 数据面断连持续 $($script:pageDownStreak) 轮，已达重启上限 $($script:pageHealRestarts) 次（$($act.Reason)）") 'local-only'
+                    }
+                }
+                default { }
+            }
+        }
+    }
+    # 恢复/稳定后清零计数（D4）
+    if (-not $pageHealth.PageDown -and $script:pageDownStreak -eq 0 -and $script:pageHealRestarts -gt 0) {
+        Write-Log ("PAGE-HEAL: page healthy - reset restart counter (was $($script:pageHealRestarts))")
+        $script:pageHealRestarts = 0
+        $script:pageHealQuietUntil = $null
+        $script:pageHealAlerted = $false
+    }
     # P2.2 按需 reload(替代原每 2 分钟无条件刷新):空闲且距上次活动超过阈值才刷新;忙时超过 30 分钟兜底
     $minsSinceReload = [int]((Get-Date) - $script:lastReload).TotalMinutes
     $minsSinceActivity = [int]((Get-Date) - $ctx.lastActivity).TotalMinutes
@@ -1091,6 +1167,12 @@ function Initialize-MonitorRuntime {
     $script:lastReload = Get-Date
     # CDP 连续失败计数：达到阈值触发 Chrome 自愈（重启+重登）
     $script:cdpFailStreak = 0
+    # [FIX-PAGEHEALTH 2026-09-25] 数据面断连连续轮次（分级自愈用）
+    $script:pageDownStreak = 0
+    # [FIX-THROTTLE 2026-09-26] 自愈节流运行态
+    $script:pageHealRestarts = 0      # 本轮累计 FORCE-RESTART 次数
+    $script:pageHealQuietUntil = $null # 静默期截止时间
+    $script:pageHealAlerted = $false   # 达上限后只告警一次
 }
 
 function Start-Monitor {

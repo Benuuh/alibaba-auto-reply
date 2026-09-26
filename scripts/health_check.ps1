@@ -86,8 +86,19 @@ try {
     if ($cdpOk) {
         $js = "(function(){return JSON.stringify({url:(location.href||'').substring(0,60),hasTa:!!document.querySelector('textarea.send-textarea'),onLogin:!!document.querySelector('input[name=account]')})})()"
         $st = Invoke-CdpEval $js
-        $pageOk = ($st -match 'hasTa":true')
-        Add-Check "page_logged_in" $pageOk ([string]$st)
+        # [FIX-PAGEHEALTH 2026-09-25] hasTa 在断连时依然为 true（实测断连页 sendTextarea=1），
+        #   必须叠加数据面判据，否则"页面断连"会被判为 OK（health.log 22:48/23:03 即此误报）。
+        $ph = Test-PageHealth
+        # [FIX-PAGESELECT 2026-09-26] S1-3 空守卫：Get-Page 无 OneTalk 页时返回 $null，
+        #   Test-PageHealth 正常仍返回对象（wrong-tab 判定），但异常路径可能返回字符串/数组；
+        #   直接取 $ph.PageDown 会静默拿到 $null ⇒ 把"判据失效"伪装成"未断连"。这里显式归一化。
+        if ($ph -is [array]) { $ph = $ph[0] }
+        if ($null -eq $ph -or -not ($ph.PSObject.Properties.Name -contains 'PageDown')) {
+            $ph = [pscustomobject]@{ PageDown=$true; Reason='probe-invalid'; Items=0; Spinner=0; Tab=''; Tip='' }
+        }
+        $pageOk = ($st -match 'hasTa":true') -and (-not $ph.PageDown)
+        $phDetail = "pageDown=$($ph.PageDown) reason=$($ph.Reason) items=$($ph.Items) spin=$($ph.Spinner)"
+        Add-Check "page_logged_in" $pageOk ("$st | $phDetail")
     }
 } catch { Write-Log ("HEALTH-ERR: " + $_.Exception.Message) }
 
@@ -170,7 +181,14 @@ try {
                 $wdErr = Join-Path $script:logsDir "watchdog_err.log"
                 $healResult = 'fail'
                 try {
-                    Start-Process powershell.exe -ArgumentList ("-ExecutionPolicy Bypass -NoProfile -File `"$wdScript`" -Action start") -WindowStyle Hidden -RedirectStandardOutput $wdOut -RedirectStandardError $wdErr | Out-Null
+                    # [FIX-ENVBLOCK 2026-09-25] 原 Start-Process 带 -RedirectStandard* 在本机必抛
+                    #   ArgumentException 'NO_PROXY / no_proxy'(health.log 23:10:01 "HEALTH-HEAL-FAIL"
+                    #   即此路径),导致 watchdog 自愈拉起永远失败。watchdog 是常驻无限循环,
+                    #   不能对它做管道重定向(父进程不排空即死锁) → 改走 Start-ProcessClean 不带重定向;
+                    #   代价:logs\watchdog_out.log / watchdog_err.log 不再更新(watchdog 自身写 watchdog.log)。
+                    #   幂等语义不变:下方仍按 watchdog.pid + 命令行双重校验。
+                    $wdArgList = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', ('"' + $wdScript + '"'), '-Action', 'start')
+                    [void](Start-ProcessClean -FilePath 'powershell.exe' -ArgumentList $wdArgList)
                     Start-Sleep -Seconds 6
                     if (Test-PidAlive (Join-Path $LogDir "watchdog.pid") 'watchdog\.ps1') {
                         $wdPid = ''

@@ -43,11 +43,30 @@ function Start-Bridge {
     }
     if (-not (Test-Path $script:logDir)) { New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null }
     if (-not (Test-Path (Split-Path $script:pidFile -Parent))) { New-Item -ItemType Directory -Path (Split-Path $script:pidFile -Parent) -Force | Out-Null }
-    $p = Start-Process -FilePath "node.exe" -ArgumentList ("`"" + $script:entryJs + "`"") -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput (Join-Path $script:logDir "out.log") `
-        -RedirectStandardError (Join-Path $script:logDir "err.log")
+    # [FIX-DAEMONLAUNCH 2026-09-25] 原为 Start-Process 带标准流重定向参数（本机必抛 NO_PROXY）。
+    #   改为已验证的"真实文件句柄重定向 + 脱离存活"启动器（见 scripts\lib\cdp.ps1::Start-DaemonClean）。
+    $cdpLib = $null
+    $probe = $PSScriptRoot
+    while ($probe -and -not $cdpLib) {
+        $cand = Join-Path $probe 'scripts\lib\cdp.ps1'
+        if (Test-Path $cand) { $cdpLib = $cand; break }
+        $up = Split-Path $probe -Parent
+        if ($up -eq $probe) { break }
+        $probe = $up
+    }
+    if (-not $cdpLib) { Write-Output "CONTROL-START-FAIL (cdp.ps1 not found from $PSScriptRoot)"; exit 1 }
+    . $cdpLib
+    $p = Start-DaemonClean -FilePath "node.exe" `
+        -ArgumentList @($script:entryJs) `
+        -LogPath (Join-Path $script:logDir "out.log") `
+        -ErrPath (Join-Path $script:logDir "err.log") `
+        -PumpSeconds 5
+    # Start-DaemonClean 返回 .bat 包装层，其 Id ≠ node pid；pid 文件必须存**真实 node pid**，
+    #   否则 Get-PidFileProcess（按 node+agent_bridge 校验）会判定无效 → 破坏单实例语义。
+    $realPid = Get-DaemonProcessId -FilePath "node.exe" -Needle $script:entryJs
+    if ($realPid -le 0) { $realPid = $p.Id }
     Start-Sleep -Seconds 2
-    try { Set-Content -Path $script:pidFile -Value $p.Id -Encoding ASCII } catch {}
+    try { Set-Content -Path $script:pidFile -Value $realPid -Encoding ASCII } catch {}
     # 等心跳(最多 15 秒)
     $deadline = (Get-Date).AddSeconds(15)
     $hb = $false
@@ -58,7 +77,7 @@ function Start-Bridge {
     if ($hb) {
         # 成功启动 = 恢复保活意图:清停用标记
         Remove-Item $script:disableFlag -Force -ErrorAction SilentlyContinue
-        Write-Output ("CONTROL-STARTED (PID " + $p.Id + ")")
+        Write-Output ("CONTROL-STARTED (PID " + $realPid + ")")
         exit 0
     }
     Write-Output "CONTROL-START-FAIL (agent.log 无心跳)"

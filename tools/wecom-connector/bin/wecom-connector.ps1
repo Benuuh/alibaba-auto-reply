@@ -82,9 +82,25 @@ function Start-Bridge {
     }
     Apply-Creds
     if (-not (Test-Path $script:logDir)) { New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null }
-    Start-Process -FilePath "node.exe" -ArgumentList ("`"" + $script:serverJs + "`"") -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $script:logDir "wecom_bot.log") `
-        -RedirectStandardError (Join-Path $script:logDir "wecom_bot.err.log") | Out-Null
+    # [FIX-DAEMONLAUNCH 2026-09-25] 原为 Start-Process 带标准流重定向参数（本机必抛 NO_PROXY）。
+    #   改为已验证的"真实文件句柄重定向 + 脱离存活"启动器（见 scripts\lib\cdp.ps1::Start-DaemonClean）。
+    #   必须在 Apply-Creds 之后调用（保持位置不变），否则 WX_BOT_ID/WX_BOT_SECRET 不会被继承。
+    $cdpLib = $null
+    $probe = $PSScriptRoot
+    while ($probe -and -not $cdpLib) {
+        $cand = Join-Path $probe 'scripts\lib\cdp.ps1'
+        if (Test-Path $cand) { $cdpLib = $cand; break }
+        $up = Split-Path $probe -Parent
+        if ($up -eq $probe) { break }
+        $probe = $up
+    }
+    if (-not $cdpLib) { Write-Output "WECOM-START-FAIL (cdp.ps1 not found from $PSScriptRoot)"; exit 1 }
+    . $cdpLib
+    $null = Start-DaemonClean -FilePath "node.exe" `
+        -ArgumentList @($script:serverJs) `
+        -LogPath (Join-Path $script:logDir "wecom_bot.log") `
+        -ErrPath (Join-Path $script:logDir "wecom_bot.err.log") `
+        -PumpSeconds 5
     $deadline = (Get-Date).AddSeconds(20)
     while ((Get-Date) -lt $deadline) {
         if (Test-BridgeReady) { break }

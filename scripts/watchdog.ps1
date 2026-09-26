@@ -148,12 +148,17 @@ function Get-LogAgeSec {
 }
 
 function Start-MonitorProcess {
-    # 重定向输出避免窗口阻塞；monitor.ps1 为无限循环，必须在独立进程运行
-    Start-Process -FilePath "powershell.exe" -ArgumentList (
-        "-ExecutionPolicy Bypass -NoProfile -File `"$monitorScript`" -Action start"
-    ) -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $script:logFileDir "monitor_out.log") `
-        -RedirectStandardError (Join-Path $script:logFileDir "monitor_err.log") | Out-Null
+    # [FIX-ENVBLOCK 2026-09-25] 原实现用 Start-Process 带 -RedirectStandardOutput/-RedirectStandardError，
+    #   在本机（进程环境块含 3 组仅大小写不同的重复键）必抛
+    #   ArgumentException 'Item has already been added. Key in dictionary: NO_PROXY / no_proxy'，
+    #   → watchdog.log 22:27:18 起连续 4 条 "Monitor process NOT FOUND ... Restarting..." 后紧跟 "Watchdog error"，
+    #   monitor 根本起不来（这是本次缺陷二的**真实抛点**，spec §1.5 推测的 L262 不是）。
+    #   改走 Start-ProcessClean（.NET 直启 + 已去重环境块）。monitor.ps1 是无限循环，
+    #   不能对它做管道重定向（父进程必须持续排空，否则子进程写满管道缓冲区即死锁），故此处不带重定向；
+    #   代价：logs\monitor_out.log / monitor_err.log 不再更新，monitor 自身仍写 logs\monitor.log。
+    #   单实例/幂等语义不变：monitor.ps1 内部 Initialize-MonitorRuntime 仍按 monitor.pid 判重。
+    $argList = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', ('"' + $monitorScript + '"'), '-Action', 'start')
+    [void](Start-ProcessClean -FilePath "powershell.exe" -ArgumentList $argList)
 }
 
 function Start-Watchdog {
@@ -243,8 +248,22 @@ function Start-Watchdog {
                 }
             }
             # B 系列:企微机器人长连接服务监管(幂等启动,node 进程死亡自动拉起)
+            # [HANDOVER 2026-09-26] 交接前置门：与 scripts\wecom_start.ps1 的 Get-WecomHandoverSkip 同语义。
+            #   为什么要在这里再判一次：wecom_start.ps1 里的门禁虽然能挡住"启动旧通道"，但每 30s 仍会
+            #   spawn 一个 PowerShell 进程只为打印一行 skip（11:28-11:31 实测：日志每 30s 一行 + 进程开销）。
+            #   在这里短路后，watchdog 连 spawn 都不做。逃生门与判定条件完全一致：marker 不在 或
+            #   新通道宿主不在 ⇒ 退回原逻辑（继续保活，绝不静默失守）。
+            #   [PORTABLE 2026-09-26] marker 路径不再硬编码绝对路径：与 L87 同款走 Get-SkillPath "data"
+            #   （硬编码会让脚本不可移植，且被 .githooks\sanitize_check.ps1 的 'D:\\Agent_work' 规则判为敏感内容）。
+            $wecomHandoverMarker = Join-Path (Get-SkillPath "data") 'alert-channel.handover.json'
+            $wecomHandover = $false
+            if ($env:WECOM_FORCE_RUN -ne '1' -and (Test-Path $wecomHandoverMarker)) {
+                try { $wecomHandover = @(Get-Process -Name 'DSH Desktop' -ErrorAction SilentlyContinue).Count -gt 0 } catch { $wecomHandover = $false }
+            }
             $wecomStart = Join-Path $LogDir "wecom_start.ps1"
-            if (Test-Path $wecomStart) {
+            if ($wecomHandover) {
+                # 已交接：不 spawn、不记日志（watchdog.log 已有 wecom_start 侧的首条 HANDOVER-SKIP 留痕）
+            } elseif (Test-Path $wecomStart) {
                 $ws = powershell -ExecutionPolicy Bypass -NoProfile -File $wecomStart 2>&1
                 if ($ws -match 'WECOM-STARTED') {
                     Write-Log "WATCHDOG-WECOM: $($ws -join ' ')"
@@ -255,23 +274,21 @@ function Start-Watchdog {
             # control-agent 保活（冷却 5 分钟；仅状态变化/失败记日志；DISABLED/ALREADY-RUNNING 静默）
             $agentStart = Join-Path $LogDir "agent_start.ps1"
             if ((Test-Path $agentStart) -and ((Get-Date) -ge $script:agentRetryAfter)) {
-                # 文件重定向 + 轮询输出文件(不用管道捕获):node 会继承调用方管道句柄,
+                # 文件重定向 + 等待结果(不用管道捕获):node 会继承调用方管道句柄,
                 # 管道捕获会导致 watchdog 循环悬挂直到 node 退出(PS 5.1 句柄继承坑,wecom_start 同款教训)
+                # [FIX-ENVBLOCK 2026-09-25] Start-Process 带 -RedirectStandard* 在本机必抛 NO_PROXY 异常,
+                #   改走 Start-ProcessClean(.NET 直启 + 去重环境块,stdout/stderr 由父进程异步排空后落盘)。
+                #   语义等价:仍在 75s 上限内等结果,仍按 CONTROL-* 分支记日志。
                 $asOut = Join-Path $env:TEMP ("wagent_out_" + $PID + ".txt")
                 $asErr = Join-Path $env:TEMP ("wagent_err_" + $PID + ".txt")
-                $asChild = Start-Process -FilePath 'powershell.exe' -ArgumentList ('-ExecutionPolicy Bypass -NoProfile -File "' + $agentStart + '"') -WindowStyle Hidden -RedirectStandardOutput $asOut -RedirectStandardError $asErr -PassThru
-                $asDeadline = (Get-Date).AddSeconds(75)
+                $asArgList = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', ('"' + $agentStart + '"'))
+                [void](Start-ProcessClean -FilePath 'powershell.exe' -ArgumentList $asArgList -RedirectStandardOutput $asOut -RedirectStandardError $asErr -WaitSeconds 75)
                 $asText = ""
-                $sawControl = $false
-                while ((Get-Date) -lt $asDeadline) {
-                    if (Test-Path $asOut) {
-                        $asText = (@(Get-Content $asOut -Encoding UTF8 -ErrorAction SilentlyContinue) -join ' ')
-                        if ($asText -match 'CONTROL-') { $sawControl = $true; break }
-                    }
-                    Start-Sleep -Seconds 1
+                if (Test-Path $asOut) {
+                    $asText = (@(Get-Content $asOut -Encoding UTF8 -ErrorAction SilentlyContinue) -join ' ')
                 }
                 Remove-Item $asOut,$asErr -Force -ErrorAction SilentlyContinue
-                if ($sawControl) {
+                if ($asText -match 'CONTROL-') {
                     if ($asText -match 'CONTROL-STARTED') { Write-Log "WATCHDOG-AGENT: $asText" }
                     elseif ($asText -match 'CONTROL-START-FAIL') {
                         Write-Log "WATCHDOG-AGENT: issue - $asText (5 分钟内不重试)"

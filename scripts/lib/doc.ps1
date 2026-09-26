@@ -2,6 +2,10 @@
 #              → 临时文件(%TEMP%\alibaba_docs, 用后即删) → tools\doc-reader 解析。
 # 依赖: config.ps1, lib\cdp.ps1(Invoke-CdpEval, 由调用方 dot-source), lib\log.ps1(可选)。
 
+# [FIX-ENVBLOCK 2026-09-25] Start-ProcessClean 定义在 lib\cdp.ps1。调用方(monitor.ps1)会先 dot-source cdp.ps1,
+# 这里做一次带守卫的兜底加载,避免单独引用 doc.ps1 时因函数缺失而整条文档解析路径静默失败。
+if (-not (Get-Command Start-ProcessClean -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot "cdp.ps1") }
+
 function Get-DocTempDir {
     $d = Join-Path $env:TEMP "alibaba_docs"
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
@@ -97,8 +101,13 @@ function Invoke-DocReader([string]$filePath, [int]$MaxChars = 6000, [int]$Render
     if (-not (Test-Path $reader)) { return $null }
     $outFile = Join-Path $env:TEMP ("docread_" + [guid]::NewGuid().ToString("N") + ".json")
     try {
-        $p = Start-Process -FilePath 'node.exe' -ArgumentList ('"' + $reader + '" "' + $filePath + '" --max-chars ' + $MaxChars + ' --render-max-pages ' + $RenderMaxPages) -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $env:TEMP "docread_err.tmp") -PassThru
-        if (-not $p.WaitForExit(30000)) {
+        # [FIX-ENVBLOCK 2026-09-25] 改用 Start-ProcessClean(.NET 直启 + 去重环境块):
+        #   原 Start-Process 带 -RedirectStandard* 在本机必抛 NO_PROXY 异常,整条文档解析路径失效。
+        #   子进程 stdout 由父进程异步排空后按 UTF-8 落盘到同一 $outFile(与旧 cmd 级重定向字节等价,
+        #   node 输出即 UTF-8),下游 Test-Path/Get-Content 逻辑不变。
+        $docArgs = @('"' + $reader + '"', '"' + $filePath + '"', '--max-chars', [string]$MaxChars, '--render-max-pages', [string]$RenderMaxPages)
+        $p = Start-ProcessClean -FilePath 'node.exe' -ArgumentList $docArgs -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $env:TEMP "docread_err.tmp") -WaitSeconds 30
+        if (-not $p.HasExited) {
             try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
             return $null
         }

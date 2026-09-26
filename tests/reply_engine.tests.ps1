@@ -237,6 +237,45 @@ Assert-True  "dedup-older-ts"           (Test-AlreadyReplied "$H|1789455764000" 
 # sandy 回归:第一轮 state 记无 ts($H),第二轮抓到同文案+ts → 必须判已回复(防重复发送)
 Assert-True  "dedup-sandy-regression"   (Test-AlreadyReplied $H $H "2026-09-15 15:02:44")
 
+# ===== FIX-DUP 2026-09-25: 去重键稳定性（原文 + 买家消息条数）=====
+Write-Output "== FIX-DUP: dedup key stability =="
+# 形态 A：译文未渲染 —— 原文重复两遍（实测快照 msgs_20260925_214523.txt）
+$a = Get-NormalizedMsgText "ok. i will send it now to my director ok. i will send it now to my director"
+# 形态 B：译文已渲染 —— 原文 + 中文译文 + 标记（实测快照 msgs_20260925_214540.txt）
+$b = Get-NormalizedMsgText "ok. i will send it now to my director 好的。我现在就把它发送给我的总监。 由阿里提供"
+Assert-Eq "dup-a-eq-b" $a $b
+
+# 短消息形态（Bohdana 实测）
+$c = Get-NormalizedMsgText "🙏👍 🙏👍"
+$d = Get-NormalizedMsgText "🙏👍 由阿里提供"
+Assert-Eq "dup-emoji-eq" $c $d
+
+# 不相关人员/不同消息必须区分（防过度归一化导致漏回）
+Assert-True "diff-msg" ((Get-NormalizedMsgText "Yes") -ne (Get-NormalizedMsgText "Ok"))
+Assert-True "diff-msg2" ((Get-NormalizedMsgText "Thankyou and ddp method only") -ne (Get-NormalizedMsgText "I am still waiting"))
+
+# 列表预览噪声（实测两轮预览）
+$p1 = Get-NormalizedMsgText "B 1 Bohdana Borysenko 🙏👍 订单中"
+$p2 = Get-NormalizedMsgText "B Bohdana Borysenko 🙏👍 订单中"
+Assert-Eq "preview-unread-noise" $p1 $p2
+Assert-True "preview-time-noise" ((Get-NormalizedMsgText "Fahad Ali 12:34 Hey") -eq (Get-NormalizedMsgText "Fahad Ali Hey"))
+
+# 判定表（S1-c 的 6 行）
+$h = Get-StableHash (Get-NormalizedMsgText "Ok")
+Assert-True "dedup-empty"      (-not (Test-DedupHit "" $h 9))
+Assert-True "dedup-newtext"    (-not (Test-DedupHit "$h|9" (Get-StableHash 'No') 9))
+Assert-True "dedup-same"       (Test-DedupHit "$h|9" $h 9)
+Assert-True "dedup-same-fewer" (Test-DedupHit "$h|9" $h 8)
+Assert-True "dedup-resent"     (-not (Test-DedupHit "$h|9" $h 10))
+Assert-True "dedup-legacy-ts"  (Test-DedupHit "$h|1790343929902" $h 9)
+
+# FIX-DUP 2026-09-25 补充断言（不修改上述规格断言，仅追加安全bottom-line）
+Assert-True "norm-empty"        ((Get-NormalizedMsgText "   ") -eq "")
+Assert-True "norm-marker-only"  ((Get-NormalizedMsgText "由阿里提供") -eq "")
+Assert-True "norm-cjk-kept"     ((Get-NormalizedMsgText "好的") -ne "")
+Assert-True "dedupkey-format"   ((Get-DedupKey "Ok" 9) -match '^[0-9A-F]{32}\|9$')
+Assert-True "dedup-legacy-bare" (Test-DedupHit $h $h 9)
+
 Write-Output ""
 Write-Output ("RESULT: pass={0} fail={1}" -f $script:pass, $script:fail)
 if ($script:fail -gt 0) { Write-Output ("FAILED CASES: " + ($script:fails -join ", ")); exit 1 }

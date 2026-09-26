@@ -11,11 +11,44 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "config.ps1")
 . (Join-Path $PSScriptRoot "lib\creds.ps1")
 . (Join-Path $PSScriptRoot "lib\log.ps1")
+. (Join-Path $PSScriptRoot "lib\cdp.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 $script:logFileDir = Get-SkillPath "logs"
 if (-not $script:logFileDir) { $script:logFileDir = Join-Path (Split-Path $LogDir -Parent) "logs" }
 $logFile = Join-Path $script:logFileDir "watchdog.log"
 function Write-Log([string]$msg) { Write-SkillLog $msg $logFile }
+
+# [HANDOVER 2026-09-26] 告警通道交接门：旧通道(19886)已被 dsh-im 接管，两者抢同一个企微机器人
+#   (tools\wecom-connector\config.json 的 exit_on_kicked_offline=true ⇒ 谁后连谁把对方踢掉)。
+#   本门禁让"是否保活旧通道"只由**显式标记文件**决定，避免 watchdog 每 30s 把新通道踢下线，
+#   也避免旧启动器再次悬死(2026-09-26 10:37:14 悬死 17 分钟 ⇒ watchdog 五重守护整体停摆)。
+#   证据(隔离实验 7/7 PASS)：marker 存在且新通道宿主在 ⇒ 跳过；marker 不在或宿主不在 ⇒ 退化为原行为
+#   (继续保活，绝不静默失守)；WECOM_FORCE_RUN=1 ⇒ 逃生门，强制恢复旧行为。
+#   [PORTABLE 2026-09-26] marker 路径不再硬编码绝对路径：与 L203 同款走 Get-SkillPath "data"
+#   （硬编码会让脚本不可移植，且被 .githooks\sanitize_check.ps1 的 'D:\\Agent_work' 规则判为敏感内容）。
+$script:HandoverMarker = Join-Path (Get-SkillPath "data") 'alert-channel.handover.json'
+$script:DshProcessName = 'DSH Desktop'
+
+function Get-WecomHandoverSkip {
+    <#
+      返回 $true  = 跳过旧通道(19886)保活；$false = 仍执行保活。
+      设计原则：**只有"新通道宿主真的在"才敢停旧通道**；任何不确定一律 $false(退化为旧行为)。
+      已知限制(不许当成"新通道已连通"的证据)：DSH Desktop 进程存在 ⇒ 只说明 DSH 宿主活着，
+      不代表 dsh-im 的企微长连接已建立；该连接的**唯一**业务级证据见 spec §7 A8(用户发一条企微消息)。
+    #>
+    if ($env:WECOM_FORCE_RUN -eq '1') { return $false }
+    if (-not (Test-Path $script:HandoverMarker)) { return $false }
+    $newAlive = $false
+    try { $newAlive = @(Get-Process -Name $script:DshProcessName -ErrorAction SilentlyContinue).Count -gt 0 } catch { $newAlive = $false }
+    return [bool]$newAlive
+}
+
+if (Get-WecomHandoverSkip) {
+    $hMsg = 'WECOM-HANDOVER-SKIP (19886 retired -> dsh-im; marker data\alert-channel.handover.json)'
+    Write-Log $hMsg
+    Write-Output $hMsg
+    exit 0
+}
 
 $script:baseUrl = "http://127.0.0.1:19886"
 $script:componentRoot = Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\wecom-connector'
@@ -173,9 +206,14 @@ $env:WX_RECEIVER_FILE = Join-Path (Get-SkillPath "data") "wecom_receiver.json"
 
 $bin = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\wecom-connector') 'bin\wecom-connector.ps1'
 # 以文件重定向方式调用 bin(而非管道捕获):避免被启动的 node 进程继承管道句柄导致调用方(如 watchdog 轮询)悬挂
+# [FIX-ENVBLOCK 2026-09-25] Start-Process 带 -RedirectStandard* 在本机必抛 NO_PROXY 异常 →
+#   改走 Start-ProcessClean(.NET 直启 + 去重环境块;stdout/stderr 由父进程异步排空后按 UTF-8 落盘),
+#   $tmpOut/$tmpErr 路径与下游读取逻辑不变。注意:本脚本前一行刚把凭据写进 $env:,
+#   Get-CleanEnvSnapshot 读的是**当前进程**环境块,故凭据仍随去重快照注入子进程(不落盘)。
 $tmpOut = Join-Path $env:TEMP ("wconn_out_" + $PID + ".txt")
 $tmpErr = Join-Path $env:TEMP ("wconn_err_" + $PID + ".txt")
-$child = Start-Process -FilePath 'powershell.exe' -ArgumentList ('-ExecutionPolicy Bypass -NoProfile -File "' + $bin + '" -Action start') -WindowStyle Hidden -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr -PassThru
+$childArgs = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', ('"' + $bin + '"'), '-Action', 'start')
+$child = Start-ProcessClean -FilePath 'powershell.exe' -ArgumentList $childArgs -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr -WaitSeconds 45
 $child.WaitForExit(45000) | Out-Null
 $out = @()
 if (Test-Path $tmpOut) { $out = @(Get-Content $tmpOut -Encoding UTF8 -ErrorAction SilentlyContinue) }

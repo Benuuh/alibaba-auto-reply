@@ -439,6 +439,74 @@ function Test-AlreadyReplied([string]$savedHash, [string]$hText, [string]$ts) {
     return ($cur -le $old)
 }
 
+# [FIX-DUP 2026-09-25] 归一化买家文本/列表预览:剔除 UI 噪声与译文的重复呈现,保证同一消息跨抽取一致。
+#   顺序:翻译标记(含短形态"由阿里提供") -> 译文尾段 -> 时间/日期 -> 单独出现的未读计数数字 -> 整段对半重复 -> 压空白。
+#   译文尾段剥离依据(只读 CDP 实测 DOM):.content-with-translation.text-content
+#     > [0] .session-rich-content.text(原文,cjk=0) / [1] .session-translate(译文,cjk>0),
+#   父节点 innerText = 原文 + 译文(未渲染译文时 = 原文×2);仅当 CJK 之前存在非空非 CJK 前缀时才剥离,
+#   纯中文原文(首字符即 CJK)不剥离,避免把中文买家消息归一化成空串。
+#   注意:本函数只用于"同一性判定",不用于展示文本;不转小写(大小写差异视为不同消息)。
+function Get-NormalizedMsgText([string]$text) {
+    if ([string]::IsNullOrWhiteSpace($text)) { return '' }
+    $s = $text.Trim()
+    if ($s.Length -eq 0) { return '' }
+    # 1) 翻译标记与状态词(大小写不敏感;长形态先删)
+    foreach ($tok in @('由阿里翻译提供','由阿里提供','翻译中…','翻译中','Revert','[未读]','反馈','已读','未读','自动接待发送')) {
+        $s = [regex]::Replace($s, [regex]::Escape($tok), ' ', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    # 2) 译文尾段剥离(见函数头注释)
+    $cjk = [regex]::Match($s, '[\u4e00-\u9fff]')
+    if ($cjk.Success -and $cjk.Index -gt 0) { $s = $s.Substring(0, $cjk.Index) }
+    # 3) 时间与日期
+    $s = $s -replace '\d{1,2}:\d{2}',' '
+    $s = $s -replace '\d{4}[-/]\d{1,2}[-/]\d{1,2}',' '
+    # 4) 单独出现的未读计数数字(词边界内的纯数字串;不碰 UN3481 / 13kg 这类内嵌数字)
+    $s = $s -replace '\b\d+\b',' '
+    # 5) 整段对半重复压缩(只处理"整段对半重复"这一种形态;按原始串截断以保留空格形态)
+    $squashed = $s -replace '[\s\u00A0\u200B]+',''
+    if ($squashed.Length -ge 2 -and (($squashed.Length % 2) -eq 0)) {
+        $half = [int]($squashed.Length / 2)
+        if ($squashed.Substring(0, $half) -ceq $squashed.Substring($half)) {
+            $nonWs = [regex]::Matches($s, '[^\s\u00A0\u200B]')
+            if ($nonWs.Count -ge $half) {
+                $last = $nonWs[$half - 1]
+                $s = $s.Substring(0, $last.Index + $last.Length)
+            }
+        }
+    }
+    # 6) 压空白(不转小写)
+    $s = $s -replace '[\s\u00A0\u200B]+',' '
+    return $s.Trim()
+}
+
+# [FIX-DUP 2026-09-25] 去重键 = 文本 hash | 买家消息条数(替代不可信的 @@TS:showTime 为会话级时间,
+#   会被我们自己发出的回复推大,导致永远判"新消息")。
+function Get-DedupKey([string]$normText, [int]$buyerCount) {
+    return ((Get-StableHash $normText) + '|' + [string]$buyerCount)
+}
+
+# [FIX-DUP 2026-09-25] 已回复判定:文本 hash 相同 且 当前买家条数未增加 → 已回复(不发送)。
+#   旧格式(<hash>|<ts>,ts 为合成值或日期)第 2 段无法作为"条数"比较 → 一律按"文本相同即已回复"保守处理。
+#   返回 $true = 已回复、不发送;$false = 新消息。
+#   $hText 为 Get-StableHash(归一化文本) 的结果(与 $savedKey 第 1 段同口径;见 REPORT §7 偏差记录)。
+function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
+    if ([string]::IsNullOrWhiteSpace($savedKey)) { return $false }
+    $parts = $savedKey -split '\|', 2
+    $savedText = [string]$parts[0]
+    if ($savedText -ne $hText) { return $false }
+    $savedCount = -1
+    if ($parts.Count -gt 1) {
+        $seg = ([string]$parts[1]).Trim()
+        if ($seg -match '^\d+$') {
+            $parsed = 0
+            if ([int]::TryParse($seg, [ref]$parsed)) { $savedCount = $parsed }
+        }
+    }
+    # 旧格式(ts 形态)或缺失 → 保守判已回复;新格式则要求条数真的增加才算新消息
+    if ($savedCount -lt 0) { return $true }
+    return ($buyerCount -le $savedCount)
+}
+
 # 发送前禁词检测（纯函数；monitor 发送前拦截与回归测试共用定义，避免复制）：
 # 大小写不敏感；ASCII 词按词边界匹配并容忍复数/'s 后缀；中文按子串命中；长词先匹配避免短词抢先命中长词。
 # 词表主源在 reply_rules.json banned_phrases；$bannedList 缺省/$null 时回退本函数内置默认表（同语料词表）。返回命中词或 $null。
