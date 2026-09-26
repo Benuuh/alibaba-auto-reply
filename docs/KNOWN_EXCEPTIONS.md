@@ -382,7 +382,47 @@
   - `scripts\health_check.ps1` 新增第 7 项检查 `scheduled_tasks_fresh`（6 个 `AlibabaAutoReply*` 任务里护 5 个"每日/每周型"的
     `LastRunTime` 新鲜度）；`scripts\status.ps1` 删除 `L208` 的 `未排程 ⇒ '登录时触发'` 旁路（它会把"触发器真的被摘掉"
     美化成"登录时触发"，正是本条事故的掩盖剂）。
-- **已知盲区（如实记录）**：`AlibabaAutoReplyWeekly` 自 `2026-09-21 20:01:39` 起未成功运行（`LastTaskResult=2147946720`），
-  而 `scheduled_tasks_fresh` 对它的 `maxAge=259200s`（3 天）⇒ 它只在**逾 3 天未跑**后才被这条自检抓到，
-  在此之前**不会**产生告警。修 Weekly 不在本轮范围。另：`PT1M` 触发会让 `watchdog.log` **每分钟增加一行**
-  `Another watchdog instance already running` —— 属该设计的固有代价，用于换取"≤1 分钟"的拉起窗口。
+- **已知盲区（如实记录；2026-09-26 Phase 2 已修，见 E-22）**：`AlibabaAutoReplyWeekly` 曾自 `2026-09-21 20:01:39` 起未成功运行
+  （`LastTaskResult=2147946720`），且 `scheduled_tasks_fresh` 对它的 `maxAge=259200s`（3 天）⇒ 它只在**逾 3 天未跑**后才被这条自检抓到，
+  在此之前**不会**产生告警。**该盲区已于同日 Phase 2 修复**：Weekly 触发器由"每周一 08:00"改为"每日 08:00 + `StartWhenAvailable`"，
+  并加 `data\weekly_state.json` 每周幂等守卫。**阈值/名单未动**（`maxAge` 仍为 `259200s`）——按设计，Weekly 在 `2026-09-27 08:00`
+  首次按新排程运行后才**自然**转绿，**不得**为让它提前变绿而调阈值或从名单删除（详见下方 E-22）。另：`PT1M` 触发会让 `watchdog.log`
+  **每分钟增加一行** `Another watchdog instance already running` —— 属该设计的固有代价，用于换取"≤1 分钟"的拉起窗口。
+
+## E-22 **"守护已武装"判据加严**：只有 `TimeTrigger + PT1M` 才算 OK，仅登录触发一律 FAIL（2026-09-26 Phase 2 已修）
+
+- **现象（加严前的假阴性）**：`health_check.ps1` 的 `Test-WatchdogAlive` 原末段有一条兜底分支
+  `foreach ($n in ...) { if ($n.LocalName -eq 'LogonTrigger') { return $true } }`，
+  于是"**任务只剩登录触发器、时间触发器被摘掉**"这种病灶态会被判为 `watchdog_process=OK`。
+- **错在哪**：这条兜底分支命中的**恰恰就是** E-21 要抓的主诉病灶（`AlibabaAutoReplyWatchdog` 实测只有 `<LogonTrigger><Delay>PT30S</Delay>`、
+  无 `TimeTrigger`、`NextRunTime` 为空），即"新自检对其要抓的故障是**假阴性**"。Phase 1 spec 的 `R8` 曾把它描述为
+  "**这一分支只在刚回滚到基线时命中**" —— **该表述是错的**：病灶态本身就会命中它（`R8` 已在 Phase 2 更正）。
+- **证据**：规划会话与 Phase 2 执行者用"只有 `LogonTrigger`"的临时 XML 复跑原判据，输出 `命中=logon-only` 且会走兜底分支返回 `TRUE`
+  （Phase 1 spec §SC-2 与 Phase 2 spec §6 S1 的"跑红"复现块）。
+- **本轮动作（2026-09-26，已实测）**：删除该兜底分支，末段改为直接 `return $false`；判据语义变为
+  **"只有 `TimeTrigger` + `Interval=PT1M` + `Enabled=true` 才算已武装"**；同时把 `$wdDetail` 改为**三态**区分：
+  `pid dead (pidfile=N)` / `pid alive but task armed=logon-only (no TimeTrigger)` / `pid alive, TimeTrigger present but not PT1M/Enabled`。
+  即"**进程死**"与"**仅登录触发未武装**"不再混成同一句话。
+- **不要误判为**：
+  ① "`watchdog_process=FAIL` ⇒ 守护进程一定死了"（**错**：PID 存活但触发器退化也会 FAIL，必须读 `detail` 三态分辨）；
+  ② "只在登录触发也算已武装"（**错**：这正是本轮消除的假阴性）；
+  ③ "把 Weekly/Watchdog 任务回滚成仅登录触发后 FAIL 是新故障"（**错**：判据就该对病灶态报警，回滚脚本需预期这条）。
+- **探测器测试的合法例外**：本判据**允许**外部（如有界验证/探测器）**临时改写 `data\watchdog.pid` 指向另一存活进程**而不误报——
+  判据只断言"pid 文件指向的进程存活 + 任务已按 `PT1M` 武装"，不追溯 pid 的来源。测试完必须复原。
+- **下游处置**：本轮**不动** `Get-TaskFreshness` 的名单与阈值（§3-3/§3-8）；`scheduled_tasks_fresh` 对 Weekly 的 FAIL
+  属**预期残留**，Weekly 按新排程在 `2026-09-27 08:00` 首跑后自然转绿。相关：E-21、E-12。
+
+## E-23 `data\weekly_state.json` 是**状态文件**，不是配置键（2026-09-26 新增）
+
+- **现象**：`data\` 下多了一个 `weekly_state.json`（形如 `{"weekKey":"<本周一 yyyy-MM-dd>","ranAt":"<时间戳>"}`，UTF-8 带 BOM）。
+- **它是什么**：`weekly_report.ps1` 的**每周幂等守卫状态**，与 `data\health_state.json`、`data\report_push_state.json`、
+  `data\heartbeat_state.json` 同类（同目录、同 BOM 惯例）。**不是**配置键，因此**没有**、也**不应**登记进
+  `scripts\config.json` / `scripts\config.json.example`（§3-2）。
+- **不要误判为**：① "它出现在 `data\` ⇒ 是配置漂移/该补进 config 模板"（**错**，是状态）；
+  ② "删掉它能修好什么"（删除的语义是**回到"本周未跑"**，下次触发会重新生成周报并**再跑一次 nudge**）；
+  ③ "有它 ⇒ 周报一定跑过"（`weekKey` 只记**周**，同一周内多个触发都会 SKIP，属设计）。
+- **回滚注意（硬性）**：回滚 Weekly 任务**必须同时删除** `data\weekly_state.json`，否则"任务已回滚回每周一，但守卫仍挡住本周"
+  ⇒ 报告整周缺失（详见本轮 spec §9 回滚第 3 步）。
+- **失败取向**：状态文件读坏/写失败一律 **fail-open**（`ConvertFrom-Json` 失败视为"未跑过"；写失败记 `WEEKLY-GUARD-WRITE-FAIL`），
+  宁可同周多跑一次也不冒"整周不生成"的风险。若 `monitor.log` 出现 `WEEKLY-GUARD-WRITE-FAIL` ⇒ 每天都会重跑周报**并重复 nudge**，
+  属**对真实买家的风险**，优先处置。

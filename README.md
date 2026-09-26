@@ -114,7 +114,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 **规则引擎 19 类场景**：指责不读/拒绝/感谢/简短确认/问 AI/问候/稍后回来/联系方式/流程/计费/时效/电池合规/砍价/比价/无供应商/信息提供/地址/查件/默认追问——实现见 `scripts\reply_engine.ps1`，分支清单见 `SKILL.md` 或测试 `tests\reply_engine.tests.ps1`（119 断言）。
 
-**质量闭环**：05:00 质量报告（`analyze_replies.ps1`）→ 05:30 LLM 自动提炼（`auto_optimize.ps1`，精确去重 + never 保留最新 40 条 + 阈值自动调用 `consolidate_prompt.ps1` 合并归档）→ 次日报告对比；周报（周一 08:00，含国别分布 + nudge 唤醒）。
+**质量闭环**：05:00 质量报告（`analyze_replies.ps1`）→ 05:30 LLM 自动提炼（`auto_optimize.ps1`，精确去重 + never 保留最新 40 条 + 阈值自动调用 `consolidate_prompt.ps1` 合并归档）→ 次日报告对比；周报（每日 08:00 + `StartWhenAvailable` 补跑，含国别分布 + nudge 唤醒；每周幂等守卫保证一周只真跑一次，其余触发走 `WEEKLY-SKIP`）。
 
 ## 📱 企微通道与远程控制
 
@@ -367,7 +367,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File .githooks\sanitize_check.ps1
 
 **守护加固（2026-09-18 P0）**：Watchdog/Health 任务 `StopOnIdleEnd=false`；Health 发现 watchdog 死亡时自动拉起（`HEALTH-HEAL pid=<new>`，30 分钟节流）；去重判定改为 ts 归一化（`Test-AlreadyReplied`）+ 发送后 3 分钟冷却；死信心跳 `deadman_ping_url`（healthchecks.io，仅 ping 无 PII，默认空=不发）。
 
-**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（周一 08:00 周报 + nudge）、Watchdog（登录自启 + **每分钟重复触发**，常驻守护）、Health（每 15 分钟健康心跳 + 自动拉起 watchdog）。
+**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（**每日 08:00 + `StartWhenAvailable` 补跑**的周报 + nudge，`data\weekly_state.json` 保证按周幂等）、Watchdog（登录自启 + **每分钟重复触发**，常驻守护）、Health（每 15 分钟健康心跳 + 自动拉起 watchdog）。
 
 > [2026-09-26] 守护启动通道已回到计划任务（`Interval=PT1M` 每分钟重复触发 + 失败重试），
 > 静默无守护的窗口由"最长约 30 分钟"压到 **≤1 分钟**；任务是否仍被触发另由健康心跳的

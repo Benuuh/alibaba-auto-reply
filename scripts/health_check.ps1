@@ -72,14 +72,26 @@ try {
                 if ($iv.InnerText -eq 'PT1M') { return $true }
             }
         }
-        # 兜底: 仍保留登录触发器时不算"未武装",但明确暴露状态
-        foreach ($n in @($x.Task.Triggers.ChildNodes)) { if ($n.LocalName -eq 'LogonTrigger') { return $true } }
+        # [SC-2 修正 2026-09-26] 只有 TimeTrigger + Interval=PT1M + Enabled=true 才算是"已武装"。
+        # 原兜底分支"有 LogonTrigger 就返回 $true"会让自检对病灶态(只有登录触发器)假阴性 —— 见 Phase 1 spec SC-2。
         return $false
     }
 
     $wdOk = Test-WatchdogAlive
     $wdDetail = "alive + task armed(PT1M)"
-    if (-not $wdOk) { $wdDetail = "pid dead or task not armed (no TimeTrigger/PT1M)" }
+    if (-not $wdOk) {
+        $wdPidFile = Join-Path $LogDir "watchdog.pid"
+        $wdPidVal = 0
+        try { $wdPidVal = [int]((Get-Content $wdPidFile -Raw -ErrorAction SilentlyContinue).Trim()) } catch { }
+        $wdProcOk = $false
+        if ($wdPidVal -gt 0) { $wdProcOk = [bool](Get-CimInstance Win32_Process -Filter "ProcessId=$wdPidVal" -ErrorAction SilentlyContinue) }
+        try { $wdX = [xml](Export-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog') } catch { $wdX = $null }
+        $wdHasTime = $false
+        if ($wdX) { foreach ($n in @($wdX.Task.Triggers.ChildNodes)) { if ($n.LocalName -eq 'TimeTrigger') { $wdHasTime = $true } } }
+        if (-not $wdProcOk)      { $wdDetail = "pid dead (pidfile=$wdPidVal)" }
+        elseif (-not $wdHasTime) { $wdDetail = "pid alive but task armed=logon-only (no TimeTrigger)" }
+        else                     { $wdDetail = "pid alive, TimeTrigger present but not PT1M/Enabled" }
+    }
     Add-Check "watchdog_process" $wdOk $wdDetail
 
     $cdActive = $false; $cdUntil = ""

@@ -31,7 +31,7 @@ CDP 控制本机 Chrome 登录 OneTalk 卖家消息中心：监控询盘、按�
 
 ## B. 健康检查与维护
 - B1 `scripts\status.ps1`：无 `[!!]` 且敏感审计 `[OK]`。
-- B2 守护与任务：`watchdog.ps1` 运行中（30s 检查，**四重守护：进程/日志/CDP/企微保活**；另有 Accio 轻量探测，网关不可达记 `WATCHDOG-ACCIO` 日志）；计划任务 5 项：Summary/Quality/Optimize/Weekly（Ready）+ Watchdog（登录自启 + **每分钟重复触发**，常驻 Running）。**control-agent 已于 2026-09-26 退休**（保活块已从 watchdog 删除，守护由五重降为四重）：它曾由 watchdog 每 30s 幂等调用 `scripts\agent_start.ps1` 保活，停用/恢复用 `bin\control-agent.ps1 -Action stop/start`（标记 `data\control-agent.disabled`）—— **这些入口现已不再被自动调用**。企微远程控制能力改由 **DSH agent** 承担。复活前必须先接 dsh-im 新通道并清掉 `owner_userid` 占位符；详见 `docs\KNOWN_EXCEPTIONS.md` E-20。
+- B2 守护与任务：`watchdog.ps1` 运行中（30s 检查，**四重守护：进程/日志/CDP/企微保活**；另有 Accio 轻量探测，网关不可达记 `WATCHDOG-ACCIO` 日志）；计划任务 5 项：Summary/Quality/Optimize/Weekly（Ready）+ Watchdog（登录自启 + **每分钟重复触发**，常驻 Running；`watchdog_process` 判据为 **pid 存活 + TimeTrigger/PT1M**，仅登录触发一律 FAIL）。**Weekly 自 2026-09-26 起改为每日 08:00 + `StartWhenAvailable` 补跑**（原"每周一 08:00"在关机时整周消失），由 `data\weekly_state.json` 按 ISO 周键保证一周只真跑一次（其余触发输出 `WEEKLY-SKIP`、不重复生成也不重复 nudge）。**control-agent 已于 2026-09-26 退休**（保活块已从 watchdog 删除，守护由五重降为四重）：它曾由 watchdog 每 30s 幂等调用 `scripts\agent_start.ps1` 保活，停用/恢复用 `bin\control-agent.ps1 -Action stop/start`（标记 `data\control-agent.disabled`）—— **这些入口现已不再被自动调用**。企微远程控制能力改由 **DSH agent** 承担。复活前必须先接 dsh-im 新通道并清掉 `owner_userid` 占位符；详见 `docs\KNOWN_EXCEPTIONS.md` E-20。
 - B3 镜像：`scripts\sync.ps1 -Status` 无 DIFFERS/ONLY-WORK，否则 `-Push`；镜像目录 `%USERPROFILE%\.config\opencode\skills\alibaba-auto-reply`。
 - B4 发布：`backup.ps1 -Snapshot` → 改代码（UTF-8 BOM）→ `status.ps1` → `sync.ps1 -Push` → git commit/push（`.githooks\` 自动脱敏，[BLOCK] 必须整改，禁止 `--no-verify`）→ 观察 24h；改 `monitor.ps1` 需低询盘时段重启。
 
@@ -63,7 +63,7 @@ CDP 控制本机 Chrome 登录 OneTalk 卖家消息中心：监控询盘、按�
 |------|------|
 | `scripts\` | 代码 + 状态(state.json/pid) + 规则 |
 | `logs\` | 运行日志 |
-| `data\` | 买家快照 + buyers 档案（PII，仅本机） |
+| `data\` | 买家快照 + buyers 档案（PII，仅本机）+ 状态文件（`summary_last.json`/`health_state.json`/`weekly_state.json`，非配置键） |
 | `reports\` | 质量/总结/周报 |
 | `backups\` | 代码快照 zip（不含凭据） |
 

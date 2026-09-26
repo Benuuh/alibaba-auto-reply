@@ -1,10 +1,11 @@
 ﻿# 周报:汇总最近 7 天监控与回复业务数据,生成周报 md;并顺带执行沉睡买家唤醒(nudge.ps1)。
 # 用法: powershell -ExecutionPolicy Bypass -NoProfile -File weekly_report.ps1 [-SkipNudge]
-# 计划任务: AlibabaAutoReplyWeekly 每周一 08:00
+# 计划任务: AlibabaAutoReplyWeekly 每日 08:00 + 登录后补跑（StartWhenAvailable）; 每周幂等(weekly_state.json)
 param(
     [string]$LogDir = "",
     [int]$Days = 7,
-    [switch]$SkipNudge
+    [switch]$SkipNudge,
+    [switch]$DryRun   # 2026-09-26: 只测守卫判定,不写报告/不写状态/不跑 nudge
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +19,42 @@ $outDir = Get-SkillPath "reports"
 if (-not $outDir) { $outDir = Join-Path (Split-Path $LogDir -Parent) "reports" }
 
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+
+# ===== 0) 每周幂等守卫 (2026-09-26) =====
+# 背景: 原排程"每周一 08:00"在机器关机/睡眠时整周消失(实测 2026-09-21 08:00 机器关着,
+#       开机后 20:01 才补跑)。改为"每日 08:00 + StartWhenAvailable"后,必须由本守卫保证
+#       一周只真正执行一次 —— 否则每天都会重发周报推送、并且重复执行 nudge.ps1 打扰买家。
+# 状态: data\weekly_state.json (与 config 同级惯例; 不写入 config.json, 不是配置键)
+# 返回: 0=本周已跑过(skip) / 1=本周还没跑(继续)
+$weekKey = $null
+try {
+    $dow = [int](Get-Date).DayOfWeek
+    $monday = (Get-Date).Date.AddDays(-((($dow + 6) % 7)))
+    $weekKey = $monday.ToString('yyyy-MM-dd')
+} catch { $weekKey = $null }
+
+if (-not $weekKey) {
+    Write-Output "WEEKLY-GUARD: cannot compute week key - proceeding (fail-open)"
+} else {
+    $guardFile = Join-Path (Get-SkillPath "data") "weekly_state.json"
+    $already = $false
+    if (Test-Path $guardFile) {
+        try {
+            $gj = Get-Content $guardFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($gj.weekKey -eq $weekKey) { $already = $true }
+        } catch { $already = $false }
+    }
+    if ($already) {
+        Write-Output "WEEKLY-SKIP: week $weekKey already generated - exiting without regenerating or nudging"
+        Add-Content -Path $logFile -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + " | WEEKLY-SKIP: week $weekKey already generated - skip (no nudge)") -Encoding UTF8
+        exit 0
+    }
+    # [新增] DryRun: 报告判定结果后立即退出,绝不产生副作用
+    if ($DryRun) {
+        Write-Output "WEEKLY-GUARD-DRYRUN: week=$weekKey would=RUN (not already generated); exiting without side effects"
+        exit 0
+    }
+}
 
 # ===== 1) 统计 =====
 $winStart = (Get-Date).AddDays(-$Days)
@@ -157,4 +194,14 @@ if (-not $SkipNudge) {
         Write-Output "--- 执行沉睡买家唤醒 ---"
         powershell -ExecutionPolicy Bypass -NoProfile -File $nudgeScript -LogDir $LogDir 2>&1
     }
+}
+
+# ===== 4) 标记本周已完成 (2026-09-26) =====
+if ($weekKey) {
+    try {
+        $guardFile2 = Join-Path (Get-SkillPath "data") "weekly_state.json"
+        $payload = '{"weekKey":"' + $weekKey + '","ranAt":"' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '"}'
+        Set-Content -Path $guardFile2 -Value $payload -Encoding UTF8
+        Write-Output "WEEKLY-GUARD: marked week $weekKey done"
+    } catch { Write-Output ("WEEKLY-GUARD-WRITE-FAIL: " + $_.Exception.Message) }
 }

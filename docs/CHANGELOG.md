@@ -2,6 +2,10 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-26 - 周报补跑与守护判据加严：Weekly 改每日触发 + 每周幂等；`Test-WatchdogAlive` 去掉 logon-only 兜底
+
+- `AlibabaAutoReplyWeekly` 触发器由"每周一 08:00"（关机即整周消失，实测 09-21 08:00 机器关着、20:01 才补跑且 `LastTaskResult=2147946720`）改为**每日 08:00 + `StartWhenAvailable` 补跑 + 保留 `LogonTrigger`**；`weekly_report.ps1` 新增**每周幂等守卫**（ISO 周键，状态存 `data\weekly_state.json`）保证一周只真跑一次，避免每日重发周报推送与重复 nudge——守卫命中时输出 `WEEKLY-SKIP` 并跳过生成与 nudge，写状态失败则 fail-open（宁可重跑一次也不整周不生成）；另加 `-DryRun`（只测守卫判定、零副作用）。`Test-WatchdogAlive` 删除"有 `LogonTrigger` 就返回 `$true`"的兜底分支（该分支对病灶态假阴性），改为**只有 `TimeTrigger + Interval=PT1M + Enabled=true` 才算已武装**，`detail` 三态区分"进程死 / 仅登录触发未武装 / 有 TimeTrigger 但未 PT1M"；未改 `Get-TaskFreshness` 名单与阈值。详见 `docs\KNOWN_EXCEPTIONS.md` E-22。
+
 ## 2026-09-26 - 守护可靠启动：Watchdog 任务恢复周期拉起（PT1M）+ 计划任务新鲜度自检
 
 - `AlibabaAutoReplyWatchdog` 任务恢复时间触发器（`Interval=PT1M` 每分钟重复 + 失败重试 `PT1M`×3），静默无守护窗口由最长约 30 分钟压到 ≤1 分钟；`health_check.ps1` 新增第 7 项检查 `scheduled_tasks_fresh`（5 个"每日/每周型"任务的 `LastRunTime` 新鲜度，Watchdog 改由 `Test-WatchdogAlive` 断言"pid 存活 + `TimeTrigger`/`PT1M` 已武装"），`status.ps1` 删除"未排程 ⇒ 登录时触发"过时旁路；详见 `docs\KNOWN_EXCEPTIONS.md` E-21。

@@ -196,7 +196,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File tools\control-agent\bin\cont
 | `AlibabaAutoReplySummary` | summarize.ps1 | 每 4 小时 |
 | `AlibabaAutoReplyQuality` | analyze_replies.ps1 | 每日 05:00 |
 | `AlibabaAutoReplyOptimize` | auto_optimize.ps1 | 每日 05:30 |
-| `AlibabaAutoReplyWeekly` | weekly_report.ps1（含 nudge 唤醒） | 每周一 08:00 |
+| `AlibabaAutoReplyWeekly` | weekly_report.ps1（含 nudge 唤醒） | 每日 08:00（`StartWhenAvailable` 补跑）+ 登录后补跑；每周幂等（`data\weekly_state.json`，首个成功运行后本周其余触发走 `WEEKLY-SKIP`，不重复生成也不重复 nudge） |
 | `AlibabaAutoReplyWatchdog` | watchdog.ps1（整栈自启，ExecutionTimeLimit=PT0S） | 登录时 +30s（Hidden） |
 | `AlibabaAutoReplyHealth` | health_check.ps1（健康心跳，每项 30 分钟去重告警） | 每 15 分钟 |
 
