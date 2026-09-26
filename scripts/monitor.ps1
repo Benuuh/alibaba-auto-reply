@@ -1,6 +1,8 @@
 param(
     [string]$Action = "start",
-    [string]$LogDir = ""
+    [string]$LogDir = "",
+    # [Phase3 2026-09-26] 仅用于自测: 验证 pending_retry.json 读写闭环, 不启动主循环(见文件末 SelfTestRetry 分支)
+    [switch]$SelfTestRetry
 )
 
 $ErrorActionPreference = "Stop"
@@ -598,6 +600,121 @@ function Cleanup-StaleState {
     }
 }
 
+# ===== 待补发表 (2026-09-26 Phase 3) =====
+# 背景: 发送失败(ABORT_WRONG_CONVO / CDP 瞬时错误)后,会话会离开"待回复"列表,
+#       而 RETRY-QUEUE 只是日志字符串、没有补发循环 ==> 买家永远收不到回复。
+# 设计: 失败即入表; 每轮扫描前先处理到期的补发项; 成功或超限即出表。
+# 存储: data\pending_retry.json (运行数据根, 不入库)
+# 取舍(对应 spec §8-2 R1/R7): 补发优先复用既有 Invoke-ConvoItem(完整流程:会话名校验/去重/
+#       生成/禁词双检/SENT_OK 记账),因为"重新抓消息重新生成"正是该函数的语义,天然满足 D5;
+#       代价是若原发送其实已成功(仅清空校验未通过),补发会重发一次 ==> 见 REPORT 残留风险。
+#       补发与正常路径共用同一把去重键 Get-DedupKey, 不引入第二套键。
+function Get-RetryFile { Join-Path (Get-SkillPath "data") "pending_retry.json" }
+
+function Read-RetryTable {
+    $f = Get-RetryFile
+    if (-not (Test-Path $f)) { return @{ version = 1; items = @{} } }
+    try {
+        $j = Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json
+        $t = @{ version = 1; items = @{} }
+        if ($j -and $j.items) {
+            foreach ($p in $j.items.PSObject.Properties) {
+                $t.items[$p.Name] = @{
+                    key = [string]$p.Value.key; reason = [string]$p.Value.reason
+                    firstAt = [string]$p.Value.firstAt; lastAt = [string]$p.Value.lastAt
+                    tries = [int]$p.Value.tries; nextAt = [string]$p.Value.nextAt
+                }
+            }
+        }
+        return $t
+    } catch {
+        Write-Log ("RETRY-TABLE-READ-FAIL: " + $_.Exception.Message + " (treated as empty)")
+        return @{ version = 1; items = @{} }
+    }
+}
+
+function Save-RetryTable($t) {
+    $f = Get-RetryFile
+    try {
+        $o = @{}
+        foreach ($k in $t.items.Keys) {
+            $v = $t.items[$k]
+            $o[$k] = @{ key=$v.key; reason=$v.reason; firstAt=$v.firstAt; lastAt=$v.lastAt; tries=$v.tries; nextAt=$v.nextAt }
+        }
+        $payload = @{ version = 1; items = $o } | ConvertTo-Json -Depth 6
+        # 带 BOM, 与 summary_last.json 惯例一致
+        $enc = New-Object System.Text.UTF8Encoding($true)
+        [System.IO.File]::WriteAllText($f, $payload, $enc)
+    } catch { Write-Log ("RETRY-TABLE-WRITE-FAIL: " + $_.Exception.Message) }
+}
+
+# 退避: 1, 2, 5, 15, 30 分钟后第 6 次放弃(共 5 次补发机会)
+function Get-RetryBackoffMin([int]$tries) {
+    $seq = @(1, 2, 5, 15, 30)
+    if ($tries -ge $seq.Count) { return -1 }   # -1 = 放弃
+    return $seq[$tries]
+}
+
+function Add-PendingRetry([string]$key, [string]$reason) {
+    $t = Read-RetryTable
+    $sk = $key.ToLower()
+    $now = Get-Date
+    $r = $reason
+    if ($r.Length -gt 200) { $r = $r.Substring(0, 200) }
+    if ($t.items.ContainsKey($sk)) {
+        $it = $t.items[$sk]
+        $it.tries = [int]$it.tries + 1
+        $it.lastAt = $now.ToString('yyyy-MM-dd HH:mm:ss')
+        $it.reason = $r
+    } else {
+        $it = @{ key=$key; reason=$r; firstAt=$now.ToString('yyyy-MM-dd HH:mm:ss')
+                 lastAt=$now.ToString('yyyy-MM-dd HH:mm:ss'); tries=0; nextAt=$now.ToString('yyyy-MM-dd HH:mm:ss') }
+    }
+    $bk = Get-RetryBackoffMin ([int]$it.tries)
+    if ($bk -lt 0) {
+        $t.items.Remove($sk)
+        Write-Log ("RETRY-GIVEUP $key after $($it.tries) tries: $r")
+    } else {
+        $it.nextAt = $now.AddMinutes($bk).ToString('yyyy-MM-dd HH:mm:ss')
+        $t.items[$sk] = $it
+        Write-Log ("RETRY-QUEUED $key tries=$($it.tries) next=$($it.nextAt) reason=$r")
+    }
+    Save-RetryTable $t
+}
+
+function Remove-PendingRetry([string]$key) {
+    $t = Read-RetryTable
+    $sk = $key.ToLower()
+    if ($t.items.ContainsKey($sk)) {
+        $t.items.Remove($sk)
+        Save-RetryTable $t
+        Write-Log "RETRY-CLEARED $key"
+    }
+}
+
+# [Phase3] 补发单个会话: 重新抓待回复列表 ->
+#   在列表内  => 走既有 Invoke-ConvoItem 完整流程(会话名校验/去重/生成/双检/SENT_OK)
+#   不在列表内 => 'NOT_IN_LIST', 不发(避免对已人工处理的会话误发)
+# 注意: 本函数自身不发送, 一律经由 Invoke-ConvoItem -> Send-OneTalkMessage(内含会话名校验, D4)。
+function Send-PendingRetry($ctx, [string]$key) {
+    $nkey = (Get-NormalizedMsgText $key).ToLower()
+    if (-not $nkey) { $nkey = $key.ToLower() }
+    $snapRaw = Get-Snapshot
+    if ($snapRaw -notmatch '^\[') { return "SNAP_FAIL ($snapRaw)" }
+    $snap = $null
+    try { $snap = $snapRaw | ConvertFrom-Json } catch { return "SNAP_PARSE_FAIL" }
+    $target = $null
+    foreach ($it in @($snap)) {
+        if (-not $it.name) { continue }
+        $cand = (Get-NormalizedMsgText ([string]$it.name)).ToLower()
+        if ($cand -eq $nkey) { $target = $it; break }
+    }
+    if (-not $target) { return 'NOT_IN_LIST' }
+    Write-Log "RETRY-INLIST $key -> reusing full convo pipeline"
+    Invoke-ConvoItem $ctx $target
+    return 'PROCESSED'
+}
+
 # 会话处理:处理待办板块中的单个会话(提醒/白名单/冷却/打开/去重/生成/双检/发送/状态/提醒推送)。
 # $ctx 为可写上下文引用: state/openCooldown/skipCooldown/noReplyPreview/sendFailCount/failAlertAt/lastActivity
 function Invoke-ConvoItem($ctx, $item) {
@@ -763,7 +880,16 @@ function Invoke-ConvoItem($ctx, $item) {
             if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
             $count = 1
             if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = $count }   # [FIX-DUP 2026-09-25]
+            # [Phase3] 冷却键一致性诊断(F10: 冷却升级从未发生, 需确认是否为键不一致)
+            Write-Log ("COOLDOWN-KEYCHECK key=[$key] prevFound=$([bool]$prev) prevCount=$(if($prev){$prev.count}else{'-'})")
+            # [Phase3] 已回复且无新消息: 冷却按 3/6/12/15 分钟递增(既有设计意图),并标明等待状态,
+            #   避免每 9 秒刷一行 TEMP-SKIP 让运维误判为"漏回"。
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview
+                                         pkey = (Get-NormalizedMsgText $item.preview)
+                                         buyers = $buyerCount; count = $count }
+            $coolMin2 = [Math]::Min(3 * [Math]::Pow(2, ($count - 1)), 15)
+            Write-Log "ALREADY-REPLIED-WAIT $($key) no new buyer message; next check in ${coolMin2}m (count=$count)"
+            return
         } else {
             # A1 new inquiry alert (24h throttle)
             # [FIX-ALERTNOISE 2026-09-26] 移到这里：本分支 = $already 为假 = **买家确实说了新的、
@@ -959,6 +1085,7 @@ function Invoke-ConvoItem($ctx, $item) {
                 if ($sendRes -match 'SENT_OK') {
                     # [FIX-DUP 2026-09-25] 写新格式去重键（归一化原文 hash + 买家消息条数）
                     Set-StateHash $ctx $skey $newKey
+                    Remove-PendingRetry $key          # [Phase3] 发送成功即出补发表
                     # 发送成功后短冷却:同一会话 3 分钟内不再重复处理（方案甲：冷却期内不再提前解除）
                     $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }   # [FIX-DUP 2026-09-25]
                     Write-Log "POST-SEND-COOLDOWN $($key) 3min"
@@ -989,6 +1116,9 @@ function Invoke-ConvoItem($ctx, $item) {
                     }
                     Write-Log "RETRY-QUEUE $($key): send failed ($sendRes), will retry after cooldown"
                     $ctx.openCooldown[$key] = Get-Date
+                    # [Phase3] 发送失败 ⇒ 入持久化补发表(会话可能就此离开待回复列表 ⇒ 否则永不重试)。
+                    #   不去重 state(沿用既有正确设计, 见上方 L957-958 注释: 写了会永久卡死且永不重试)。
+                    Add-PendingRetry $key ([string]$sendRes)
                 }
             } else {
                 Write-Log "SKIP $($key): empty reply generated"
@@ -1012,6 +1142,39 @@ function Invoke-ScanRound($ctx) {
     }
     $snapRaw = ''
     $snap = $null
+        # ===== [Phase3] 先处理到期的补发项 =====
+        # 这些会话可能已经不在待回复列表里(这正是 P-A 的成因),所以必须独立于列表推进。
+        try {
+            $rt = Read-RetryTable
+            $nowR = Get-Date
+            $due = @()
+            foreach ($k in @($rt.items.Keys)) {
+                $it = $rt.items[$k]
+                $nx = $null
+                try { $nx = [datetime]::Parse([string]$it.nextAt) } catch { $nx = $null }
+                if (-not $nx -or $nx -le $nowR) { $due += $k }
+            }
+            foreach ($k in $due) {
+                $itR = (Read-RetryTable).items[$k]
+                if (-not $itR) { continue }
+                $bkey = [string]$itR.key
+                Write-Log "RETRY-ATTEMPT $bkey tries=$($itR.tries) reason=$($itR.reason)"
+                try {
+                    $rres = Send-PendingRetry $ctx $bkey
+                    if ($rres -eq 'SENT_OK') { Remove-PendingRetry $bkey }
+                    elseif ($rres -eq 'NOT_IN_LIST') {
+                        # 会话已不在待回复列表 ⇒ 无法安全补发(可能已被人工处理或买家已撤回)
+                        Add-PendingRetry $bkey 'NOT_IN_LIST (conversation no longer in pending list)'
+                    } else {
+                        # 'PROCESSED': Invoke-ConvoItem 未抛异常且未发送成功(命中 dedup/冷却/打开失败等);
+                        # 仍按失败再排期, 由 tries 上限兜住(自然收敛, 见 spec §8-2 R3)
+                        Add-PendingRetry $bkey ([string]$rres)
+                    }
+                } catch {
+                    Add-PendingRetry $bkey ("RETRY-EXC: " + $_.Exception.Message)
+                }
+            }
+        } catch { Write-Log ("RETRY-LOOP-ERR: " + $_.Exception.Message) }
     try {
         # 待回复板块 = 待办队列：板块里出现的每个会话都需要处理，回复后自动从板块消失。
         $snapRaw = Get-Snapshot
@@ -1215,6 +1378,30 @@ function Stop-Monitor {
         try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
     }
     Write-Log "=== Monitor stopped ==="
+}
+
+# [Phase3 2026-09-26] 自测开关(spec §6 S8 / §7 A1): 只验证 pending_retry.json 读写闭环,
+#   不进入主循环、不碰浏览器、不发送。下一轮可清理。
+if ($SelfTestRetry) {
+    $zeroKeys = @()
+    $__t0 = Read-RetryTable
+    if ($__t0.items) { $zeroKeys = @($__t0.items.Keys) }
+    Write-Output ("SELFTEST-BEFORE keys=[" + (($zeroKeys | Sort-Object) -join ',') + "]")
+    Write-Output ("SELFTEST-FILE " + (Get-RetryFile))
+    Add-PendingRetry 'ZZ_Phase3_Selftest' 'selftest write->read->delete roundtrip'
+    Write-Output ("SELFTEST-RAW " + (Get-Content (Get-RetryFile) -Raw -Encoding UTF8))
+    $__t1 = Read-RetryTable
+    $__hit = $__t1.items.ContainsKey('zz_phase3_selftest')
+    Write-Output ("SELFTEST-READBACK hasSelfTestKey=" + $__hit + " tries=" + $(if($__hit){$__t1.items['zz_phase3_selftest'].tries}else{'-'}) + " nextAt=" + $(if($__hit){$__t1.items['zz_phase3_selftest'].nextAt}else{'-'}))
+    Remove-PendingRetry 'ZZ_Phase3_Selftest'
+    $__t2 = Read-RetryTable
+    $__still = $false
+    if ($__t2.items) { $__still = $__t2.items.ContainsKey('zz_phase3_selftest') }
+    Write-Output ("SELFTEST-AFTER-DELETE stillPresent=" + $__still)
+    $__b = foreach ($i in 0..6) { Get-RetryBackoffMin $i }
+    Write-Output ("SELFTEST-BACKOFF " + ($__b -join ','))
+    Write-Output "SELFTEST-OK (main loop NOT started)"
+    exit 0
 }
 
 switch ($Action) {
