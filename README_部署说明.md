@@ -40,7 +40,6 @@
 │   │                          ⚠️ 2026-09-26 起其**保活被交接门阻断**，19886 默认不再监听
 │   ├── doc-reader\         ← 买家文档解析（PDF 文本/扫描渲染、xlsx/csv/docx → 文本或 PNG；node --test）
 │   ├── email-verify\       ← 邮箱可投递性验证（MX/SMTP 探测；Node 零依赖，无 npm install）
-│   ├── status-verify\      ← 状态核实工具（verify_all.ps1）
 │   └── control-agent\      ← 企微自然语言远程控制桥（Node 常驻；bin\control-agent.ps1 启停）
 │   │   ├── config.json     ← 由 config.json.example 复制（host/port/data_dir/receiver_file/log_dir，无凭据）
 │   │   ├── client\wecom-client.ps1   ← PowerShell 客户端库（Conn-* 系列，零依赖可复用）
@@ -363,7 +362,8 @@ watchdog 每 30s 巡检一轮，monitor 的"僵死"判定同时依赖**进程是
 - **`AlibabaAutoReplyWatchdog` 只有"登录自启"触发器**：机器重启后若无人登录，守护不会自动起来
   （如需开机即跑，应另加开机触发器并保留单实例保护）
 - 变更记录（详见 docs\CHANGELOG.md）：
-  - **2026-09-26：告警通道交接 + dsh-im 主动投递出口 + 页面判据修复**——旧企微长连接桥（`127.0.0.1:19886`）与 dsh-im 插件抢同一机器人而互踢（实测旧桥 `AUTH-OK` 后 87 秒被 `KICKED-OFFLINE`，且旧启动器曾悬死 17 分钟把 watchdog 堵停）；新增**交接门**（`data\alert-channel.handover.json` + 新通道宿主存在才让路，`WECOM_FORCE_RUN=1` 逃生门）阻断旧桥保活；`lib\wecom.ps1::Send-WecomMessage` 内部改走 dsh-im 投递 HTTP 接口（**函数名与返回码契约不变 ⇒ 7 个调用点一行未改**）；`Test-PageHealth` 判定抽成纯函数 `Get-PageHealthVerdict` 并新增**可见性维度**（陈旧 tip 被容器折叠时不再误判 `PageDown`，此前导致每 10 分钟无谓重启 Chrome）；新增测试 `page_health_verdict` / `page_health` / `page_select` / `page_heal_throttle` / `daemon_launch` / `env_block`（主仓库回归由 8 文件 296 断言增至 **14 文件 390 断言**）；新增 `scripts\okki`、`scripts\waimao`、`tools\email-verify`、`tools\status-verify`、`clean-c`
+  - **2026-09-26：告警通道交接 + dsh-im 主动投递出口 + 页面判据修复**——旧企微长连接桥（`127.0.0.1:19886`）与 dsh-im 插件抢同一机器人而互踢（实测旧桥 `AUTH-OK` 后 87 秒被 `KICKED-OFFLINE`，且旧启动器曾悬死 17 分钟把 watchdog 堵停）；新增**交接门**（`data\alert-channel.handover.json` + 新通道宿主存在才让路，`WECOM_FORCE_RUN=1` 逃生门）阻断旧桥保活；`lib\wecom.ps1::Send-WecomMessage` 内部改走 dsh-im 投递 HTTP 接口（**函数名与返回码契约不变 ⇒ 7 个调用点一行未改**）；`Test-PageHealth` 判定抽成纯函数 `Get-PageHealthVerdict` 并新增**可见性维度**（陈旧 tip 被容器折叠时不再误判 `PageDown`，此前导致每 10 分钟无谓重启 Chrome）；新增测试 `page_health_verdict` / `page_health` / `page_select` / `page_heal_throttle` / `daemon_launch` / `env_block`（主仓库回归由 8 文件 296 断言增至 **15 文件 427 断言**）；新增 `scripts\okki`、`scripts\waimao`、`tools\email-verify`
+  - **2026-09-26（清理）**：移除与本项目无关的 `clean-c\`（C 盘缓存清理工具，误入库）与一次性验收工具 `tools\status-verify\`，并清掉 `scripts\` 下的旧备份残留（`reply_agent_prompt.md.bak/.pre`、`reply_rules.json.bak`）；被移除内容已归档到**部署根的上一级**（目录名 `Agent_work-removed_<时间戳>`，含哈希），`clean-c\` 与 `status-verify\` 另可从 git 历史取回。**未删除任何被引用的代码**：静态引用分析显示的"无调用"脚本（`backup.ps1`/`dashboard.ps1`/`quote_remind.ps1`）经核实均为**手动工具**，已在根 README「手动工具」表中登记
   - 2026-09-18：P0 优化——守护加固（任务 `StopOnIdleEnd=false` + Health 自动拉起 watchdog，取消 WinSW 服务化）、重复发送修复（ts 归一化去重 + 发送后 3 分钟冷却）、日志/PII 治理（ACCIO-PARSE-ERR 单行化、日志轮转、快照保留、案卷归档）、死信心跳（healthchecks.io ping 接口就绪）
   - 2026-09-12（3）：报告企微推送（`lib\report_push.ps1`，quality/weekly 生成后自动推摘要，`report_push_enabled` 开关 + 去重）+ 模型切换 `deepseek-v4-flash`（`thinking:disabled`）+ 附件识别（`lib\vision.ps1`/`lib\doc.ps1` + `tools\doc-reader` 组件；monitor 图片多模态/文档解析/机会性提取 → `data\vision_extract\`；goods 合并 sidecar）
   - 2026-09-12（2）：control-agent 保活并入 watchdog（五重守护，agent_start.ps1，启动失败 5 分钟冷却）+ 停用标记机制（bin stop/start 自动维护）+ 注册 `AlibabaAutoReplyWatchdog` 登录自启任务（+30s/Hidden/不限时）+ status 纳入 control-agent 与第 5 项任务

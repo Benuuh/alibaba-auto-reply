@@ -103,3 +103,12 @@ scripts/last_sync.json
 *.png
 # 注意：tests/ 下的夹具为虚构数据，仍需入库
 !tests/fixtures/*.png
+
+# ===== 2026-09-26 清理补充 =====
+# 与本项目无关的本机工具（C 盘缓存清理），2026-09-26 曾误入库，已移除并在此保险排除
+/clean-c/
+# 一次性验收工具（对应 spec 已归档；如需再跑可从 git 历史或仓库外的"已移除归档"目录取回）
+/tools/status-verify/
+# 仓库外的"已移除归档"目录若被误复制回部署根，排除之（归档目录名 Agent_work-removed_<时间戳>）
+/Agent_work-removed_*/
+

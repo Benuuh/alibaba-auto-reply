@@ -251,7 +251,6 @@ alibaba-auto-reply/
 │   ├── BrowserSkill使用约定.md ← BrowserSkill CLI 接入铁律（7 条）
 │   └── 外贸主动获客系统_*.md  ← 主动获客（Leadgen）设计文档
 ├── .githooks\                ← pre-commit / pre-push 敏感扫描（sanitize_check.ps1）
-├── clean-c\                  ← C 盘可再生产物清理（普通版 + 管理员版）
 ├── scripts\                  ← 主代码 + 状态 + 规则
 │   ├── monitor.ps1           ← 监控主程序（全自动闭环，单实例）
 │   ├── reply_engine.ps1      ← 规则回复引擎（纯逻辑，可单测）
@@ -280,8 +279,7 @@ alibaba-auto-reply/
 │   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
 │   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例 + shadow_compare.ps1）
 │   ├── control-agent\        ← 企微自然语言远程控制桥（Node，46 例测试）
-│   ├── email-verify\         ← 邮箱可投递性验证（MX/SMTP 探测，Node 零依赖）
-│   └── status-verify\        ← 状态核实工具（verify_all.ps1）
+│   └── email-verify\         ← 邮箱可投递性验证（MX/SMTP 探测，Node 零依赖）
 ├── tests\                    ← 主仓库回归测试（14 文件 390 断言，fixtures 虚构数据）
 ├── logs\  data\  reports\  backups\   ← 运行时数据（均不入库）
 └── chrome-profile\           ← Chrome 登录态（独立 profile，勿删除）
@@ -290,10 +288,10 @@ alibaba-auto-reply/
 ## 🧪 开发与运维
 
 ```powershell
-# 主仓库回归测试（14 文件 390 断言，实测全绿）
+# 主仓库回归测试（15 文件 427 断言，实测全绿）
 # 分布：accio 29 / daemon_launch 10 / env_block 12 / goods 27 / lock 11 / log_maintenance 22 /
-#       no_reply 29 / page_heal_throttle 15 / page_health 15 / page_health_verdict 10 /
-#       page_select 15 / reply_engine 119 / report_push 33 / vision 43
+#       no_reply 29 / no_reply_write 36 / page_heal_throttle 15 / page_health 15 /
+#       page_health_verdict 10 / page_select 15 / reply_engine 119 / report_push 33 / vision 43
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
 
 # 单跑某个测试文件（更快，便于定位）
@@ -320,6 +318,18 @@ powershell -ExecutionPolicy Bypass -NoProfile -File .githooks\sanitize_check.ps1
 
 > ⚠️ **本机环境注意（Windows + Restricted 执行策略）**：`.ps1` 一律用
 > `powershell -ExecutionPolicy Bypass -NoProfile -File <路径>` 调用；`npm` 需用 `npm.cmd`（`npm.ps1` 会被策略拦下）。
+
+**手动工具（无自动调用，需人工触发——不是死代码）**：
+
+| 脚本 | 何时用 |
+|---|---|
+| `scripts\backup.ps1 -Snapshot` | **发布/大改前**做代码快照（回滚点） |
+| `scripts\dashboard.ps1` | 需要看无 PII 的 HTML 聚合看板时 |
+| `scripts\quote_remind.ps1` | 需要手动触发一次报价提醒时（走 `lib\wecom.ps1` 同一告警出口） |
+| `scripts\whitelist.ps1` | 管理人工接管白名单（增/删/查，见上文白名单一节） |
+| `scripts\status.ps1` / `log_rotate.ps1 -DryRun` / `retention.ps1 -DryRun` | 体检 / 轮转预演 / 保留预演 |
+
+> 说明：这些脚本**没有任何代码或计划任务引用它们**，只能人工运行；用静态引用分析找"死代码"时会把它们误判成垃圾，故在此显式登记。
 
 **守护加固（2026-09-18 P0）**：Watchdog/Health 任务 `StopOnIdleEnd=false`；Health 发现 watchdog 死亡时自动拉起（`HEALTH-HEAL pid=<new>`，30 分钟节流）；去重判定改为 ts 归一化（`Test-AlreadyReplied`）+ 发送后 3 分钟冷却；死信心跳 `deadman_ping_url`（healthchecks.io，仅 ping 无 PII，默认空=不发）。
 
