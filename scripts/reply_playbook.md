@@ -83,7 +83,7 @@
 真正的问题不是这句话本身，而是**没有理由就说这句话**。判据**不是**"说过几次"，而是**买家有没有给出理由**。
 - 买家只回 `Sure` / `ok`（**没给任何理由**）→ 机器人回 `No worries, take your time`
   买家听到的是：**你不知道接下来该干什么。**
-- 买家说 `I have some issues with my labels, working with Amazon to fix it, probably 2 to 3 business days`（**给了具体理由和时间**）→ 回一句"不急，等你消息"是**对的、也是专业的**。
+- 买家给了**具体理由 + 大概时间**（例如：正和平台处理标签问题、预计还要两三个工作日）→ 回一句"不急，等你消息"是**对的、也是专业的**。
 
 | 允许说"不急/慢慢来"（每次对话限 1 次） | 必须改成推进动作（不得说"慢慢来"） |
 |---|---|
@@ -281,11 +281,14 @@
 
 ### ✅ 这个做法不是新招，是"偶发命中"—— 有实证
 
-扫全部 **1,812 条**我方消息，发现**已经有 3 条真的在索取供应商联系方式**：
+扫全部 **1,812 条**我方消息，发现**已经有 3 条真的在索取供应商联系方式**。
+
+> **PII 说明**：下面两段是**我方（机器人）发出的历史消息**，不是买家的话；但按 §4-7「消息原文不入库」的纪律，
+> 这里**做了泛化处理**：把供应商所在城市替换为 `[城市]`、长句折行。原句只保留在运行数据根下。
 
 ```text
 [2026-09-19] ...Could you also share the packaging dimensions (L*W*H), a few reference
-             images of the goods, and the supplier's contact in Shenzhen?
+             images of the goods, and the supplier's contact in [城市]?
 
 [2026-09-26] Could u pls provide the weight, packaging dimensions(L*W*H) and reference
              images of the goods, or directly offer the contact information of the
@@ -301,10 +304,11 @@
 ### 已确认的违规红线（历史实例，本手册禁止清单的来由）
 
 ```text
-[2026-09-19, 某买家会话]
+[2026-09-19, 某买家会话, 我方发出的消息]
 [ME] Could you provide your contact information? I will have the supplier contact you
      to confirm your specific needs
 ```
+> 同上：这是**我方**发出的消息；为遵守 §4-7，除这一条必须引用的关键句外不做其他展开。
 
 **这一条同时踩了两个问题**：
 1. **向买家本人索要联系方式** —— 平台红线（底线 2）。全库仅此 1 条，但性质明确。
