@@ -9,6 +9,9 @@ $ErrorActionPreference = "Stop"
 
 # 集中配置:路径统一来自 config.json
 . (Join-Path $PSScriptRoot "config.ps1")
+. (Join-Path $PSScriptRoot "lib\msg_source.ps1")
+. (Join-Path $PSScriptRoot "lib\goods.ps1")
+. (Join-Path $PSScriptRoot "lib\reply_metrics.ps1")
 if (-not $LogDir) { $LogDir = Get-SkillPath "scripts" }
 if (-not $OutDir) { $OutDir = Get-SkillPath "reports" }
 if (-not $OutDir) { $OutDir = Join-Path (Split-Path $LogDir -Parent) "reports" }
@@ -98,8 +101,12 @@ foreach ($f in (Get-ChildItem -Path (Get-SkillPath "data") -Filter "msgs_*.txt" 
     }
     $a = Analyze-Snapshot $content
     if (-not $a) { continue }
+    # [S8 只加不改] 新增指标:与本轮快照同源计算, 不改动 Analyze-Snapshot 的任何既有分值语义
+    $sp = Get-SoothingPhraseRepeatStats $content
+    $m = @{ soothingRepeats = $sp.Repeats; soothingMax = $sp.MaxSameCount
+            dimGuide = (Test-DimensionGuidanceHit $content) }
     if (-not $perBuyer.ContainsKey($buyer)) { $perBuyer[$buyer] = @() }
-    $perBuyer[$buyer] += [pscustomobject]@{ time = $f.LastWriteTime; a = $a; file = $f.Name }
+    $perBuyer[$buyer] += [pscustomobject]@{ time = $f.LastWriteTime; a = $a; file = $f.Name; m = $m }
     if ($a.neg) { $negCases += [pscustomobject]@{ buyer = $buyer; time = $f.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"); line = $a.neg; me = $a.lastMe; file = $f.Name } }
 }
 
@@ -117,6 +124,22 @@ $rows = $perBuyer.Keys | Sort-Object | ForEach-Object {
     "| $_ | $($perBuyer[$_].Count) | $($last.a.score) | $flag | $dup | $info |"
 }
 $worst = $perBuyer.GetEnumerator() | Sort-Object { $_.Value[-1].a.score } | Select-Object -First 1
+
+# ===== [S8 新增] 推进类指标(独立成节, 不改动上方旧 4 项分值的任何语义) =====
+# 为什么加: 旧评分只考"话说得漂不漂亮", 不考"有没有推进" —— 无法分辨"正常等待"与"卡死"。
+$newRows = $perBuyer.Keys | Sort-Object | ForEach-Object {
+    $last = $perBuyer[$_][-1]
+    $mm = $last.m
+    $snd = if ($mm -and $mm.soothingRepeats -gt 0) { "⚠️ $($mm.soothingRepeats) 处(同句最多 $($mm.soothingMax) 次)" } else { "-" }
+    $dg = if ($mm -and $mm.dimGuide) { "✅" } else { "-" }
+    "| $_ | $snd | $dg |"
+}
+$soothingViolators = @($perBuyer.Keys | Where-Object { $perBuyer[$_][-1].m -and $perBuyer[$_][-1].m.soothingRepeats -gt 0 }).Count
+$dimGuideBuyers = @($perBuyer.Keys | Where-Object { $perBuyer[$_][-1].m -and $perBuyer[$_][-1].m.dimGuide }).Count
+$monLog = Join-Path (Get-SkillPath "logs") "monitor.log"
+$hjStat = Get-HumanInterjectionCount $monLog 20000
+$quotable = 0
+try { $quotable = Get-QuotableBuyerCount (Get-SkillPath "data") } catch { $quotable = 0 }
 
 $negBlock = if ($negCases.Count) { $negCases | ForEach-Object {
     "- **$($_.buyer)** ($($_.time)): $($_.line)"
@@ -136,7 +159,21 @@ $lines = @(
     "## 风险会话 Top1", "",
     "- **$($worst.Key)** 评分 $($worst.Value[-1].a.score)，最近快照 $($worst.Value[-1].file)",
     "- 建议人工查看该会话，必要时在 reply_rules.json 增加规则", "",
-    "---", "质量评分说明: 负面 -3 / 重复提问 -2 / 新信息 +2 / 实质互动 +1"
+    "---", "质量评分说明: 负面 -3 / 重复提问 -2 / 新信息 +2 / 实质互动 +1",
+    "",
+    "## 推进类指标（2026-09-26 新增，独立成列；上方 4 项分值语义未变，历史报告仍可比）", "",
+    "- **human_interjection 次数（人工插话让路）**: $($hjStat.Count)（扫描 monitor.log 末 $($hjStat.TailLines) 行，实际读到 $($hjStat.Scanned) 行）",
+    "  - 含义：老板亲自回过之后，机器人让路不再插话的次数（S2 防抢话）。",
+    "  - 注意：此数只覆盖日志**尾部**，不是全历史累计。",
+    "- **尺寸引导使用次数（有会话命中）**: $($dimGuideBuyers) / $($perBuyer.Count)",
+    "  - 含义：我方消息里出现了「引导买家给尺寸/给供应商联系方式」成品话术的会话数。",
+    "- **安抚语重复次数（>1 即计违规）**: $($soothingViolators) 个会话",
+    "  - 含义：同一会话里同一句安抚式等待语（take your time / no rush 等）出现 ≥ 2 次；D6/S7 规定对同一买家最多 1 次。",
+    "- **可报价买家数（重量+尺寸+地址三项齐全）**: $($quotable)",
+    "  - 含义：达到「资料齐可报价」门槛的买家数（复用 lib\goods.ps1::Get-GoodsDataStatus，键名小写）。", "",
+    "| 买家 | 安抚语重复 | 尺寸引导 |",
+    "|------|-----------|---------|",
+    ($newRows -join "`n")
 )
 $lines -join "`n" | Set-Content -Path $outFile -Encoding UTF8
 Write-Output "quality report: $outFile"

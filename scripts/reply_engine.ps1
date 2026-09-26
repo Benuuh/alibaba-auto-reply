@@ -393,6 +393,47 @@ function Get-StateKey([string]$name) {
     return $name.Trim().ToLowerInvariant()
 }
 
+# 尺寸引导话术(2026-09-26 更像真人销售 S4/§12.2): "买家说没有尺寸/量不了"时的**唯一话术定义处**。
+# 依据: 实测 86.4% 的买家从未给过尺寸, 而尺寸是报价硬需求(不能用重量+件数代替)。
+# 主推 = 主动提出"我直接联系供应商"(替买家干活 + 顺手拿到供应商联系方式 + 供应商手上有装箱数据);
+# 三种退一步说法仅在"买家没有供应商/不愿意给/就是个普通纸箱"时用。
+# 消费方: reply_agent_prompt.md §第三步之二、reply_playbook.md 指南 1、tests\reply_engine.tests.ps1。
+# ⚠️ 本函数**只提供话术**, 不含任何价格/区间/折扣; 机器人在任何情况下不得声称"已联系供应商"。
+function Get-DimensionGuidance {
+    return @{
+        primary = "If you can share your supplier's contact, I can confirm the cargo details with them directly - that way I get you an accurate quote faster, and you don't have to go back and forth."
+        fallbacks = @(
+            @{ case = 'goods still at the factory / buyer is a middleman'; text = "No problem - if it's easier, just the carton sizes from the factory's packing list would do." },
+            @{ case = 'buyer will not share the contact';                 text = "Understood, no pressure. A rough size is fine to start - we can adjust it once the cargo reaches our warehouse." },
+            @{ case = 'just an ordinary carton, easy to measure';         text = "If it's a carton, just the L x W x H in cm is enough." }
+        )
+    }
+}
+
+# 尺寸引导的"禁止暗示"检测(纯函数, 供发送前检查与测试共用):
+# 命中 = 回复里出现了"没尺寸也能报价/也可以报"这类暗示 ⇒ 违反定价红线(D1/D7), 必须重写。
+function Test-NoDimensionQuoteHint([string]$text) {
+    if (-not $text) { return $false }
+    $pats = @(
+        'quote you without the dimensions',
+        'quote without the dimensions',
+        'quote you without dimensions',
+        'can quote without dimensions',
+        "don't need the dimensions",
+        'do not need the dimensions',
+        'no need for the dimensions',
+        'dimensions are not required',
+        'dimensions not required',
+        'no dimensions needed',
+        'without sizes we can still quote',
+        'we can quote you anyway'
+    )
+    foreach ($p in $pats) { if ($text -match [regex]::Escape($p)) { return $true } }
+    # 形态2: "no need ... dimension(s)/size(s)/measure" 这类组合(含"不用量了也能往下走"的暗示)
+    if ($text -match '(?i)no need\b[^.!?]{0,40}\b(dimension|size|measur)') { return $true }
+    return $false
+}
+
 # 稳定哈希：去翻译标记/标点/空白/大小写，保证同一买家消息两次抓取 hash 一致
 # 注意顺序：先删标点再压空白（先压空白会留下"标点删除后的双空格"导致 hash 不一致）
 function Get-StableHash([string]$text) {
