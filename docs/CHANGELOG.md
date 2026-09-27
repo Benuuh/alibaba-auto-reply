@@ -2,6 +2,29 @@
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
 
+## 2026-09-27 - 终结误发（阶段 A）：`Test-ShouldReply` 单一判据出口 + 整轮硬门禁，删除旧判据与回退分支
+
+**背景**：09-27 11:42–11:50 恢复运行后 8 分钟内对外发出 8 条，其中至少 3 条是对不需要回复的买家重复发言（"修重复"第 6 次 `4eb39fe` 之后再次复发）。spec 判定根因不是判据不够聪明，而是"是否回复"没有**唯一出口**、且判据建立在不稳定信号（列表位置/条数/预览串）上。详见 `docs\specs\误发终止_单出口判据_20260927.md`。
+
+- **唯一出口**：`reply_engine.ps1` 新增纯函数 `Test-ShouldReply -ConvoLines -LedgerKey -NormLastBuyerHash`，返回 `@{Reply;Reason}`；证据锚点 = "账本记录的那次回复 vs 该会话最后一条买家消息"，不依赖列表位置/条数抖动/预览串
+- **删除旧出口**：整体删除 `Test-NewBuyerMessage`（其回退分支"文本 hash 不同即算新消息"是第 6 次修复失效的直接原因）；`monitor.ps1` 去重块的 `Test-DedupHit` 调用与 `$isNew/$already` 兜底闸门全部由 `Test-ShouldReply` 单点取代；`nudge.ps1` 的自动发送路径删除（改为只留内部提醒，spec §4.1）
+- **整轮硬门禁**：G1 页面不可用/无 OneTalk 页 ⇒ 整轮 `ABORT-PAGE-DOWN ... action=skip-round`、零会话处理零发送；G1b 连续 2 轮升级既有 `PAGE-HEAL`（自愈失败 ≥2 次 ⇒ `ABORT-PAGE-DOWN-FATAL` 停机等人工）；G2 `ABORT_WRONG_CONVO` 升级为**整轮中止** `round-halt`；G3 冷启动第 1 个 scan cycle 只观察不发送 `COLD-START observe-only`；G4 最小版：同一买家 15 分钟内不再发第 2 条 `RATE-SKIP`（完整限流属阶段 B）
+- **验收（离线，全程 monitor 停止）**：A1 全量 23 个测试文件 `failedFiles=0`；A2 213 份历史快照回放 **0 违例**；A9 用改动前代码复现事故 5 份快照的红灯（erico/Ganesan/Riyad 各至少 1 次误判"应回"）→ A10 同一现场跑绿；新增 `tests\should_reply.tests.ps1`（88 断言）与 `tools\dedup_acceptance\`（A9 红基线 + A4/A5/A6 门禁离线验收）
+- ⚠️ **阶段 A 完成后监控仍保持停止**：`AlibabaAutoReplyWatchdog` / `AlibabaAutoReplyHealth` 均 Disabled，未启动任何 monitor/watchdog 进程。阶段 B（完整限流）/ C（自愈定因）/ D（经老板同意后启用并观察 30 分钟）未做
+
+## 2026-09-27 - 公海客户开发模块（阶段 1 侦察 + 阶段 2 试发）：新增 `scripts\gonghai\` 与 71 项回归测试
+
+**背景**：老板要求在"不猜网页结构"的前提下开发阿里公海客户。链路经规划会话只读探测 + 本次实测确认：取客户名 → 加为我的客户 → OneTalk 搜索 → 校验 customerId → 发破冰消息。**试发是对外不可逆动作**，故模块默认关（`gonghai_enabled=false`）且带多重门禁。
+
+- 新增 `scripts\gonghai\`：`gonghai_cdp.ps1`（公海专用 CDP 桥：按域取页、短连接、凭据事件静默丢弃）、`gonghai_lib.ps1`（限速/幂等/状态/页面恢复/认领/搜索）、`gonghai_probe.ps1`（试发 CLI，判定链固定顺序）、`gonghai_recon.ps1`（只读侦察器，含凭据擦除）、`icebreaker.md`（老板定稿话术）
+- **未改** `monitor.ps1` / `reply_rules.json` / `reply_agent_prompt.md` / `lib\cdp.ps1` / `cdp.ps1`：发送复用 `lib\send.ps1` 的 `Send-OneTalkMessage`、写锁复用 `lib\lock.ps1`、健康复用 `lib\cdp.ps1` 的 `Test-PageHealth`、日志复用 `lib\log.ps1` 的 `Write-SkillLog`。公海取页因既有 `Get-Page` 是 onetalk-only 守卫而**另写**，不动共享实现
+- **实测纠正 4 处早期记录**：①数据行须 `tbody tr.ant-table-row`（首行是 measure-row，全 TH）②行内 **15** 个 td（含选择列）③**客户名**是 `.name--ECjwwoJJ span`（粗体 600），`.companyName--oljcmVQI` 是公司名/别名/邮箱的次要行 ④OneTalk 搜索框 `type` 属性为空串，`input[type=text]` 永不匹配，须按 placeholder 过滤
+- **关键时序（务必记住）**：认领后 OneTalk 搜索索引有同步延迟（实测约 1 分钟）⇒ 立即搜索得 0 结果，**不可据此判定路径不通**；`gonghai_probe.ps1` 内置 6 次重试
+- **发对人判据**：详情卡 `.alicrm-customer-detail-card` 的 `customerId` 必须**精确等于**公海行 `data-row-key`，不等即 `ABORT_WRONG_CONVO` 拒发
+- 新增 `tests\gonghai.tests.ps1`（**71 断言**）：话术与定稿逐字一致 + 合规（无数字/@/价格词/群发腔）+ 幂等键 + 限速硬下限（不小于 90000ms）与抖动区间 [63000,117000] + 配置越界**硬夹回** + 状态原子写 + 幂等判定 + BOM + 禁止项静态检查（不得出现表头全选 / 清空所有筛选项 / `Invoke-PageReload` / `chrome_ensure`）
+- 硬约束：每条间隔不小于 90s 且 ±30% 抖动；单次运行不超过 3 条；写锁 `Get-AppLock` 取不到不强上；**操作 OneTalk 后必恢复列表**（清空搜索 → 点「全部」→ 断言 `.contact-item-container` 数量大于 0）；遇验证码/风控立即停机
+- ⚠️ **阶段 2 未完成**：已发出 **2 条**（`GONGHAI-SENT`），未达 spec 要求的完整验证；**§1 #10「公海客户回复是否进待回复板块」未验证**（发送后 monitor 恰好停摆）。偏差与事故详见运行时数据根 `specs\` 下的 REPORT（不入库）
+
 ## 2026-09-26 - 周报补跑与守护判据加严：Weekly 改每日触发 + 每周幂等；`Test-WatchdogAlive` 去掉 logon-only 兜底
 
 - `AlibabaAutoReplyWeekly` 触发器由"每周一 08:00"（关机即整周消失，实测 09-21 08:00 机器关着、20:01 才补跑且 `LastTaskResult=2147946720`）改为**每日 08:00 + `StartWhenAvailable` 补跑 + 保留 `LogonTrigger`**；`weekly_report.ps1` 新增**每周幂等守卫**（ISO 周键，状态存 `data\weekly_state.json`）保证一周只真跑一次，避免每日重发周报推送与重复 nudge——守卫命中时输出 `WEEKLY-SKIP` 并跳过生成与 nudge，写状态失败则 fail-open（宁可重跑一次也不整周不生成）；另加 `-DryRun`（只测守卫判定、零副作用）。`Test-WatchdogAlive` 删除"有 `LogonTrigger` 就返回 `$true`"的兜底分支（该分支对病灶态假阴性），改为**只有 `TimeTrigger + Interval=PT1M + Enabled=true` 才算已武装**，`detail` 三态区分"进程死 / 仅登录触发未武装 / 有 TimeTrigger 但未 PT1M"；未改 `Get-TaskFreshness` 名单与阈值。详见 `docs\KNOWN_EXCEPTIONS.md` E-22。

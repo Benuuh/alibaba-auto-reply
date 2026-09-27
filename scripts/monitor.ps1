@@ -72,6 +72,50 @@ function Switch-ToPendingTab() {
     return Invoke-CdpEval $js
 }
 
+# [SPEC §4.2-G1 2026-09-27] OneTalk 页是否存在(只读探测, 不写页面)。
+#   取 $null 而非抛异常: 门禁本身不允许因为探测失败而放行。任何异常/无页一律返回 $false(=页面不可用)。
+#   ⚠️ 与 Test-PageHealth 的分工: 本函数答"有没有 OneTalk 页", Test-PageHealth 答"页在但数据面是否断"。
+#   两者任一不通过 ⇒ 整轮跳过(§4.2-G1)。
+function Test-OneTalkPagePresent {
+    try {
+        $p = Get-Page
+        return [bool]($p -and $p.url -match 'onetalk\.alibaba\.com')
+    } catch { return $false }
+}
+
+# [SPEC §4.2-G1b 2026-09-27] G1 连续 2 轮 ⇒ 升级既有 PAGE-HEAL 路径(chrome_ensure -ForceRestart)。
+#   返回: 'OK'(已尝试自愈) / 'FATAL'(自愈失败达上限 ⇒ 必须停止本轮之后的会话处理并告警)。
+#   与主循环里既有的分级自愈(Get-PageHealAction 的静默期/退避/上限)共用同一套计数器, 不新造节流。
+function Invoke-PageHealFromGate([string]$Reason) {
+    if ($script:pageHealFails -ge 2) {
+        Write-Log "ABORT-PAGE-DOWN-FATAL reason=$Reason healFails=$($script:pageHealFails) action=stop-round"
+        try {
+            Send-WecomMessage ("[ALERT] OneTalk 页面连续不可用, chrome_ensure 自愈已失败 $($script:pageHealFails) 次 (reason=$Reason); 已停止本轮及之后的会话处理, 等待人工介入") | Out-Null
+        } catch { Write-Log "ABORT-PAGE-DOWN-FATAL: wecom alert failed - $($_.Exception.Message)" }
+        return 'FATAL'
+    }
+    $act = Get-PageHealAction -Streak $script:pageDownStreak -Restarts $script:pageHealRestarts -QuietUntil $script:pageHealQuietUntil
+    if ($act.Action -ne 'restart') {
+        # 静默期/达上限等既有节流命中 ⇒ 不重复重启, 但仍按 G1 整轮跳过(上面已 return)
+        Write-Log "PAGE-HEAL-ESCALATE-SKIPPED reason=$($Reason) heal=$($act.Action) [$($act.Reason)]"
+        return 'OK'
+    }
+    Write-Log ("PAGE-HEAL-ESCALATE reason=$Reason streak=$($script:pageDownStreak) [$($act.Reason)] quiet=$($act.NextQuietSec)s")
+    $ensure = powershell -ExecutionPolicy Bypass -NoProfile -File $script:ensureScript -ForceRestart 2>&1
+    Write-Log "PAGE-HEAL-ESCALATE chrome_ensure exit=$LASTEXITCODE result: $(($ensure -join ' | '))"
+    $script:pageHealRestarts++
+    if ($act.NextQuietSec -gt 0) { $script:pageHealQuietUntil = (Get-Date).AddSeconds($act.NextQuietSec) }
+    # 自愈是否成功以"页面上又能看到 OneTalk"为准, 不以退出码为准(退出码为 0 也可能是空动作)
+    if (Test-OneTalkPagePresent) {
+        Write-Log "PAGE-HEAL-ESCALATE result=ok (onetalk page present again)"
+        $script:pageHealFails = 0
+    } else {
+        $script:pageHealFails++
+        Write-Log "PAGE-HEAL-ESCALATE result=failed (healFails=$($script:pageHealFails))"
+    }
+    return 'OK'
+}
+
 function Get-Snapshot() {
     # 先切到待回复标签并等待列表刷新，再抓取会话列表
     $tabRes = Switch-ToPendingTab
@@ -784,15 +828,29 @@ function Send-PendingRetry($ctx, [string]$key) {
 
 # 会话处理:处理待办板块中的单个会话(提醒/白名单/冷却/打开/去重/生成/双检/发送/状态/提醒推送)。
 # $ctx 为可写上下文引用: state/openCooldown/skipCooldown/noReplyPreview/sendFailCount/failAlertAt/lastActivity
-function Invoke-ConvoItem($ctx, $item) {
+function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     $key = $item.name.Trim()
     $skey = Get-StateKey $key
     Write-Log "PROCESS convo from pending-list: $($key) | $($item.preview)"
+    # ===== [SPEC §4.2-G3 2026-09-27] 冷启动只观察: 启动后第 1 个 scan cycle 一律不发送 =====
+    # 依据 §2.1: 本次事故 3 条重复全部落在启动后第 1-3 分钟; 历史 09-27 00:43 事故形态相同
+    #   (停机后重启 ⇒ 老会话被当首次问询)。代价 ≤12 秒延迟(下一轮即可正常发送)。
+    # 位置: 会话处理入口第一步 —— 排在所有"可能走到发送"的分支之前, 包括失败补发/新询盘提醒/LLM 生成。
+    if ($CycleNo -le 1) {
+        Write-Log "COLD-START-SKIP $($key): observe-only cycle=$CycleNo (no send this cycle)"
+        return
+    }
+    # ===== [SPEC §4.2-G2 2026-09-27] 发对人校验 ⇒ 整轮中止 =====
+    # 真正的比对点在 **发送前一步**: lib\send.ps1::Send-OneTalkMessage 的会话名/标题校验(L70-73),
+    #   它每次发送都会执行, 返回 `ABORT_WRONG_CONVO (expected=.., current=..)`。
+    # 本函数消费该结果(见下方发送回执分支): 一旦出现 ⇒ 置 $script:roundHalt, 本轮剩余会话一律不处理。
+    # 依据 §2.1/§3-R6: 11:49:35 实测该闸门被触发时旧行为只报错、继续处理后续会话(前 7 条已经发出去)。
+    if ($script:roundHalt) { return }
     # A1 新询盘通知已下移 —— 见下方"确认买家有新消息"处 [FIX-ALERTNOISE 2026-09-26]。
     #   旧位置的问题：只看"会话在不在待回复列表 + 该买家 24h 内是否通知过"，
     #   **完全不看买家有没有说新话** ⇒ 已读会话（预览往往还是我方最后发出那句）也照发通知。
     #   实测事故 2026-09-26 18:34：74 秒内连发 9 条，用户判定为"乱发"。
-    #   故移到 dedup 判定（$already）之后：只有"买家确实说了新的、且还没回过"才通知。
+    #   故移到 Test-ShouldReply 判定之后：只有"账本证明不了已经回过这条"才通知。
     # A5 人工接管白名单(NO-REPLY):名单买家不自动回复(LLM/规则/图片模板/QUICK 全跳过,不发送);
     # 只读留痕(买家档案+msgs 快照)且不写 replied 去重状态 → 移出名单后自动恢复正常;
     # 新消息仍由上方 A1 提醒主人(24h 节流);预览不变时后续轮免打扰跳过
@@ -894,11 +952,11 @@ function Invoke-ConvoItem($ctx, $item) {
     # ===== [2026-09-26 更像真人销售 S2] 防抢话: 老板已亲自回过的会话, 机器人不再插话 =====
     # 依据: @@TS 只出现在机器人消息上; 人工在 OneTalk 手打的消息不带任何标记(实测 1812/1812)。
     # 判据方向(spec §4-15): 宁可少发, 不可抢话 —— 尾部我方消息判为人工时一律不自动发送。
-    # 位置: 发送前最靠前的闸门(发送链路真正的会话名校验 ABORT_WRONG_CONVO 在 lib\send.ps1 L73,
-    #       在 Send-OneTalkMessage 内部、每次发送都会执行, 未能被"提前", 故本闸门设在其上游必经处)。
-    # 取 $cdpLines 而非 $lines: 后者可能被 Accio 网关行替换, 网关行是否携带 @@TS 无契约保证,
-    #       一旦不带会被误判成人工 ⇒ 机器人永久不回复(§8-R1 风险)。CDP 行是本判定的权威数据面。
-    $hj = Get-HumanInterjectionGate @($cdpLines)
+    # [SPEC §4.2 2026-09-27 位置调整] 本闸门原在"抓取消息之后"(旧位置), 现**上移到任何页面操作之前**:
+    #   (a) 它只依赖列表预览 $item.preview 的尾部标记, 不需要先打开会话;
+    #   (b) 新门禁 G2(发对人)/判定出口都在其后 ⇒ 让路会话不再白白打开页面(与"整轮硬门禁"取向一致:
+    #       先在最便宜、最保守的闸门处拦下, 再决定是否触页面)。
+    $hj = Get-HumanInterjectionGate @(Get-HumanInterjectionProbeLines $item.preview)
     if ($hj.Action -eq 'SKIP') {
         if (-not $ctx.humanPending[$key]) {
             # 告警只在"让路开始"时写一次, 避免每轮刷新
@@ -939,11 +997,19 @@ function Invoke-ConvoItem($ctx, $item) {
             }
         }
     }
+    # [SPEC-单出口 2026-09-27] 会话级"整轮中止"标记: 由 G2(发对人失败)置位, 置位后本轮剩余会话一律不处理。
+    #   依据 spec §4.2-G2 + §4.4-4(禁止"只跳过该会话、继续处理下一个")。消费点在 Invoke-ScanRound。
+    $script:roundHalt = $false
     $buyerMsgs = @($cdpLines | Where-Object { $_ -match '^\[BUYER\]' })
     if ($buyerMsgs.Count -gt 0) {
         # [FIX-DUP-ORDER 2026-09-27] 位置 0 不再是"最新"的来源(spec §7-A8)。
+        # [FIX-DUP-ORDER 2026-09-27] 位置 0 不再是"最新"的来源(spec §7-A8)。
         #   选中"我们上一次回复所针对的那条"(按账本 hash 内容匹配), 取不到则退最后一条。
-        #   注意: 本变量只供日志/LLM 输入; 去重判定已改为与位置无关的条数判据(见下方 $isNew)。
+        #   ⚠️ [SPEC-单出口 2026-09-27 修正] 本变量**只供日志与 LLM 输入**。
+        #   判据的 hash 必须取**该会话最后一条买家消息**(spec §4.1 入参契约逐字规定), 不得取本选择器的结果 ——
+        #   二者在"顺序抖动/抽取漂移"时会指向不同消息: 取选择器结果会让 A2 不变量(应回 ⇒ 账本 hash ≠
+        #   最后买家消息 hash)在 47 个会话上被破坏(实测回放), 因为选择器会挑出一条**账本 hash 恰好相同**
+        #   的旧消息, 而那条并不是最后一条买家消息。
         $savedForLatest = ''
         if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
             $savedForLatest = [string]$ctx.state.replied.$skey
@@ -956,6 +1022,14 @@ function Invoke-ConvoItem($ctx, $item) {
             $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
             return
         }
+        # ===== 判据口径的"买家最后一条消息"(与 $latest 可能不同, 见上) =====
+        $lastBuyerRaw = $buyerMsgs[$buyerMsgs.Count - 1]
+        $lastBuyerClean = $lastBuyerRaw -replace '^\[BUYER\]\s*','' -replace '@@TS:.*?$','' -replace '@@OT:[A-Za-z0-9+/=]+','' -replace '\s+$',''
+        $lastBuyerOrig = ''
+        $lbB64 = ''
+        if ($lastBuyerRaw -match '@@OT:([A-Za-z0-9+/=]+)') { $lbB64 = $Matches[1] }
+        if ($lbB64) { try { $lastBuyerOrig = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($lbB64)) } catch { $lastBuyerOrig = '' } }
+        if (-not $lastBuyerOrig) { $lastBuyerOrig = $lastBuyerClean }
         # 解析消息时间戳（@@TS），并剥掉供 LLM/规则引擎使用
         $ts = ''
         if ($latest -match '@@TS:(.+)$') { $ts = $Matches[1].Trim() }
@@ -969,32 +1043,41 @@ function Invoke-ConvoItem($ctx, $item) {
         # [FIX-DUP 2026-09-25] LLM/规则输入必须剥离 @@OT（否则提示词里会出现 B64 垃圾）
         $lines = $lines | ForEach-Object { $_ -replace '@@TS:.*?$','' -replace '@@OT:[A-Za-z0-9+/=]+','' }
         Write-Log "Latest buyer msg: $latestClean"
-        # [FIX-DUP 2026-09-25] 去重键 = 归一化原文 hash + 买家消息条数（hash 仅作留痕/兼容，见下）
+        # [FIX-DUP 2026-09-25] 去重键 = 归一化原文 hash + 买家消息条数（格式保持不变: HASH|count,
+        #   spec §4.4-3 明令禁止改格式 —— 旧格式键继续被 Test-ShouldReply 判为"不解析第二段"⇒ fail-closed）。
         $normText = Get-NormalizedMsgText $latestOrig
         $hText = Get-StableHash $normText
+        # [SPEC-单出口 2026-09-27] 判据专用 hash: 必须是**该会话最后一条买家消息**的 hash(同口径: 原文优先)。
+        $hLastBuyer = Get-StableHash (Get-NormalizedMsgText $lastBuyerOrig)
         $buyerCount = @($buyerMsgs).Count
-        $newKey = Get-DedupKey $normText $buyerCount
-        # [FIX-DUP-ORDER 2026-09-27] 判定"是否已回复"不再依赖 $buyerMsgs[0] 的位置:
-        #   消息列表顺序不稳定(实测两份快照方向相反), 位置一漂 hash 就变 ⇒ 旧判据会把已回复的会话
-        #   判成"买家说了新话"而重发。改为条数判据(Test-NewBuyerMessage, 纯函数), 与位置无关。
-        #   注意 $newKey 的格式(hash|count)保持不变, 只改"怎么判"。
-        $already = $false
-        $saved = ''
-        $isNew = $true
+        # $newKey 仅用于日志留痕; 真正写账本的是发送成功后下方的 Set-StateHash(同一 hash 与条数)。
+        #   条数口径 = 该会话买家消息条数(与 $lastBuyer 同一次抓取), 保证"账本条数 vs 当前条数"可比。
+        $newKey = Get-DedupKey (Get-NormalizedMsgText $lastBuyerOrig) $buyerCount
+        # ===== [SPEC-单出口 2026-09-27] 「是否回复」的唯一出口: Test-ShouldReply =====
+        # 旧实现的三套并存判据(Test-DedupHit / Test-NewBuyerMessage / $already 兜底闸门)已整体删除,
+        # 由下面这一次调用单点取代(spec §4.1「必须删掉的旧出口」)。理由见 §3-R2:
+        #   「是否回复」没有唯一出口 ⇒ 改一处不影响另一处 ⇒ 修了 6 次仍然误发。
+        # 账本键按**原样**取出后直接交给判据, 本处不再解析第二段(§4.1 入参契约)。
+        $ledgerKey = ''
         if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
-            $saved = [string]$ctx.state.replied.$skey
-            $isNew = Test-NewBuyerMessage -BuyerLines $buyerMsgs -SavedKey $saved -CurrentHash $hText
-            $already = -not $isNew
+            $ledgerKey = [string]$ctx.state.replied.$skey
         }
-        $savedCountSeg = '-'
-        if ($saved) { $sp = $saved -split '\|', 2; if ($sp.Count -gt 1) { $savedCountSeg = $sp[1] } }
-        Write-Log "DEDUP-JUDGE $($key): savedCount=$savedCountSeg nowCount=$buyerCount isNew=$isNew (order-independent)"
-        # [FIX-DUP-ORDER 2026-09-27] 兜底闸门(spec §6-F1 判据优先级 3): 判据说"没有新消息"时一律不发送,
-        #   且冷却照常升级 —— 宁可少发, 不可重复打扰。正常情况下 $already 已等价于 (-not $isNew),
-        #   此闸门是独立于 $already 赋值的第二道保险: 将来若有人改错 $already, 也不会漏出重复发送。
-        if (-not $isNew) { $already = $true }
-        if ($already) {
-            Write-Log "SKIP $($key): already replied (dedup text=$($hText.Substring(0,8)) buyers=$buyerCount)"
+        $shouldReply = Test-ShouldReply -ConvoLines $cdpLines -LedgerKey $ledgerKey -NormLastBuyerHash $hLastBuyer
+        Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) buyerMsgs=$buyerCount ledgerKey=$ledgerKey lastBuyerHash=$($hLastBuyer.Substring(0,[Math]::Min(8,$hLastBuyer.Length)))"
+        # ===== [SPEC §4.3-G4 最小实现 2026-09-27] 同一买家最小间隔 15 分钟(抖动兜底) =====
+        #   依据 §0 判据 3「同一买家在 15 分钟内不可能收到第 2 条」+ §5.1-A5。
+        #   §4.3 的**完整**限流(日上限 / 整轮上限 / 整日上限 + data\reply_rate.json)属阶段 B;
+        #   阶段 A 只落地"最小间隔"这一条 —— 它是 A5 的验收对象, 且独立于判据(即使判据判错也发不出去)。
+        #   命中即跳过本次发送(不写账本), 但必须留日志。
+        if ($shouldReply.Reply -and $ctx.lastSendAt.ContainsKey($skey)) {
+            $gapMin = ((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes
+            if ($gapMin -lt 15) {
+                Write-Log ("RATE-SKIP buyer={0} gap={1}m (min-gap 15m, stage-A minimal G4)" -f $skey, [int]$gapMin)
+                $shouldReply = [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
+            }
+        }
+        if (-not $shouldReply.Reply) {
+            # 判定表命中"不发"(LEDGER_COUNT_MATCH / LEDGER_HASH_MATCH / UNCERTAIN_FAILCLOSED)
             # [FIX-DUP 2026-09-25] removed DEDUP-UPGRADE (key no longer carries ts)
             $prev = $null
             if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
@@ -1017,8 +1100,8 @@ function Invoke-ConvoItem($ctx, $item) {
             return
         } else {
             # A1 new inquiry alert (24h throttle)
-            # [FIX-ALERTNOISE 2026-09-26] 移到这里：本分支 = $already 为假 = **买家确实说了新的、
-            #   且尚未回复过**（dedup 用"归一化原文 hash + 买家消息条数"判定，是权威判据）。
+            # [FIX-ALERTNOISE 2026-09-26] 移到这里：本分支 = Test-ShouldReply 判"应回" = **账本证明不了
+            #   已经回过这条**（新询盘 / 买家真说了新话）。
             #   条件与旧位置逐字相同，只是挪到信息更全的位置 ⇒ 已读/无新消息的会话不再打扰主人。
             #   [FIX-DEDUP2] 补前置: 账本必须可读。本轮开头已保证(不可读则整轮跳过), 此处再挡一道,
             #   避免把"账本读不到"误报成"首次问询"(实测 2026-09-27 00:43 对老买家误发 3 次)。
@@ -1219,6 +1302,8 @@ function Invoke-ConvoItem($ctx, $item) {
                     # 发送成功后短冷却:同一会话 3 分钟内不再重复处理（方案甲：冷却期内不再提前解除）
                     $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }   # [FIX-DUP 2026-09-25]
                     Write-Log "POST-SEND-COOLDOWN $($key) 3min"
+                    # [SPEC §4.3-G4 2026-09-27] 记录成功发送时刻(最小间隔判据的数据面, 见上方 RATE-SKIP)
+                    $ctx.lastSendAt[$skey] = Get-Date
                     # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
                     try {
                         $gst = Get-GoodsDataStatus $key $script:dataDir
@@ -1230,6 +1315,15 @@ function Invoke-ConvoItem($ctx, $item) {
                         Write-Log "QUOTE-REMIND-ERR: $($_.Exception.Message)"
                     }
                 } else {
+                    # ===== [SPEC §4.2-G2 2026-09-27] 发对人校验失败 ⇒ **整轮中止**(不只是跳过该会话) =====
+                    # 依据 §7-R6: 本次事故里该闸门确实被触发(11:49:35 expected=Lena Fixari, current=Ganesan
+                    #   Krishnasamy), 但旧行为只报错、继续处理后续会话 ⇒ 页面已错位仍继续发。spec §4.4-4
+                    #   明令禁止"只跳过该会话、继续处理下一个"。
+                    if ($sendRes -match 'ABORT_WRONG_CONVO') {
+                        $script:roundHalt = $true
+                        Write-Log "ABORT_WRONG_CONVO $($key): $sendRes round-halt (no further sends this round)"
+                        try { Send-WecomMessage ("[ALERT] ABORT_WRONG_CONVO for " + $key + " - " + $sendRes + " ; round halted") | Out-Null } catch { }
+                    }
                     # A4: count consecutive send failures, alert after 3 (30m throttle per buyer)
                     $failCount = 0
                     if ($ctx.sendFailCount.ContainsKey($key)) { $failCount = $ctx.sendFailCount[$key] }
@@ -1338,9 +1432,50 @@ function Invoke-ScanRound($ctx) {
                     Write-Log "STATE-SUSPECT: ledger has only $($led.Count) entries but file is $($led.Bytes) bytes"
                 }
             }
+            # ===== [SPEC §4.2 G1/G1b/G3 2026-09-27] 整轮硬门禁(不满足 ⇒ 本轮一条都不发) =====
+            # 依据: 本次事故 §2.1 —— 页面已 `no onetalk page found`, monitor 仍逐会话处理并刷屏 8 条/轮,
+            #   8 分钟内 8 条消息无人拦(§3-R3「失败不闭合: 错了一条也停不下来」)。
+            # 位置: 必须**在进入会话处理循环之前**; 命中即整轮 return, 绝不"只跳过该会话、继续处理下一个"
+            #   (spec §4.4-4 明令禁止)。
+            # (a) 页面存在性: 无 OneTalk 页 ⇒ 页面不可用(与 Test-PageHealth 互补: 后者覆盖"页在但数据面断")
+            $pageMissing = -not (Test-OneTalkPagePresent)
+            $pageHealth = Test-PageHealth
+            # S1-3 空守卫(沿用既有教训): 异常路径可能返回字符串/数组, 直接取 .PageDown 会静默拿到 $null
+            #   ⇒ 把"判据失效"伪装成"未断连"。显式归一化后再判定。
+            if ($pageHealth -is [array]) { $pageHealth = $pageHealth[0] }
+            if ($null -eq $pageHealth -or -not ($pageHealth.PSObject.Properties.Name -contains 'PageDown')) {
+                $pageHealth = [pscustomobject]@{ PageDown = $true; Reason = 'probe-invalid'; Items = 0; Spinner = 0; Tab = ''; Tip = '' }
+            }
+            if ($pageMissing -or $pageHealth.PageDown) {
+                $pdReason = if ($pageMissing) { 'no-onetalk-page' } else { [string]$pageHealth.Reason }
+                Write-Log "ABORT-PAGE-DOWN reason=$($pdReason) items=$(@($snap).Count) action=skip-round"
+                $script:pageDownStreak++
+                # (b) G1b 自愈: 连续 2 轮 G1 ⇒ 升级到既有 chrome_ensure -ForceRestart 路径
+                if ($script:pageDownStreak -ge 2) {
+                    $heal = Invoke-PageHealFromGate $pdReason
+                    if ($heal -eq 'FATAL') { return @{ Action = 'PageDownFatal' } }
+                }
+                Write-Log "Scan cycle done (page-down skip)"
+                return @{ Action = 'Normal' }
+            }
+            if ($script:pageDownStreak -gt 0) {
+                Write-Log "PAGE-RECOVERED after $($script:pageDownStreak) down round(s)"
+                $script:pageDownStreak = 0
+            }
+            $script:pageHealFails = 0
+            # (c) G3 冷启动: monitor 启动后的第 1 个 scan cycle 只观察不发送(允许写快照/日志/推提醒)。
+            $script:scanCycleNo++
+            $observeOnly = ($script:scanCycleNo -le 1)
+            if ($observeOnly) { Write-Log "COLD-START observe-only cycle=$($script:scanCycleNo)" }
             foreach ($item in $snap) {
                 if (-not $item.name) { continue }
-                Invoke-ConvoItem $ctx $item
+                if ($script:roundHalt) {
+                    # G2 整轮中止: 已发生"发对人"校验失败 ⇒ 本轮剩余会话一律不处理(§4.2-G2 round-halt)
+                    Write-Log "ROUND-HALT: ABORT_WRONG_CONVO seen in this round; skipping remaining item(s)"
+                    break
+                }
+                $script:roundHalt = $false
+                Invoke-ConvoItem $ctx $item $script:scanCycleNo
             }
         }
         Write-Log "Scan cycle done"
@@ -1505,6 +1640,10 @@ function Initialize-MonitorRuntime {
     $script:pageHealRestarts = 0      # 本轮累计 FORCE-RESTART 次数
     $script:pageHealQuietUntil = $null # 静默期截止时间
     $script:pageHealAlerted = $false   # 达上限后只告警一次
+    # [SPEC §4.2 2026-09-27] 整轮硬门禁运行态
+    $script:pageHealFails = 0          # G1b: 门禁触发的 chrome_ensure 自愈连续失败次数(>=2 ⇒ FATAL)
+    $script:scanCycleNo = 0            # G3: scan cycle 序号(启动后第 1 轮 = 冷启动, 只观察不发送)
+    $script:roundHalt = $false         # G2: 本轮是否已因"发对人失败"而整轮中止
 }
 
 function Start-Monitor {
@@ -1518,6 +1657,7 @@ function Start-Monitor {
         sendFailCount = @{}
         failAlertAt = @{}
         humanPending = @{}   # [2026-09-26 S2] 买家 -> $true: 该会话"我方尾部是人工消息", 自动回复正让路中
+        lastSendAt = @{}     # [SPEC §4.3-G4 2026-09-27] statekey -> 最近一次**成功发送**时刻(最小间隔 15 分钟兜底)
         lastActivity = Get-Date
     }
     while ($true) {
@@ -1527,6 +1667,14 @@ function Start-Monitor {
             continue
         }
         if ($r.Action -eq 'Reloaded') {
+            continue
+        }
+        if ($r.Action -eq 'PageDownFatal') {
+            # [SPEC §4.2-G1b] 页面不可用且自愈失败达上限 ⇒ 停止处理, 等人工介入。
+            #   不再 5 秒一轮刷屏(本次事故 §2.1: 页面已不可用仍逐会话刷屏 8 条/轮)。
+            Write-Log "MONITOR-HALT: page unavailable and self-heal failed; waiting for manual intervention (60s recheck, no sends)"
+            Release-AppLock 'onetalk-write'
+            Start-Sleep -Seconds 60
             continue
         }
         Release-AppLock 'onetalk-write'

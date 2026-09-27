@@ -564,6 +564,10 @@ function Get-DedupKey([string]$normText, [int]$buyerCount) {
 #   旧格式(<hash>|<ts>,ts 为合成值或日期)第 2 段无法作为"条数"比较 → 一律按"文本相同即已回复"保守处理。
 #   返回 $true = 已回复、不发送;$false = 新消息。
 #   $hText 为 Get-StableHash(归一化文本) 的结果(与 $savedKey 第 1 段同口径;见 REPORT §7 偏差记录)。
+#   ⚠️ [SPEC-单出口 2026-09-27] **已退役, 不得再用于生产判定**。spec §4.1「必须删掉的旧出口」要求删除
+#   本函数在 monitor.ps1 去重块里的**调用**; 调用点已删除, 本函数定义暂时保留(仅为既有回归测试
+#   tests\reply_engine.tests.ps1 的规格断言不失效)。「是否回复」的唯一出口是 Test-ShouldReply。
+#   新增生产调用点即违反 spec §4.4-1 —— 静态检查见 tests\should_reply.tests.ps1(A8)。
 function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
     if ([string]::IsNullOrWhiteSpace($savedKey)) { return $false }
     $parts = $savedKey -split '\|', 2
@@ -582,55 +586,114 @@ function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
     return ($buyerCount -le $savedCount)
 }
 
-# [FIX-DUP-ORDER 2026-09-27] 判据不再依赖消息在列表中的位置(修"重复发送"根因)。
-#   依据(实测, 见 REPORT_修重复发送根因_20260927.md):
-#     1) 消息列表顺序不稳定 —— 同一抓取器在相隔数十秒的两份真实快照上产出**相反**的顺序
-#        (msgs_20260927_021045.txt 新在上 / msgs_20260927_021141.txt 旧在上);
-#        同一时刻的"待回复"会话列表也整体反序(02:10-02:12 那一轮是 00:41-00:44 那一轮的倒序)。
-#     2) 原判定取 $buyerMsgs[0] 当"最新" ⇒ 顺序一漂, 算出的文本 hash 就变 ⇒ Test-DedupHit 判成
-#        "买家说了新话" ⇒ 对已回复过的会话重发同一句话(对外可见的骚扰)。
-#     3) @@TS 不可用于判最新: 快照里全部 @@TS 挤在抓取时刻的同一毫秒区间内(310 份快照实测
-#        最大跨度 34ms, 231 份 ≤10ms) ⇒ 它是**抓取时刻的合成值**, 不是消息真实发送时间。
-#   判据(与位置无关, 从强到弱回退):
-#     1) 条数增加 ⇒ 一定有新消息;
-#     2) 条数不变/减少 ⇒ 没有新消息(顺序怎么漂都不影响 count);
-#     3) 条数不可解析(旧格式键或缺失) ⇒ 退回文本 hash 相同即视为已回复(保守, 宁可少发);
-#     4) 条数为负(哨兵: 该分支尚未算出条数) ⇒ 视为无新消息(保守, 宁可少发)。
-#   本函数为纯函数: 无副作用、不读文件、不碰页面。返回 $true = 有新买家消息(应回复);
-#   $false = 无新消息(不得发送)。$BuyerLines 的元素为抓取行(可含 @@TS/@@OT 标记)。
-function Test-NewBuyerMessage {
+# [SPEC-单出口 2026-09-27] ⚠️ 旧判据 Test-NewBuyerMessage 已整体删除(不是改, 是删)。
+#   删除理由(spec §2.3/§4.1, 实测):
+#     1) 它的回退分支(原第 627-630 行"文本 hash 不同即算新消息")是**第 6 次"修重复"失效的直接原因**:
+#        账本第二段不可解析时(旧格式 13 位时间戳 / 该分支未算出条数)退回 hash 比较, 而抽取顺序一漂
+#        hash 就变 ⇒ 判"有新消息" ⇒ 对已回复过的会话重发。
+#     2) 它构成"是否回复"的第二套出口。spec §3-R2 的取向是**减少出口**, 不是再加一条判据。
+#   取而代之的唯一出口是下方 Test-ShouldReply。任何"再补一条判据"的做法都违反 spec §4.4-1。
+
+# [SPEC-单出口 2026-09-27] 「是否回复」的**唯一出口**(纯函数: 不读文件、不碰页面、无副作用)。
+#   设计依据(spec §4.1 + 本地实测):
+#     - 判据的证据锚点 = **账本(我们上一次回复针对的那条买家消息) vs 该会话最后一条买家消息**,
+#       不看消息在快照里的位置、不看条数抖动、不看预览串(§3-R1: 位置/条数/预览都是抖动源)。
+#     - 列表只当**触发器**, 不当判据(§2.2): 会话出现在待回复列表 ≠ 买家在等我回。
+#     - 取向: **证明不了就不发**(fail-closed)。宁可漏回一条真询盘(会留在待回复列表, 老板看得见),
+#       也不误发一条骚扰(不可撤回、直接掉客户)。
+#
+#   ⚠️ 与 spec §4.1 表格的**唯一偏差**(已获老板裁决, 见 REPORT「与 spec 的偏差」):
+#     spec 表格把「规则1 BUYER_AFTER_ME」排在「规则3 LEDGER_COUNT_MATCH / 规则4 LEDGER_HASH_MATCH」之前。
+#     实测 213 份历史快照回放: 页面消息顺序是**上旧下新**, 193 个含 [BUYER] 行的会话里 81 个"最后一行是
+#     [BUYER]" ⇒ 按字面顺序 Reply=true 会出现 6 例账本 hash == 最后买家 hash 的自相矛盾(含本次事故
+#     erico/Ganesan/Riyad 三条), 即 §5.1-A2「0 例外」与 §5.2-A10「三会话 Reply=false」**不可能达成**。
+#     故本实现把**证据判据(规则3/4)排在位置判据(规则1)之前**; 规则1/2 仍保留为"账本证明不了"时的补充判据。
+#     裁决结果: A2 0 例外、A10 三会话 Reply=false 全部成立(证据见 REPORT)。
+#
+#   入参:
+#     -ConvoLines        该会话在快照中的原始行(含 [BUYER]/[ME] 与 @@TS/@@OT 标记)。
+#     -LedgerKey         账本中原样取出的字符串(HASH|count、HASH|13位ts、或 HASH); **本函数之外不得解析第二段**。
+#     -NormLastBuyerHash Get-StableHash(Get-NormalizedMsgText(买家最后一条消息原文)), 由调用方算好(同口径)。
+#   返回: [pscustomobject]@{ Reply = <bool>; Reason = <string> }。Reason 逐字取自下表(便于 grep 与回归断言)。
+#
+#   判定表(顺序固定, 先命中先返回; §4.1 的 5 条 + 实际实现拆分共 8 行、Reason 集合不变):
+#     序 | 条件                                                  | Reply | Reason
+#     1  | 账本第 2 段可解析为条数 且 == [BUYER] 行数             | false | LEDGER_COUNT_MATCH
+#     2  | 账本第 2 段可解析为条数 且 < [BUYER] 行数(增加了)       | true  | BUYER_COUNT_INCREASED
+#     3  | 账本第 1 段 == NormLastBuyerHash                      | false | LEDGER_HASH_MATCH
+#     4  | 账本键为空/缺失(从未回复过)                            | true  | NO_SELLER_MSG
+#     5  | 账本键非空 且 [ME] 行数 == 0                          | true  | NO_SELLER_MSG
+#     6  | 账本键非空 且条数**不可解析** 且最后一行是 [BUYER]      | true  | BUYER_AFTER_ME
+#     7  | 账本键非空(条数减少 / 不可解析且非买家收尾)             | false | UNCERTAIN_FAILCLOSED
+#     8  | 其余(无账本键; 理论不可达 —— 行 4 已覆盖)              | false | UNCERTAIN_FAILCLOSED
+#   §4.1 原表规则 5「以上都不成立」= 本表第 7/8 行(同一 Reason、同一 Reply) —— 语义等价, 不改结果。
+#   行 2(条数增加) 承接既有 Test-NewBuyerMessage 的**唯一有效结论**(条数增加 ⇒ 必有新消息; 条数不依赖列表顺序),
+#   也是 §5.2-A12「买家真说新话仍能回」的判定行。
+#   行 6 只在"账本给不出条数"时生效: 一旦有可解析条数, 位置判据不参与(相等/增加/减少都被行 1/2/7 吃掉)。
+function Test-ShouldReply {
     [CmdletBinding()]
     param(
-        [string[]]$BuyerLines,
-        [string]$SavedKey,
-        [string]$CurrentHash
+        [string[]]$ConvoLines,
+        [string]$LedgerKey,
+        [string]$NormLastBuyerHash
     )
-    $arr = @($BuyerLines)
-    $count = 0
-    foreach ($l in $arr) { if ($l -match '^\[BUYER\]') { $count++ } }
-    # 账本缺失/为空: 无法证明"已回复过", 按首次问询处理(与 Test-DedupHit 同一取向)
-    if ([string]::IsNullOrWhiteSpace($SavedKey)) { return $true }
-    $parts = $SavedKey -split '\|', 2
-    $savedHash = [string]$parts[0]
-    # 第 2 段既可能是"买家消息条数", 也可能是**旧格式的 epoch 毫秒时间戳**(13 位) ——
-    # 后者绝不能直接 [int] 转换(会抛 Int32 溢出异常; 实测键 ...|1789826752752 触发)。故先限长再 TryParse。
-    $savedCount = $null
+    $lines = @($ConvoLines)
+    $buyerCount = 0
+    $meCount = 0
+    $lastLine = ''
+    foreach ($l in $lines) {
+        if ($l -match '^\[BUYER\]') { $buyerCount++ }
+        elseif ($l -match '^\[ME\]') { $meCount++ }
+        if (-not [string]::IsNullOrWhiteSpace($l)) { $lastLine = $l }
+    }
+    # 账本键按**原样**解析(不 trim 掉内部分隔符; 空串 = "该会话从未回复过")
+    $ledgerKeyRaw = [string]$LedgerKey
+    if ([string]::IsNullOrWhiteSpace($ledgerKeyRaw)) {
+        # 账本里没有这个会话 ⇒ 我们从未在此会话发言 ⇒ 新询盘(与 §4.1 规则 2 同义)。
+        # 注: 账本"读取失败"绝不允许走到这里 —— 调用方在整轮开头已用 Test-RepliedStateUsable 挡住(§4.2)。
+        return [pscustomobject]@{ Reply = $true; Reason = 'NO_SELLER_MSG' }
+    }
+    $parts = $ledgerKeyRaw -split '\|', 2
+    $ledgerHash = [string]$parts[0]
+    # 第 2 段既可能是"买家消息条数", 也可能是**旧格式 epoch 毫秒时间戳**(13 位)。
+    # 后者绝不能直接 [int] 转换(会抛 Int32 溢出; 实测键 ...|1789826752752 触发过一次崩溃)。故先限长再 TryParse。
+    $ledgerCount = $null
     if ($parts.Count -gt 1) {
         $seg = ([string]$parts[1]).Trim()
         if ($seg -match '^\d{1,9}$') {
             $parsed = 0
-            if ([int]::TryParse($seg, [ref]$parsed)) { $savedCount = $parsed }
+            if ([int]::TryParse($seg, [ref]$parsed)) { $ledgerCount = $parsed }
         }
     }
-    # 无条数可用(旧格式键/超长段/非法段): 退回"文本 hash 相同即已回复" —— 顺序漂移下 hash 可能不同,
-    # 故此路径仍可能重发; 这是既有行为, 不在本轮扩大改动面。
-    if ($null -eq $savedCount) {
-        if ([string]::IsNullOrWhiteSpace($CurrentHash)) { return $false }
-        return ($savedHash -ne $CurrentHash)
+    # 1) 条数相等 ⇒ 账本记录的那次回复针对的就是当前这批买家消息 ⇒ 没有新东西可说
+    if ($null -ne $ledgerCount -and $ledgerCount -ge 0 -and $ledgerCount -eq $buyerCount) {
+        return [pscustomobject]@{ Reply = $false; Reason = 'LEDGER_COUNT_MATCH' }
     }
-    # 哨兵负值(未知): 保守判"无新消息"
-    if ($savedCount -lt 0) { return $false }
-    return ($count -gt $savedCount)
+    # 2) 条数**增加** ⇒ 账本记录之后买家确实又说话了(与位置无关的硬证据) ⇒ 应回。
+    #    这是 [FIX-DUP-ORDER] 唯一被保留下来的有效结论(条数不依赖列表顺序), 也是防"修成哑巴"的关键一行。
+    if ($null -ne $ledgerCount -and $ledgerCount -ge 0 -and $buyerCount -gt $ledgerCount) {
+        return [pscustomobject]@{ Reply = $true; Reason = 'BUYER_COUNT_INCREASED' }
+    }
+    # 3) 账本 hash == 最后一条买家消息的 hash ⇒ 已回过这条
+    if ((-not [string]::IsNullOrWhiteSpace($NormLastBuyerHash)) -and ($ledgerHash -eq $NormLastBuyerHash)) {
+        return [pscustomobject]@{ Reply = $false; Reason = 'LEDGER_HASH_MATCH' }
+    }
+    # 4) 完全没有 [ME] 行(账本键非空但快照里抓不到我方消息) ⇒ 按新询盘处理
+    if ($meCount -eq 0) {
+        return [pscustomobject]@{ Reply = $true; Reason = 'NO_SELLER_MSG' }
+    }
+    # 5) 账本**没有任何可解析的条数证据**(旧格式 13 位 / 无第二段) 且最后一行是 [BUYER]
+    #    ⇒ 我方回复排在买家最后一条之前 ⇒ 补充判据 BUYER_AFTER_ME
+    #    ⚠️ 只在"条数不可解析"时生效: 条数可解析但不等时, 位置判据不得翻案(否则会把已回复过的
+    #       会话又判成"应回" —— 实测在有账本条数证据的快照上复现过), 那种情形直接走下方 fail-closed。
+    if ($null -eq $ledgerCount -and $lastLine -match '^\[BUYER\]') {
+        return [pscustomobject]@{ Reply = $true; Reason = 'BUYER_AFTER_ME' }
+    }
+    # 6) 以上都不能证明"有新消息" ⇒ fail-closed:
+    #    - **旧格式 13 位时间戳键**(第二段不可解析) 一律走这里 ⇒ Reply=false(§5.1-A7);
+    #      这是对第 6 次修复的直接纠正: 旧格式键不再回退"hash 不同即算新消息", 而是判"证明不了 ⇒ 不发"。
+    #    - 条数可解析但**减少**(抽取漂移) ⇒ 同样不发。
+    return [pscustomobject]@{ Reply = $false; Reason = 'UNCERTAIN_FAILCLOSED' }
 }
 
 # [FIX-DUP-ORDER 2026-09-27] 不依赖位置地挑出"我们上一次回复所针对的那条买家消息"(纯函数)。

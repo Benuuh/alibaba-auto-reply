@@ -114,41 +114,13 @@ if ($DryRun) { Write-Output "NUDGE-DRYRUN: 未发送任何消息"; exit 0 }
 # 3) 发送前确认 CDP 可用
 if (-not (Test-CdpReady)) { Write-Log "NUDGE: CDP not ready, skip"; Write-Output "NUDGE-CDP-DOWN"; exit 0 }
 
-# P2.3 写互斥:发送前获取 onetalk-write 锁(monitor 轮间隙),超时 10s 放弃,避免并发操作同一页面
-if (-not (Get-AppLock 'onetalk-write' 10)) {
-    Write-Log "NUDGE: onetalk-write lock busy, skip"
-    Write-Output "NUDGE-LOCK-BUSY"
-    exit 0
-}
-try {
-    $sent = 0; $failed = 0
-    foreach ($c in $candidates) {
-        $text = Get-NudgeText-LLM $c.name $c.ctx
-        if (-not $text) {
-            $text = "Hi $($c.name), just checking in - any update on the shipment details? We're ready whenever you are."
-        }
-        $res = Send-OneTalkMessage $c.name $text
-        Write-Log "NUDGE: $($c.name) -> $res"
-        if ($res -match 'SENT_OK') {
-            $sent++
-            # 记录去重(含发送时间);V12:IDictionary 用 Keys 枚举,避免 CLR 内部属性污染(同 monitor.ps1)
-            $nud = @{}
-            $__src = $state.nudged
-            if ($__src -is [System.Collections.IDictionary]) {
-                foreach ($__k in $__src.Keys) { $nud[$__k] = $__src[$__k] }
-            } else {
-                foreach ($__p in $__src.PSObject.Properties) { $nud[$__p.Name] = $__p.Value }
-            }
-            $nud[$c.skey] = (Get-Date -Format "yyyy-MM-dd HH:mm")
-            $state = [pscustomobject]@{ nudged = $nud }
-        } else {
-            $failed++
-        }
-        Start-Sleep -Seconds 5
-    }
-    Save-NudgeState $state
-    Write-Log "NUDGE: done (sent=$sent failed=$failed)"
-    Write-Output "NUDGE-DONE: sent=$sent failed=$failed"
-} finally {
-    Release-AppLock 'onetalk-write'
-}
+# ===== [SPEC §4.1 2026-09-27] 「沉睡买家唤醒」不再自动发给买家 =====
+# 决定来源: spec §4.1「必须删掉的旧出口」表 —— `QUOTE-REMIND`/`nudge` 的自动发送路径一律改为
+#   **只推企微/dsh-im 内部提醒, 不自动发给买家**(老板原话:"又给不需要回复的客户发消息了" —— 提醒不是消息)。
+# 为什么这里不能只删 Send-OneTalkMessage 的调用而保留"扫描+通知": 唤醒消息本身没有"买家是否在等我回"的
+#   证据锚点(与 Test-ShouldReply 无关), 属于 spec §4.4-1 禁止的"Test-ShouldReply 之外的发送判据"。
+# 保持可观测: 仍打印候选并写一行日志, 老板在企微/dsh-im 侧收到提醒后自行决定是否手动联系。
+Write-Log ("NUDGE: auto-send DISABLED by spec §4.1 - {0} candidate(s) listed only, nothing sent" -f $candidates.Count)
+foreach ($c in $candidates) { Write-Log ("NUDGE-CANDIDATE {0} (last active {1}) - manual follow-up only" -f $c.name, $c.lastTime.ToString("MM-dd HH:mm")) }
+Write-Output ("NUDGE-DISABLED-BY-SPEC: candidates={0} sent=0 (auto-send to buyers removed per spec 4.1)" -f $candidates.Count)
+exit 0
