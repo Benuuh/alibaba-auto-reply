@@ -1,4 +1,4 @@
-# should_reply tests -- [SPEC-单出口 2026-09-27] 「是否回复」唯一出口 Test-ShouldReply 的纯逻辑回归
+﻿# should_reply tests -- [SPEC-单出口 2026-09-27] 「是否回复」唯一出口 Test-ShouldReply 的纯逻辑回归
 #
 # 对应 spec: docs\specs\误发终止_单出口判据_20260927.md（唯一事实源）
 # 本文件覆盖:
@@ -323,6 +323,37 @@ Assert-True "A8-Test-NewBuyerMessage-removed" ($null -eq (Get-Command Test-NewBu
 # Test-DedupHit 仍可调用(定义保留), 但生产代码里不得有调用点
 Assert-True "A8-no-legacy-verdict-call" ($legacyCalls.Count -eq 0)
 if ($legacyCalls.Count -gt 0) { $legacyCalls | ForEach-Object { Write-Output ("    legacy call: {0}:{1} {2}" -f $_.file, $_.line, $_.code) } }
+
+# ---------------------------------------------------------------------------
+# 6b) [阶段 D 补 2026-09-27] 生产脚本的"被调用函数必须存在"静态闭包检查。
+#   为什么必须有这一条（实测教训）: 阶段 A 一次失败的回退编辑在 monitor.ps1 里留下
+#     `Get-HumanInterjectionGate @(Get-HumanInterjectionProbeLines $item.preview)`,
+#     而 `Get-HumanInterjectionProbeLines` **生产代码里根本不存在**（只在测试桩里有）。
+#     A1 全量测试全绿 / A16 语法解析全 OK / A2/A9/A10 全绿 —— 没有一条能发现它:
+#       · 测试只 dot-source 纯函数文件, 不执行 monitor.ps1 的函数体;
+#       · 语法解析只保证语法对, 不保证"名字存在"。
+#     阶段 D 真跑起来才炸: 第 2 轮 `Monitor error: The term '...' is not recognized`
+#     ⇒ 会话永久卡在待回复列表 + 每 10 秒重试。
+# ---------------------------------------------------------------------------
+$staticCheck = Join-Path $root "tools\dedup_acceptance\static_call_closure.ps1"
+if (Test-Path $staticCheck) {
+    $scOut = & powershell -ExecutionPolicy Bypass -NoProfile -File $staticCheck 2>&1
+    $scCode = $LASTEXITCODE
+    Assert-Eq "A8b-static-call-closure-passes" $scCode 0
+    if ($scCode -ne 0) {
+        Write-Output "    --- static_call_closure 输出 ---"
+        $scOut | Select-Object -First 30 | ForEach-Object { Write-Output ("    " + $_) }
+    }
+    # 反向自检: 检查本身必须真的能抓到"未定义命令"（否则它只是个安慰剂）
+    $probe = Join-Path $env:TEMP ("closure_probe_" + [guid]::NewGuid().ToString("N") + ".ps1")
+    Set-Content -LiteralPath $probe -Value "function Test-Probe { Call-NoSuchFunction-At-All }`nTest-Probe" -Encoding UTF8
+    $probeOut = & powershell -ExecutionPolicy Bypass -NoProfile -File $staticCheck -Files $probe 2>&1
+    $probeCode = $LASTEXITCODE
+    Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+    Assert-True "A8b-closure-check-catches-undefined" ($probeCode -ne 0)
+} else {
+    Assert-True "A8b-static-call-closure-script-exists" $false
+}
 
 # ---------------------------------------------------------------------------
 # 7) §4.2 G1/G2/G3 门禁的静态存在性（运行态验收属阶段 D 的 A13-A15, 阶段 A 只做离线可断言部分）

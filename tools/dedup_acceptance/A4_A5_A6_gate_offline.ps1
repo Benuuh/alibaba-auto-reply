@@ -1,4 +1,4 @@
-# A4_A5_A6_gate_offline.ps1 -- [SPEC-单出口 2026-09-27] §5.1-A4 / A5 / A6 的离线门禁验收
+﻿# A4_A5_A6_gate_offline.ps1 -- [SPEC-单出口 2026-09-27] §5.1-A4 / A5 / A6 的离线门禁验收
 #
 # 为什么可以离线验收: 三条判据都是**控制流性质**("某条件下一个发送调用都不发生"), 必须证明的是
 #   "门禁在发送之前 return"。本脚本按部署根代码的实际结构做桩驱动, 并对**真实部署文件**做 AST 断言,
@@ -107,8 +107,11 @@ function Add-Content {
 $logSink = New-Object System.Collections.ArrayList
 function Write-Log([string]$msg) { [void]$logSink.Add($msg) }
 function Send-WecomMessage([string]$m) { return 'STUB-WECOM' }
-function Get-HumanInterjectionGate([string[]]$l) { return @{ Action = 'SEND'; Reason = 'bot-last'; HasHumanLast = $false; HumanIndex = -1; LastMeSource = 'bot' } }
-function Get-HumanInterjectionProbeLines([string]$p) { return @() }
+# ⚠️ 这里**故意不桩** Get-HumanInterjectionGate / Get-HumanInterjectionProbeLines:
+#   它们由真实生产文件(msg_source.ps1 定义 / monitor.ps1 调用)提供。曾经的桩
+#   `function Get-HumanInterjectionProbeLines([string]$p) { return @() }` 掩盖了阶段 D 才炸出来的
+#   真实缺陷(monitor.ps1 调了一个生产代码里根本不存在的函数) —— 桩能"补上"生产缺的东西,
+#   这正是最危险的一类假绿。生产缺什么, 这里就必须跟着报错。
 function Test-NoReplyBuyer([string]$k) { return $false }
 function Get-Snapshot() { return '[]' }
 function Switch-ToPendingTab() { return 'ALREADY_ACTIVE' }

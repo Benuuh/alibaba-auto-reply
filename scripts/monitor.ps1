@@ -952,11 +952,10 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     # ===== [2026-09-26 更像真人销售 S2] 防抢话: 老板已亲自回过的会话, 机器人不再插话 =====
     # 依据: @@TS 只出现在机器人消息上; 人工在 OneTalk 手打的消息不带任何标记(实测 1812/1812)。
     # 判据方向(spec §4-15): 宁可少发, 不可抢话 —— 尾部我方消息判为人工时一律不自动发送。
-    # [SPEC §4.2 2026-09-27 位置调整] 本闸门原在"抓取消息之后"(旧位置), 现**上移到任何页面操作之前**:
-    #   (a) 它只依赖列表预览 $item.preview 的尾部标记, 不需要先打开会话;
-    #   (b) 新门禁 G2(发对人)/判定出口都在其后 ⇒ 让路会话不再白白打开页面(与"整轮硬门禁"取向一致:
-    #       先在最便宜、最保守的闸门处拦下, 再决定是否触页面)。
-    $hj = Get-HumanInterjectionGate @(Get-HumanInterjectionProbeLines $item.preview)
+    # [SPEC §4.2 2026-09-27] 位置: 保持在"抓取消息之后" —— 本闸门必须吃**会话行**($cdpLines),
+    #   不能用待回复列表的预览串: 预览串没有 [BUYER]/[ME] 标记, Get-MessageSource 全判 'unknown'
+    #   ⇒ 闸门恒为 SEND, 防抢话静默失效(实测教训)。发送链路真正的会话名校验在 lib\send.ps1 L73。
+    $hj = Get-HumanInterjectionGate @($cdpLines)
     if ($hj.Action -eq 'SKIP') {
         if (-not $ctx.humanPending[$key]) {
             # 告警只在"让路开始"时写一次, 避免每轮刷新
