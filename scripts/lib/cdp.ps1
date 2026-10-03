@@ -21,9 +21,12 @@ function Invoke-CdpEval([string]$js) {
 }
 
 function Test-CdpReady {
+    # [SPEC-公海独立Chrome 2026-09-27 §3.2] 加了**可选** `-Port`:公海要用 9225 探测自己的实例。
+    #   ⚠️ 不传 `-Port` 时行为与改动前**逐字一致**(仍取 config 的 cdp_port = 9222)⇒ monitor 不受影响。
+    param([int]$Port = 0)
     try {
-        $port = Get-CdpPort
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/json/version" -TimeoutSec 3 -UseBasicParsing
+        $p = $(if ($Port -gt 0) { $Port } else { Get-CdpPort })
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$p/json/version" -TimeoutSec 3 -UseBasicParsing
         return ($r.StatusCode -eq 200)
     } catch { return $false }
 }

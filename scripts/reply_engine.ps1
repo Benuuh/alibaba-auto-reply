@@ -594,106 +594,144 @@ function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
 #     2) 它构成"是否回复"的第二套出口。spec §3-R2 的取向是**减少出口**, 不是再加一条判据。
 #   取而代之的唯一出口是下方 Test-ShouldReply。任何"再补一条判据"的做法都违反 spec §4.4-1。
 
-# [SPEC-单出口 2026-09-27] 「是否回复」的**唯一出口**(纯函数: 不读文件、不碰页面、无副作用)。
-#   设计依据(spec §4.1 + 本地实测):
-#     - 判据的证据锚点 = **账本(我们上一次回复针对的那条买家消息) vs 该会话最后一条买家消息**,
-#       不看消息在快照里的位置、不看条数抖动、不看预览串(§3-R1: 位置/条数/预览都是抖动源)。
-#     - 列表只当**触发器**, 不当判据(§2.2): 会话出现在待回复列表 ≠ 买家在等我回。
-#     - 取向: **证明不了就不发**(fail-closed)。宁可漏回一条真询盘(会留在待回复列表, 老板看得见),
-#       也不误发一条骚扰(不可撤回、直接掉客户)。
+# [SPEC-待回复列表 2026-09-27] 「是否回复」的**唯一出口**(纯函数: 不读文件、不碰页面、无副作用)。
+#   ⚠️ 本函数于 2026-09-27 被**换掉判据**(source of truth: docs\specs\判据改为待回复列表_20260927.md)。
+#      ⛔ 下面这段旧论证**已被明确推翻, 不得据以改回**:
+#        「列表只当**触发器**, 不当判据(§2.2): 会话出现在待回复列表 ≠ 买家在等我回。」
+#        + 「取向: 证明不了就不发(fail-closed), 宁可漏回一条真询盘。」
+#      推翻理由(实证, 见新 spec §1.2): 旧判据只回答「我发过消息了吗」, 业务需要的是「客户的问题被回答了吗」。
+#      买家G 问了 6 次报价, 我方回了 6 次"马上给你报价"、真实价格 0 条, 最后一句
+#      (能不能到工厂提货)无人回答; 而旧判据每 9 秒判一次 LEDGER_COUNT_MATCH ⇒ **无限跳过**。
+#      老板裁决(2026-09-27 13:1x): 「回复的核心是该对话在页面待回复的列表里」——
+#      阿里的待回复列表就是待办板: 在板子上 = 需要处理; 处理完它自己会消失。
 #
-#   ⚠️ 与 spec §4.1 表格的**唯一偏差**(已获老板裁决, 见 REPORT「与 spec 的偏差」):
-#     spec 表格把「规则1 BUYER_AFTER_ME」排在「规则3 LEDGER_COUNT_MATCH / 规则4 LEDGER_HASH_MATCH」之前。
-#     实测 213 份历史快照回放: 页面消息顺序是**上旧下新**, 193 个含 [BUYER] 行的会话里 81 个"最后一行是
-#     [BUYER]" ⇒ 按字面顺序 Reply=true 会出现 6 例账本 hash == 最后买家 hash 的自相矛盾(含本次事故
-#     erico/Ganesan/Riyad 三条), 即 §5.1-A2「0 例外」与 §5.2-A10「三会话 Reply=false」**不可能达成**。
-#     故本实现把**证据判据(规则3/4)排在位置判据(规则1)之前**; 规则1/2 仍保留为"账本证明不了"时的补充判据。
-#     裁决结果: A2 0 例外、A10 三会话 Reply=false 全部成立(证据见 REPORT)。
+#   新的证据锚点 = **该会话此刻在不在页面的待回复列表里**(+ 冷却/最小间隔兜底), 不再看账本 hash、
+#   不再看买家消息条数。账本仍然继续写入(§2.2: 删了会连带破坏补发队列 / Test-RepliedStateUsable /
+#   快照保留), 但**不再作为"是否回复"的依据** —— 它只是历史记录与补发队列的关联依据。
 #
-#   入参:
-#     -ConvoLines        该会话在快照中的原始行(含 [BUYER]/[ME] 与 @@TS/@@OT 标记)。
-#     -LedgerKey         账本中原样取出的字符串(HASH|count、HASH|13位ts、或 HASH); **本函数之外不得解析第二段**。
-#     -NormLastBuyerHash Get-StableHash(Get-NormalizedMsgText(买家最后一条消息原文)), 由调用方算好(同口径)。
+#   取向变更(§9「被取代」末行): 旧「证明不了就不发」⇒ 新「**在待回复列表里且不在冷却/间隔内 ⇒ 发**」;
+#   仅账本异常/冷却/最小间隔这三类仍然 fail-closed。
+#
+#   入参(判定只用前 7 个):
+#     -LedgerUsable           账本(去重状态)是否可读。整轮开头 Test-RepliedStateUsable 已挡一道(G1/P6),
+#                             此处**再挡一道**(§2 行 1), 与 §4.1 裁决 = 方案甲(账本读不到 ⇒ 一条都不发)一致。
+#     -PendingSeenRounds      该会话**连续**在待回复列表里出现的轮数, 由 monitor 的 $ctx.pendingSeen 维护。
+#                             0 = 本轮不在列表里(未命中即删键)。§2.1: 只有 ≥2 才允许发。
+#     -RequiredSeenRounds     连续确认轮数门槛, 缺省 2(§0.1: 约 9 秒, 是唯一的"冷启动延迟", 不可再降)。
+#                             实现里强制下限 2 —— 传 0/1 会被抬回 2, 防止"瞬时残留恰好被连读两轮"之外的降级。
+#     -MinutesSinceLastSend   距上次**成功发送**的分钟数; -1 = 从未发过(则本行不命中)。
+#     -MinGapMinutes          最小间隔, 缺省 5(配置键 reply_min_gap_min; §0.1 原值 15)。
+#     -InPostSendCooldown     是否在发送后冷却期内; 由调用方用**同一个** $ctx.lastSendAt 判定, 不另记一套。
+#     -PostSendCooldownMinutes 发送后冷却分钟数, 缺省 5(配置键 reply_post_send_cooldown_min; 原值 3)。
+#                             §0.1: 与最小间隔对齐, **不得小于它**。
+#     -ConvoLines / -LedgerKey / -NormLastBuyerHash
+#                             **仅为日志与既有测试兼容而保留**; §3.1 明令判定逻辑不得再读它们。
+#
 #   返回: [pscustomobject]@{ Reply = <bool>; Reason = <string> }。Reason 逐字取自下表(便于 grep 与回归断言)。
 #
-#   判定表(顺序固定, 先命中先返回; §4.1 的 5 条 + 实际实现拆分共 8 行、Reason 集合不变):
-#     序 | 条件                                                  | Reply | Reason
-#     1  | 账本第 2 段可解析为条数 且 == [BUYER] 行数             | false | LEDGER_COUNT_MATCH
-#     2  | 账本第 2 段可解析为条数 且 < [BUYER] 行数(增加了)       | true  | BUYER_COUNT_INCREASED
-#     3  | 账本第 1 段 == NormLastBuyerHash                      | false | LEDGER_HASH_MATCH
-#     4  | 账本键为空/缺失(从未回复过)                            | true  | NO_SELLER_MSG
-#     5  | 账本键非空 且 [ME] 行数 == 0                          | true  | NO_SELLER_MSG
-#     6  | 账本键非空 且条数**不可解析** 且最后一行是 [BUYER]      | true  | BUYER_AFTER_ME
-#     7  | 账本键非空(条数减少 / 不可解析且非买家收尾)             | false | UNCERTAIN_FAILCLOSED
-#     8  | 其余(无账本键; 理论不可达 —— 行 4 已覆盖)              | false | UNCERTAIN_FAILCLOSED
-#   §4.1 原表规则 5「以上都不成立」= 本表第 7/8 行(同一 Reason、同一 Reply) —— 语义等价, 不改结果。
-#   行 2(条数增加) 承接既有 Test-NewBuyerMessage 的**唯一有效结论**(条数增加 ⇒ 必有新消息; 条数不依赖列表顺序),
-#   也是 §5.2-A12「买家真说新话仍能回」的判定行。
-#   行 6 只在"账本给不出条数"时生效: 一旦有可解析条数, 位置判据不参与(相等/增加/减少都被行 1/2/7 吃掉)。
+#   判定表(顺序固定, 先命中先返回; 新 spec §2 —— **就这 5 行**, 原来 8 行三个证据源, 现在 5 行两个):
+#     序 | 条件                                        | Reply | Reason
+#     1  | 账本(去重状态)不可用                         | false | LEDGER_UNUSABLE_FAILCLOSED
+#     2  | 该会话**不在**待回复列表(或连续确认轮数 < 2)  | false | NOT_IN_PENDING_LIST
+#     3  | 该会话在**发送后冷却**期内                    | false | POST_SEND_COOLDOWN
+#     4  | 该会话距上次成功发送 **< 最小间隔**            | false | RATE_MIN_GAP
+#     5  | 以上都不命中                                 | true  | IN_PENDING_LIST
+#   行 2 的两种形态共用同一 Reason: "不在列表"表现为轮数 0(monitor 未命中即删键), "轮数不足"表现为 1。
+#   行 3/4 的数据面是**同一个** $ctx.lastSendAt[statekey](§3.2: 不得各记一套); 行 3 排在行 4 之前,
+#   故当 PostSendCooldownMinutes ≤ MinGapMinutes(缺省两者都是 5)时, 生产日志里先出现的是 POST_SEND_COOLDOWN。
+#
+#   §2.1 为什么行 2 要"连续 2 轮确认"(不是保守, 是必须):
+#     实测两种列表瞬态 —— ①标签切换瞬间 querySelectorAll('.contact-item-container') 会读到上一个视图的
+#     残留节点(13:04:23 读到 23 个且 visibility:hidden; 13:07 同选择器读到 0 个); ②切标签后列表会短暂
+#     塌成 height:0(.all-list-container 实测 hidden/h0)。若只看单轮命中就发, 这些瞬态会造成误发。
+#     代价: 首次命中到可发之间多等 1 轮(约 9 秒); 收益: 只存活 1 轮的瞬态残留永远不会触发发送。
 function Test-ShouldReply {
     [CmdletBinding()]
     param(
+        # ===== 判定入参(§2 的 5 行表只用这些) =====
+        [bool]$LedgerUsable           = $false,   # 账本可读(整轮已挡, 此处再挡一道)
+        [int]$PendingSeenRounds       = 0,        # 该会话连续在待回复列表里出现的轮数
+        [int]$RequiredSeenRounds      = 2,        # 连续确认轮数门槛(§2.1)
+        [int]$MinutesSinceLastSend    = -1,       # 距上次成功发送的分钟数; -1 = 从未发过
+        [int]$MinGapMinutes           = 5,        # 最小间隔(配置键 reply_min_gap_min, 缺省 5)
+        [bool]$InPostSendCooldown     = $false,   # 是否在发送后冷却期内
+        [int]$PostSendCooldownMinutes = 5,        # 发送后冷却(配置键 reply_post_send_cooldown_min, 缺省 5)
+
+        # ===== 仅为日志与既有测试兼容保留; 判定逻辑**不得**再读它们(§2.2 / §3.1) =====
         [string[]]$ConvoLines,
         [string]$LedgerKey,
         [string]$NormLastBuyerHash
     )
-    $lines = @($ConvoLines)
-    $buyerCount = 0
-    $meCount = 0
-    $lastLine = ''
-    foreach ($l in $lines) {
-        if ($l -match '^\[BUYER\]') { $buyerCount++ }
-        elseif ($l -match '^\[ME\]') { $meCount++ }
-        if (-not [string]::IsNullOrWhiteSpace($l)) { $lastLine = $l }
+    # §0.1「连续确认轮数 ... 不可再降」的技术兜底: 传 0/1 一律抬回 2。
+    #   没有这一行, 一次误配(或未来某个调用点漏传)就会让 §2.1 的瞬态防线静默失效 —— 那正是本次要修的病根。
+    if ($RequiredSeenRounds -lt 2) { $RequiredSeenRounds = 2 }
+
+    # 行 1: 账本(去重状态)不可用 ⇒ fail-closed。
+    #   §4.1 裁决 = **方案甲**(保守, 推荐): 账本读不到时补发队列与 state.json 的关联也断了, 发出去可能重复。
+    #   故保持 P6: 整轮一条都不发; 本行是同一取向的第二道。
+    if (-not $LedgerUsable) {
+        return [pscustomobject]@{ Reply = $false; Reason = 'LEDGER_UNUSABLE_FAILCLOSED' }
     }
-    # 账本键按**原样**解析(不 trim 掉内部分隔符; 空串 = "该会话从未回复过")
-    $ledgerKeyRaw = [string]$LedgerKey
-    if ([string]::IsNullOrWhiteSpace($ledgerKeyRaw)) {
-        # 账本里没有这个会话 ⇒ 我们从未在此会话发言 ⇒ 新询盘(与 §4.1 规则 2 同义)。
-        # 注: 账本"读取失败"绝不允许走到这里 —— 调用方在整轮开头已用 Test-RepliedStateUsable 挡住(§4.2)。
-        return [pscustomobject]@{ Reply = $true; Reason = 'NO_SELLER_MSG' }
+    # 行 2: 不在待回复列表(轮数 0), 或连续确认轮数不足 ⇒ 不发。
+    #   ⚠️ 这是 §2.1 的瞬态防线: 标签切换/虚拟滚动残留通常只存活 1 轮 ⇒ 永远到不了 2。
+    if ($PendingSeenRounds -lt $RequiredSeenRounds) {
+        return [pscustomobject]@{ Reply = $false; Reason = 'NOT_IN_PENDING_LIST' }
     }
-    $parts = $ledgerKeyRaw -split '\|', 2
-    $ledgerHash = [string]$parts[0]
-    # 第 2 段既可能是"买家消息条数", 也可能是**旧格式 epoch 毫秒时间戳**(13 位)。
-    # 后者绝不能直接 [int] 转换(会抛 Int32 溢出; 实测键 ...|1789826752752 触发过一次崩溃)。故先限长再 TryParse。
-    $ledgerCount = $null
-    if ($parts.Count -gt 1) {
-        $seg = ([string]$parts[1]).Trim()
-        if ($seg -match '^\d{1,9}$') {
-            $parsed = 0
-            if ([int]::TryParse($seg, [ref]$parsed)) { $ledgerCount = $parsed }
-        }
+    # 行 3: 发送后冷却期内 ⇒ 不发。数据面与行 4 共用 $ctx.lastSendAt(调用方传入判定结果)。
+    if ($InPostSendCooldown) {
+        return [pscustomobject]@{ Reply = $false; Reason = 'POST_SEND_COOLDOWN' }
     }
-    # 1) 条数相等 ⇒ 账本记录的那次回复针对的就是当前这批买家消息 ⇒ 没有新东西可说
-    if ($null -ne $ledgerCount -and $ledgerCount -ge 0 -and $ledgerCount -eq $buyerCount) {
-        return [pscustomobject]@{ Reply = $false; Reason = 'LEDGER_COUNT_MATCH' }
+    # 行 4: 距上次成功发送 < 最小间隔 ⇒ 不发(§0 硬判据 2: 同一买家在最小间隔内不可能收到第 2 条)。
+    #   -1(= 从未发过)不命中本行; 间隔"刚好等于"最小间隔时放行(严格小于才拦)。
+    if ($MinutesSinceLastSend -ge 0 -and $MinutesSinceLastSend -lt $MinGapMinutes) {
+        return [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
     }
-    # 2) 条数**增加** ⇒ 账本记录之后买家确实又说话了(与位置无关的硬证据) ⇒ 应回。
-    #    这是 [FIX-DUP-ORDER] 唯一被保留下来的有效结论(条数不依赖列表顺序), 也是防"修成哑巴"的关键一行。
-    if ($null -ne $ledgerCount -and $ledgerCount -ge 0 -and $buyerCount -gt $ledgerCount) {
-        return [pscustomobject]@{ Reply = $true; Reason = 'BUYER_COUNT_INCREASED' }
-    }
-    # 3) 账本 hash == 最后一条买家消息的 hash ⇒ 已回过这条
-    if ((-not [string]::IsNullOrWhiteSpace($NormLastBuyerHash)) -and ($ledgerHash -eq $NormLastBuyerHash)) {
-        return [pscustomobject]@{ Reply = $false; Reason = 'LEDGER_HASH_MATCH' }
-    }
-    # 4) 完全没有 [ME] 行(账本键非空但快照里抓不到我方消息) ⇒ 按新询盘处理
-    if ($meCount -eq 0) {
-        return [pscustomobject]@{ Reply = $true; Reason = 'NO_SELLER_MSG' }
-    }
-    # 5) 账本**没有任何可解析的条数证据**(旧格式 13 位 / 无第二段) 且最后一行是 [BUYER]
-    #    ⇒ 我方回复排在买家最后一条之前 ⇒ 补充判据 BUYER_AFTER_ME
-    #    ⚠️ 只在"条数不可解析"时生效: 条数可解析但不等时, 位置判据不得翻案(否则会把已回复过的
-    #       会话又判成"应回" —— 实测在有账本条数证据的快照上复现过), 那种情形直接走下方 fail-closed。
-    if ($null -eq $ledgerCount -and $lastLine -match '^\[BUYER\]') {
-        return [pscustomobject]@{ Reply = $true; Reason = 'BUYER_AFTER_ME' }
-    }
-    # 6) 以上都不能证明"有新消息" ⇒ fail-closed:
-    #    - **旧格式 13 位时间戳键**(第二段不可解析) 一律走这里 ⇒ Reply=false(§5.1-A7);
-    #      这是对第 6 次修复的直接纠正: 旧格式键不再回退"hash 不同即算新消息", 而是判"证明不了 ⇒ 不发"。
-    #    - 条数可解析但**减少**(抽取漂移) ⇒ 同样不发。
-    return [pscustomobject]@{ Reply = $false; Reason = 'UNCERTAIN_FAILCLOSED' }
+    # 行 5: 以上都不命中 ⇒ **在待回复列表里且不在冷却/间隔内 ⇒ 必回**(§0 硬判据 1)。
+    return [pscustomobject]@{ Reply = $true; Reason = 'IN_PENDING_LIST' }
+}
+
+# [FIX-DUP-GUARD 2026-09-27] 「这条买家消息是不是我们已经回过的同一条」—— 纯函数: 只比对证据, 不做决定。
+#
+#   为什么需要它(实测 2026-09-27 16:31-16:50): 新判据只答"该会话在不在待回复列表里", 按 §2.2 明文
+#   不再读账本 ⇒ "账本已经证明这条回过"这一事实**无处落地**。于是买家一句话没变(Bohdana:
+#   buyerMsgs=9 恒定 / lastBuyerHash 恒定 / 列表预览逐字相同)却被连回 3 次
+#   (16:31:47 / 16:41:09 / 16:50:35, 间隔 9 分半) —— 每次都走"冷却到期 ⇒ 判据放行 ⇒ 再发一条"。
+#
+#   调用方用它把「没有待回复的新内容」当作**判据的入参**(连续确认轮数按 0 计), 由唯一出口
+#   Test-ShouldReply 返回 NOT_IN_PENDING_LIST; 本函数**不产生**第二个出口, 也不碰页面/文件。
+#
+#   与旧判据(被 spec §1.2 推翻的那个)的本质差别 —— 也是它不会重演 Ganesan 事故的原因:
+#     旧判据问的是"我发过消息了吗"(只看账本); 本函数问的是"**页面此刻抓到的最后一条买家消息**
+#     是不是账本记的那条", 且要求**条数与原文 hash 同时**逐字相等。买家只要再说一句, 同一次抓取里
+#     的 [BUYER] 行数必增、原文 hash 必变 ⇒ 两个条件同时失效 ⇒ 必定放行(不拦)。
+#   证据不足一律返回 $false(**fail-open, 不拦**): 旧格式键(只有 hash)/条数 <1/hash 缺失都算证据不足。
+#     拦错的代价是买家永远等不到回复(Ganesan 形态), 比多发一条更重 —— 故只认"逐字对上"这一种正面证据。
+function Test-BuyerMsgAlreadyAnswered {
+    [CmdletBinding()]
+    param(
+        [string]$LedgerKey,          # 账本键, 新格式 "<hash>|<count>"; 旧格式(只有 hash)不参与本判据
+        [int]$BuyerCount = -1,       # 同一次抓取里该会话的 [BUYER] 行数
+        [string]$NormLastBuyerHash   # 同一次抓取里**最后一条**买家消息(归一化原文)的 hash
+    )
+    if ($BuyerCount -lt 1) { return $false }
+    if ([string]::IsNullOrWhiteSpace($LedgerKey)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($NormLastBuyerHash)) { return $false }
+    $parts = @([string]$LedgerKey -split '\|')
+    if ($parts.Count -lt 2) { return $false }
+    if ([string]$parts[1] -notmatch '^\d+$') { return $false }
+    # [GH-56 2026-09-29 05:4x] **必须安全解析，不能硬转**：
+    #   原写法 `[int]$parts[1]` 在位数超 Int32 时**抛异常**
+    #   ("Cannot convert value \"1788799769241\" to type \"System.Int32\"")，而它发生在 monitor 扫描轮的
+    #   try 里 ⇒ **整轮扫描被终止**、10 秒后重试又撞同一处（实测 196 次；09-28 09 时一小时 125 次；
+    #   受影响会话 4 人：买家P ×134 / 买家M2 ×28 / 买家X ×19 / 买家Y ×15）。
+    #   坏值来源：**旧版本**把毫秒时间戳写进了 `HASH|count` 的 count 位（旧备份 state.json 可查：
+    #   `"faith s": "C0297…|1788799769241"`）；上面那条 `^\d+$` 守卫只保证"是数字"、**不管范围**。
+    #   现在：解析失败/超范围 ⇒ 视为"无法证明已回复" ⇒ 返回 $false（fail-safe，不再抛异常打断整轮）。
+    $savedCount = 0
+    if (-not [int]::TryParse([string]$parts[1], [ref]$savedCount)) { return $false }
+    if ($savedCount -ne $BuyerCount) { return $false }
+    if ([string]$parts[0] -ne $NormLastBuyerHash) { return $false }
+    return $true
 }
 
 # [FIX-DUP-ORDER 2026-09-27] 不依赖位置地挑出"我们上一次回复所针对的那条买家消息"(纯函数)。

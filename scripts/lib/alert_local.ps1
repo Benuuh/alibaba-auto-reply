@@ -1,4 +1,4 @@
-# lib/alert_local.ps1 - local alert fallback channel (the only observable path when WeCom is down). ASCII-only.
+﻿# lib/alert_local.ps1 - local alert fallback channel (the only observable path when WeCom is down). ASCII-only.
 # Why: health_check alerts used to be delivered only through the WeCom long connection, so a dead channel
 # silenced its own alarm (see spec 2026-09-22 R4). This module writes the alarm to local files + a popup.
 # Files: <logs>\alert_active.json (open alerts), <logs>\ALERT.md (append-only history).
@@ -85,9 +85,16 @@ function Write-LocalAlert([string]$check, [string]$detail, [string]$wecomResult)
 }
 
 # Clear the local alert for one check (file removed when it becomes empty). Never throws.
+# [2026-09-28 修噪声] **本来就没有该 check 的告警时,直接返回、不写任何东西**。
+#   原实现无条件 append `ALERT-CLEARED <check>`,而 monitor 每轮扫描(约 9 秒)都会调一次
+#   ⇒ ALERT.md 被无意义的 "CLEARED" 淹没(实测 75KB、99% 是重复空清),真正的 ALERT 反而看不见。
+#   语义也更正确:只有**确实清掉了一条告警**(状态转移)才值得记一笔。
 function Clear-LocalAlert([string]$check) {
     try {
-        $items = @(Get-LocalAlert | Where-Object { $_ -and ($_.check -ne $check) })
+        $all = @(Get-LocalAlert | Where-Object { $_ })
+        $had = @($all | Where-Object { $_.check -eq $check })
+        if ($had.Count -eq 0) { return "LOCAL_ALERT_NONE" }   # 没有告警 ⇒ 静默返回
+        $items = @($all | Where-Object { $_.check -ne $check })
         $f = Get-LocalAlertFile
         if ($items.Count -eq 0) {
             if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue }

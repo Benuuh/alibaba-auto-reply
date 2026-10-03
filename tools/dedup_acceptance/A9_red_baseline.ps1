@@ -131,15 +131,16 @@ foreach ($r in $rows) { Write-Output ("  {0} | {1}" -f $r.snapshot, $r.incidentL
 
 $redHits = @{}
 foreach ($r in $rows) {
-    if ($r.oldFallbackVerdict -eq $true -or $r.literalOrderVerdict -eq $true) { $redHits[$r.buyer] = $true }
+    if ($r.oldFallbackVerdict -eq $true -or $r.literalOrderVerdict -eq $true) { $redHits[(Get-StableHash ([string]$r.buyer))] = $true }
 }
 Write-Output ""
-Write-Output "=== A9 红灯结论（spec 期望: erico/Ganesan/Riyad 至少各判出 1 次『应回』）==="
+Write-Output "=== A9 红灯结论（spec 期望: 三个事故买家 至少各判出 1 次『应回』）==="
 $allRed = $true
-foreach ($who in @('erico Rodrigues', 'Ganesan Krishnasamy', 'Riyad Tantawi')) {
+# [脱敏] 三个事故买家以`名字哈希`指代(仓库不落纯文本 PII)
+foreach ($who in @('8042FC8BA89273852925BB5E6A86E9BA', 'C8704B8BCE51D739E8F98AB6A528971E', '5CEA1AE0E5D8695276FB84FFBC82F2FB')) {
     $hit = $redHits.ContainsKey($who)
     if (-not $hit) { $allRed = $false }
-    Write-Output ("  {0,-24} 至少 1 次判'应回' = {1}" -f $who, $hit)
+    Write-Output ("  {0,-24} 至少 1 次判'应回' = {1}" -f ('买家#' + $who.Substring(0,8)), $hit)
 }
 $contra = @($rows | Where-Object { $_.literalOrderVerdict -eq $true -and $_.ledgerHashEqLastBuyer })
 Write-Output ""

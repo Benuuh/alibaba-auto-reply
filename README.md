@@ -93,7 +93,7 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 
 | 文件 | 作用 |
 |---|---|
-| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）+ `heartbeat_hour`（每日心跳时点，缺省 9）+ Accio 开关 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（缺省全 false）+ **告警出口 `dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`**；经 `scripts\config.ps1` 统一读取。**模板是仓库里唯一的 schema 记录** ⇒ 增删键必须先改 `.example`（由 `tests\docs_consistency.tests.ps1` 强制） |
+| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）+ `heartbeat_hour`（每日心跳时点，缺省 9）+ Accio 开关 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（缺省全 false）+ **告警出口 `dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`** + **公海模块 `gonghai_*` 键（缺省关）**；经 `scripts\config.ps1` 统一读取。**键名/默认值/怎么填见 `scripts\config.json.example`**（模板是仓库里唯一的 schema 记录 ⇒ 增删键必须先改 `.example`，由 `tests\docs_consistency.tests.ps1` 强制）；公海模块的硬下限（间隔 ≥90s、单次 ≤10 条）由代码强制；**每日总量已取消**（`gonghai_daily_cap` = 0 = 不限，0/负数 = 不限、正数 = 上限，判据唯一实现在 `Test-GonghaiDailyCapReached`），见 `scripts\gonghai\gonghai_lib.ps1` |
 | `scripts\reply_rules.json` | 语料库：品牌/价格准则/收集字段/模板/规则（编辑后立即生效） |
 | `scripts\reply_agent_prompt.md` | LLM 提示词：意图识别 + 质量红线（编辑后立即生效） |
 | `llm_config.json` | LLM 非敏感配置（model=`deepseek-v4-flash` / temperature / max_tokens / timeout / endpoint / `thinking:disabled`，**不存 key**） |
@@ -275,6 +275,7 @@ alibaba-auto-reply/
 │   ├── monitor.pid / watchdog.pid ← 常驻进程 pid（启停一律按它精确停，禁止 -Action stop）
 │   ├── okki\                 ← 小满 CRM(OKKI) 链路：CDP(9223)/登录/商机建档
 │   ├── waimao\               ← 网易外贸(王野)CDP 桥(9224) + 只读侦察
+│   ├── gonghai\              ← 阿里公海客户开发：只读侦察 + 认领 + 破冰试发 + 批量（独立 Chrome 9225，不再复用 9222）
 │   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push/accio/alert_local/deadman）
 ├── tools\                    ← 独立可复用组件（各自依赖与测试）
 │   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
@@ -299,6 +300,8 @@ alibaba-auto-reply/
 ├── backups\                  ← 代码快照 zip（13 MB；配置键 backups_dir；保留最近 20 份）
 ├── logs\                     ← 运行日志（配置键 logs_dir）
 ├── data\                     ← 买家快照/档案（PII，仅本机；配置键 data_dir）
+│   └── gonghai\              ← 公海模块状态：sent_index.json（幂等，只存 key_hash/代号，**无客户名**）
+│                                / gonghai_rate.json（限速）/ disabled（停用标记）
 └── reports\                  ← 质量/总结/周报（配置键 reports_dir）
 ```
 
@@ -321,7 +324,7 @@ alibaba-auto-reply/
 
 ```powershell
 # 主仓库回归测试（文件数与断言数以本次输出为准；含文档一致性校验 docs_consistency）
-# 分布：accio 29 / alert_dedup 10 / daemon_launch 10 / env_block 12 / goods_engine 27 / lock 11 /
+# 分布：accio 29 / alert_dedup 10 / daemon_launch 10 / env_block 12 / gonghai 71 / goods_engine 27 / lock 11 /
 #       log_maintenance 22 / no_reply 29 / no_reply_write 36 / page_heal_throttle 15 / page_health 15 /
 #       page_health_verdict 10 / page_select 15 / reply_engine 119 / report_push 33 / vision 43
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1

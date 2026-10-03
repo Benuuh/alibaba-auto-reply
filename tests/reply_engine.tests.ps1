@@ -255,10 +255,10 @@ Assert-True "diff-msg" ((Get-NormalizedMsgText "Yes") -ne (Get-NormalizedMsgText
 Assert-True "diff-msg2" ((Get-NormalizedMsgText "Thankyou and ddp method only") -ne (Get-NormalizedMsgText "I am still waiting"))
 
 # 列表预览噪声（实测两轮预览）
-$p1 = Get-NormalizedMsgText "B 1 Bohdana Borysenko 🙏👍 订单中"
-$p2 = Get-NormalizedMsgText "B Bohdana Borysenko 🙏👍 订单中"
+$p1 = Get-NormalizedMsgText "B 1 买家B 🙏👍 订单中"
+$p2 = Get-NormalizedMsgText "B 买家B 🙏👍 订单中"
 Assert-Eq "preview-unread-noise" $p1 $p2
-Assert-True "preview-time-noise" ((Get-NormalizedMsgText "Fahad Ali 12:34 Hey") -eq (Get-NormalizedMsgText "Fahad Ali Hey"))
+Assert-True "preview-time-noise" ((Get-NormalizedMsgText "买家F 12:34 Hey") -eq (Get-NormalizedMsgText "买家F Hey"))
 
 # 判定表（S1-c 的 6 行）
 $h = Get-StableHash (Get-NormalizedMsgText "Ok")

@@ -91,6 +91,21 @@ $script:dataDir = Join-Path $env:TEMP "dedup_acceptance_scratch"
 New-Item -ItemType Directory -Force -Path $script:dataDir | Out-Null
 $script:logFileDir = $script:dataDir
 $script:stateFile = Join-Path $script:dataDir "state.json"
+# [SPEC-待回复列表 2026-09-27 §0.1] Invoke-ConvoItem 现在读这两个**脚本级**变量(monitor.ps1 在启动时
+#   从配置键装载)。本 harness 不执行 monitor.ps1 的脚本层, 故必须在这里补上, 否则它们是 $null
+#   ⇒ 判据的行 3/行 4 用 0 当门槛, 冷却判定静默失效(一种最难发现的假绿)。
+#   取值与 monitor 的语义一致: 配置键优先, 缺省 5; 且强制 cooldown ≥ min_gap。
+#   静态防线(不属于本 harness): tests\should_reply.tests.ps1 断言 monitor.ps1 里确实是
+#   `$script:replyMinGapMin = [int]$script:skillCfg.reply_min_gap_min` 这种**读配置键**的写法。
+$script:replyMinGapMin = 5
+$script:replyPostSendCooldownMin = 5
+$script:requiredSeenRounds = 2
+try {
+    $__cfg = Get-SkillConfig
+    if ($__cfg.PSObject.Properties.Name -contains 'reply_min_gap_min' -and $__cfg.reply_min_gap_min) { $script:replyMinGapMin = [int]$__cfg.reply_min_gap_min }
+    if ($__cfg.PSObject.Properties.Name -contains 'reply_post_send_cooldown_min' -and $__cfg.reply_post_send_cooldown_min) { $script:replyPostSendCooldownMin = [int]$__cfg.reply_post_send_cooldown_min }
+} catch { }
+if ($script:replyPostSendCooldownMin -lt $script:replyMinGapMin) { $script:replyPostSendCooldownMin = $script:replyMinGapMin }
 function Get-SkillPath([string]$name) {
     switch ($name) {
         'data' { return $script:dataDir }
@@ -163,6 +178,10 @@ function New-Ctx {
         failAlertAt    = @{}
         humanPending   = @{}
         lastSendAt     = @{}
+        # [SPEC-待回复列表 2026-09-27 §2.1] 连续确认轮数: 会话名 -> 轮数。
+        #   本 harness 直接喂"已连读 2 轮", 因为要验收的是 G4/G3 门禁而不是确认机制本身
+        #   (确认机制由 tests\should_reply_v2.tests.ps1 用生产函数 Update-PendingSeen 驱动验收)。
+        pendingSeen    = @{ 'acceptance stub buyer' = 2 }
         lastActivity   = Get-Date
     }
 }
@@ -205,29 +224,50 @@ Assert-Eq "A4-sends-zero" $script:sendCalls 0
 Assert-True "A4-incident-snapshot-would-otherwise-be-processed" ($wouldProcess -eq 1)
 
 # ---------------------------------------------------------------------------
-# 3) A5: 同一买家 15 分钟内不可能收到第 2 条
-#      (G4 最小实现; 完整限流属阶段 B)
+# 3) A5: 同一买家在**最小间隔/发送后冷却**内不可能收到第 2 条
+#      [SPEC-待回复列表 2026-09-27 §0.1] 值已由硬编码 15/3 改为配置键, 缺省 **5/5**。
+#      ⚠️ 行为变更(必须如实登记, 见 REPORT「与旧 spec 的冲突点」):
+#        §0.1 要求 cooldown ≥ min_gap, 缺省二者都是 5 ⇒ 判据第 3 行(POST_SEND_COOLDOWN)
+#        **总是**先于第 4 行(RATE_MIN_GAP)命中; 故"刚发过"时日志出现的是 POST_SEND_COOLDOWN,
+#        而不是旧标题里的 RATE-SKIP。RATE-SKIP 仍是 §3.2 明文要求保留的**纵深防御**代码路径
+#        (若判据判错也发不出去), 但正常情况下不可达 —— 下面第 (c) 段单独断言它仍然在位。
 # ---------------------------------------------------------------------------
 $script:sendCalls = 0
 $logSink.Clear()
 $ctx = New-Ctx
-$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-5)
+$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-2)   # 2 分钟前刚发过 < 5 分钟门槛
 Invoke-ConvoItem $ctx $item 2
 Assert-Eq "A5-second-send-blocked" $script:sendCalls 0
 Write-Output ("    [diagnostic] log lines = {0}" -f $logSink.Count)
 foreach ($l in $logSink) { Write-Output ("      | {0}" -f $l) }
-Assert-True "A5-rate-skip-logged" ([bool](@($logSink | Where-Object { $_ -match 'RATE-SKIP buyer=' }).Count -gt 0))
-$rateLine = @($logSink | Where-Object { $_ -match 'RATE-SKIP buyer=' })[0]
-Write-Output ("    RATE-SKIP log: {0}" -f $rateLine)
+Assert-True "A5-second-send-reason-logged" ([bool](@($logSink | Where-Object { $_ -match 'Reason=POST_SEND_COOLDOWN|RATE-SKIP buyer=' }).Count -gt 0))
+$rateLine = @($logSink | Where-Object { $_ -match 'Reason=POST_SEND_COOLDOWN|RATE-SKIP buyer=' })[0]
+Write-Output ("    block log: {0}" -f $rateLine)
 
-# 负对照: 间隔超过 15 分钟时必须**能**走到发送(证明 G4 没有把发送全封死, 且桩确实能观察到发送)
+# 负对照: 间隔超过最小间隔时必须**能**走到发送(证明限流没有把发送全封死, 且桩确实能观察到发送)
+#   ⚠️ 匹配式必须精确到 `Reason=`/`RATE-SKIP buyer=` —— 不能只写 POST_SEND_COOLDOWN:
+#     发送后的日志里有 `(config key reply_post_send_cooldown_min)`, 而 -match 默认**不区分大小写**,
+#     `post_send_cooldown` 会命中 `POST_SEND_COOLDOWN` ⇒ 负对照恒为 FAIL(实测踩过)。
 $script:sendCalls = 0
 $logSink.Clear()
 $ctx = New-Ctx
 $ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-20)
 Invoke-ConvoItem $ctx $item 2
-Assert-True "A5-beyond-gap-not-rate-blocked" (-not [bool](@($logSink | Where-Object { $_ -match 'RATE-SKIP' }).Count -gt 0))
+Assert-True "A5-beyond-gap-not-rate-blocked" (-not [bool](@($logSink | Where-Object { $_ -match 'Reason=POST_SEND_COOLDOWN|Reason=RATE_MIN_GAP|RATE-SKIP buyer=' }).Count -gt 0))
 Assert-Eq "A5-beyond-gap-reaches-send" $script:sendCalls 1
+# 发送成功后必须写 POST-SEND-COOLDOWN 且值来自配置键(§0.1: 不得再硬编码 3min)
+Assert-True "A5-post-send-cooldown-logged" ([bool](@($logSink | Where-Object { $_ -match 'POST-SEND-COOLDOWN' }).Count -gt 0))
+$psLine = @($logSink | Where-Object { $_ -match 'POST-SEND-COOLDOWN' })[0]
+Write-Output ("    post-send log: {0}" -f $psLine)
+Assert-True "A5-post-send-cooldown-uses-config-value" ($psLine -match ("POST-SEND-COOLDOWN .* {0}min" -f $script:replyPostSendCooldownMin))
+Assert-True "A5-post-send-cooldown-records-lastSendAt" ($ctx.lastSendAt.ContainsKey('acceptance stub buyer'))
+
+# (c) 纵深防御仍在位: RATE-SKIP 分支必须还存在于**真实部署文件**里(静态, 与运行态解耦)
+$monText = [System.IO.File]::ReadAllText($monitorPath, [System.Text.Encoding]::UTF8)
+Assert-True "A5-rate-skip-depth-defense-present" ($monText -match 'RATE-SKIP buyer=')
+Assert-True "A5-rate-skip-reads-config-key" ($monText -match 'if \(\$gapMin2 -lt \$script:replyMinGapMin\)')
+Assert-True "A5-no-hardcoded-15m-gap" ($monText -notmatch 'if \(\$gapMin -lt 15\)')
+Assert-True "A5-no-hardcoded-3x-cooldown" ($monText -notmatch '\[Math\]::Min\(3 \* \[Math\]::Pow')
 
 # ---------------------------------------------------------------------------
 # 4) A6: 冷启动只观察(cycle=1 ⇒ 发送数 0、输出 COLD-START)
@@ -248,6 +288,125 @@ $convoSrc = $funcAsts['Invoke-ConvoItem'].Extent.Text
 $coldIdx = $convoSrc.IndexOf('COLD-START-SKIP')
 $firstCdpIdx = $convoSrc.IndexOf('Open-ConvoAndGetMessages')
 Assert-True "A6-cold-start-before-page-work" ($coldIdx -gt 0 -and ($firstCdpIdx -lt 0 -or $coldIdx -lt $firstCdpIdx))
+
+# ---------------------------------------------------------------------------
+# 5) [FIX-DUP-GUARD 2026-09-27] A7: 同一条买家消息**不得重复回复**
+#    事故现场(2026-09-27 16:31-16:50): 买家B 收到 3 条回复(16:31:47 / 16:41:09 /
+#    16:50:35, 间隔 9 分半), 期间 buyerMsgs=9 与 lastBuyerHash 恒定、列表预览逐字相同 —— 也就是
+#    "最后一条买家消息早就回过了", 可新判据按 §2.2 不再读账本 ⇒ 冷却一到期就再发一条。
+#    验收方式: 真实 Invoke-ConvoItem + **真实算法算出的账本键**(同一次抓取里最后一条买家原文的
+#    hash + 条数), 证明该轮发不出去; 并证明判据出口没变(仍是 Test-ShouldReply 的既有 5 个 Reason)。
+# ---------------------------------------------------------------------------
+$hStubLast = Get-StableHash (Get-NormalizedMsgText 'stub')   # 桩消息的 @@OT:c3R1Yg== 解出来就是 stub
+$script:sendCalls = 0
+$logSink.Clear()
+$ctx = New-Ctx
+$ctx.state = [pscustomobject]@{ replied = [pscustomobject]@{ 'acceptance stub buyer' = "$hStubLast|1" } }
+$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-20)   # 让限流不可能是拦截原因
+Invoke-ConvoItem $ctx $item 2
+Assert-Eq "A7-same-msg-not-resent" $script:sendCalls 0
+Assert-True "A7-dup-guard-logged" ([bool](@($logSink | Where-Object { $_ -match 'DUP-GUARD-HOLD' }).Count -gt 0))
+$srLine = @($logSink | Where-Object { $_ -match '^SHOULD-REPLY ' }) | Select-Object -First 1
+Assert-True "A7-judge-still-single-exit" ([bool]($srLine -match 'Reason=NOT_IN_PENDING_LIST'))
+Assert-True "A7-dup-guard-evidence-logged" ([bool]($srLine -match 'alreadyAnswered=True'))
+foreach ($l in $logSink) { Write-Output ("      | {0}" -f $l) }
+
+# 负对照(证明这条闸门**真的会放行**, 不是把发送全封死): 买家再说一句 ⇒ 条数 1→2 ⇒ 账本对不上 ⇒ 发
+function Open-ConvoAndGetMessages([string]$k) {
+    return [pscustomobject]@{
+        name    = $k
+        msgs    = "[ME] earlier reply @@TS:1790000000000`n[BUYER] stub old buyer message @@TS:1790000000001 @@OT:c3R1Yg==`n[BUYER] stub new buyer message @@TS:1790000000002 @@OT:c3R1Yg=="
+        profile = ''
+    }
+}
+$script:sendCalls = 0
+$logSink.Clear()
+$ctx = New-Ctx
+$ctx.state = [pscustomobject]@{ replied = [pscustomobject]@{ 'acceptance stub buyer' = "$hStubLast|1" } }
+$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-20)
+Invoke-ConvoItem $ctx $item 2
+Assert-Eq "A7-new-msg-still-sent" $script:sendCalls 1
+Assert-True "A7-no-dup-guard-when-new-msg" (-not [bool](@($logSink | Where-Object { $_ -match 'DUP-GUARD-HOLD' }).Count -gt 0))
+
+# ---------------------------------------------------------------------------
+# 6) [FIX-WAIT-STACK 2026-09-27] A8: 被 RATE_MIN_GAP 挡下后, 冷却必须**锚在阻塞条件到期的那一刻**
+#    事故现场: 17:24:04 发送 → 17:24:47 买家发来新数据 → 17:28:42 判据判"该回"但被 RATE-SKIP 挡下
+#    (真实 gap=4.63m < 最小间隔 5m) → 旧代码从"此刻"再装一整段 5 分钟冷却 ⇒ 买家等到 17:33:30
+#    (共 8 分 43 秒, 而配置写的只有 5 分钟)。
+#    验收: 用真实 Invoke-ConvoItem + 真实 ctx.skipCooldown 记录, 断言 until ≈ 上次发送 + 最小间隔,
+#    而不是"此刻 + 一整段冷却"; 并断言时间一到就能正常发出(锚定不是把发送封死)。
+# ---------------------------------------------------------------------------
+$script:sendCalls = 0
+$logSink.Clear()
+$ctx = New-Ctx
+$sentAt = (Get-Date).AddMinutes(-4.6)   # 4.6 分钟: 判据的 [int] 取整判"不在冷却内", 真实值仍 < 5 ⇒ 走 RATE-SKIP
+$ctx.lastSendAt['acceptance stub buyer'] = $sentAt
+Invoke-ConvoItem $ctx $item 2
+Assert-Eq "A8-rate-skip-no-send" $script:sendCalls 0
+Assert-True "A8-rate-skip-logged" ([bool](@($logSink | Where-Object { $_ -match 'RATE-SKIP buyer=' }).Count -gt 0))
+$cd = $ctx.skipCooldown['acceptance stub buyer']
+Assert-True "A8-cooldown-record-with-until" ([bool]($cd -and $cd.ContainsKey('until')))
+if ($cd -and $cd.ContainsKey('until')) {
+    $until = [datetime]$cd['until']
+    $deltaSec = [Math]::Round([Math]::Abs(($until - $sentAt.AddMinutes($script:replyMinGapMin)).TotalSeconds), 1)
+    $waitSec = [Math]::Round((($until - (Get-Date)).TotalSeconds), 1)
+    Write-Output ("    [diagnostic] until={0:HH:mm:ss} 锚点误差={1}s 距现在={2}s" -f $until, $deltaSec, $waitSec)
+    Assert-True "A8-until-anchored-at-min-gap" ($deltaSec -le 5)
+    Assert-True "A8-until-not-now-plus-full-cooldown" ($waitSec -lt 60)
+}
+# 时间一到必须能发出(把记录里的 until 拨到过去 = 模拟时间流逝), 否则"锚定"就成了"封死"
+$ctx.skipCooldown['acceptance stub buyer']['until'] = (Get-Date).AddSeconds(-1)
+$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-5.1)
+$script:sendCalls = 0
+Invoke-ConvoItem $ctx $item 2
+Assert-Eq "A8-after-boundary-sends" $script:sendCalls 1
+
+# ---------------------------------------------------------------------------
+# 7) [FIX-COOLDOWN-LIFT 2026-09-27] A9: 冷却记录**仍在有效期内**时, "预览变化"该往哪边走
+#    这一段的两个用例合起来就是本修订第 ② 条的全部语义:
+#      (a) 账本证明**买家说了新话** ⇒ 解除页面跳过 ⇒ 发出(时间闸门若放行) —— 买家不该被冷却按住
+#      (b) 账本证明**还是那条已回过的消息** ⇒ 让路(COOLDOWN-HOLD) + 重新校准预览基准 ⇒ 不重复打扰
+#    (a) 是本次要修的病(实测 买家N 8 分 43 秒); (b) 是防止"解除冷却"退化成"再来一次重复发送"。
+# ---------------------------------------------------------------------------
+# (a) 买家说了新话: 桩给 2 条买家行(条数 2), 账本记的是旧键 |1 ⇒ 账本对不上 ⇒ 必须放行并发出
+function Open-ConvoAndGetMessages([string]$k) {
+    return [pscustomobject]@{
+        name    = $k
+        msgs    = "[ME] earlier reply @@TS:1790000000000`n[BUYER] stub old buyer message @@TS:1790000000001 @@OT:c3R1Yg==`n[BUYER] stub new buyer message @@TS:1790000000002 @@OT:c3R1Yg=="
+        profile = ''
+    }
+}
+$script:sendCalls = 0
+$logSink.Clear()
+$ctx = New-Ctx
+$ctx.state = [pscustomobject]@{ replied = [pscustomobject]@{ 'acceptance stub buyer' = "$hStubLast|1" } }
+$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-20)   # 时间闸门全放行
+$ctx.skipCooldown['acceptance stub buyer'] = @{ time = Get-Date; until = (Get-Date).AddMinutes(5); preview = 'stale preview'; pkey = 'stale preview'; buyers = 1; count = 1 }
+Invoke-ConvoItem $ctx $item 2
+Assert-True "A9-lift-recheck-logged" ([bool](@($logSink | Where-Object { $_ -match 'COOLDOWN-RECHECK' }).Count -gt 0))
+Assert-True "A9-lift-logged" ([bool](@($logSink | Where-Object { $_ -match 'COOLDOWN-LIFT' }).Count -gt 0))
+Assert-Eq "A9-lift-sends" $script:sendCalls 1
+Assert-True "A9-lift-not-held-instead" (-not [bool](@($logSink | Where-Object { $_ -match 'COOLDOWN-HOLD' }).Count -gt 0))
+
+# (b) 还是那条已回过的消息: 1 条买家行 + 账本 |1 ⇒ 必须让路, 且把预览基准重校准(免得每轮都下探开页面)
+function Open-ConvoAndGetMessages([string]$k) {
+    return [pscustomobject]@{
+        name    = $k
+        msgs    = "[ME] earlier reply @@TS:1790000000000`n[BUYER] stub new buyer message @@TS:1790000000001 @@OT:c3R1Yg=="
+        profile = ''
+    }
+}
+$script:sendCalls = 0
+$logSink.Clear()
+$ctx = New-Ctx
+$ctx.state = [pscustomobject]@{ replied = [pscustomobject]@{ 'acceptance stub buyer' = "$hStubLast|1" } }
+$ctx.lastSendAt['acceptance stub buyer'] = (Get-Date).AddMinutes(-20)
+$ctx.skipCooldown['acceptance stub buyer'] = @{ time = Get-Date; until = (Get-Date).AddMinutes(5); preview = 'stale preview'; pkey = 'stale preview'; buyers = 1; count = 1 }
+Invoke-ConvoItem $ctx $item 2
+Assert-Eq "A9-hold-no-send" $script:sendCalls 0
+Assert-True "A9-hold-logged" ([bool](@($logSink | Where-Object { $_ -match 'COOLDOWN-HOLD' }).Count -gt 0))
+$rebase = $ctx.skipCooldown['acceptance stub buyer']
+Assert-True "A9-hold-rebaselined-preview" ([bool]($rebase -and $rebase.pkey -ne 'stale preview'))
 
 # ---------------------------------------------------------------------------
 Write-Output ""

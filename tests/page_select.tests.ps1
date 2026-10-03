@@ -1,4 +1,4 @@
-# page_select tests — FIX-PAGESELECT 2026-09-26
+﻿# page_select tests — FIX-PAGESELECT 2026-09-26
 # 这条缺陷的后果是"monitor 操作错误页面"，只断言"函数存在"抓不到。
 # 关键断言：**当前活动 Chrome 上 Get-Page 必须返回 OneTalk 页**（而不是第一个 page）。
 #
@@ -91,15 +91,23 @@ Write-Output ("  (Invoke-CdpEval location.href = " + $evalUrl + ")")
 Assert-True "invoke-cdpeval-not-guard-error" ($evalUrl -notmatch 'no onetalk page found')
 Assert-True "invoke-cdpeval-returns-onetalk-url" ($evalUrl -match 'onetalk\.alibaba\.com')
 
-# ── 断言 4：负向构造 —— 第一个 page 不是 OneTalk 时 Get-Page 必须返回 $null ──
-#    （用同一份真实 CDP 数据判定；本机当前首元素就是 OneTalk ⇒ 退化为纯逻辑等价式）
-if ($rawPages.Count -gt 0 -and $firstUrl -notmatch 'onetalk\.alibaba\.com') {
-    Assert-True "no-onetalk-must-return-null" ($null -eq $p)
-} else {
-    $fake = @(@{type='page';url='https://example.com/x';webSocketDebuggerUrl='ws://a'},
+# ── 断言 4：负向构造 —— Get-Page 必须**跳过**排在前面的非 OneTalk 页 ──
+#    [FIX-PAGESELECT-TEST 2026-09-27] 原实现是一条**自相矛盾**的断言,已删除:
+#      if (首元素不是 OneTalk) { Assert-True "no-onetalk-must-return-null" ($null -eq $p) }
+#    为什么矛盾:Get-Page 的定义是"清单里**有** OneTalk 页就返回它"。
+#      "首元素不是 OneTalk"**不等于**"没有 OneTalk" ⇒ 这时断言 $p 为 null 必失败。
+#    触发条件(实测):Chrome 刚重启时首个 page 是 about:blank(URL 为空串)⇒ 进入该分支 ⇒
+#      fail=2(本断言 + 计数)。2026-09-27 公海独立 Chrome 排查期间多次命中,表现为"随手一跑就红",
+#      极易被误判成"刚改的东西把页面选择改坏了"。
+#   现改为**纯逻辑构造**(与 else 分支同款):不依赖本机当前开没开 OneTalk 页,
+#    只验证"筛选逻辑会把排在前的非 OneTalk 页跳过去" —— 这才是本断言真正要守的东西。
+#    真实环境的"Get-Page 必须命中真实 OneTalk 页"已由断言 2/3 覆盖,无需在此重复。
+foreach ($fakeFirst in @('https://example.com/x', '', 'about:blank')) {
+    $fake = @(@{type='page';url=$fakeFirst;webSocketDebuggerUrl='ws://a'},
               @{type='page';url='https://onetalk.alibaba.com/message/weblitePWA.htm';webSocketDebuggerUrl='ws://b'})
     $picked = @($fake | Where-Object { $_.type -eq 'page' -and $_.url -match 'onetalk\.alibaba\.com' } | Select-Object -First 1)
-    Assert-True "logic-skips-non-onetalk-first" ($picked.Count -eq 1 -and $picked[0].webSocketDebuggerUrl -eq 'ws://b')
+    $tag = if ($fakeFirst -eq '') { '(空URL/about:blank)' } else { $fakeFirst }
+    Assert-True "logic-skips-non-onetalk-first $tag" ($picked.Count -eq 1 -and $picked[0].webSocketDebuggerUrl -eq 'ws://b')
 }
 
 Write-Output ("RESULT: pass=$($script:pass) fail=$($script:fail)")

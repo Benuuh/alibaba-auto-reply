@@ -10,16 +10,18 @@
 #
 # Pure logic only. No CDP, no Chrome, no page, no file writes.
 #
-# RED/GREEN contract for this file (spec 6-R3 / 6-V1):
-#   - Against the CURRENT implementation ($buyerMsgs[0] == "latest") case B fails.
-#     That failure IS the reproduction evidence.
-#   - Against the FIXED implementation (Test-NewBuyerMessage, order independent)
-#     both cases pass.
-#   ⚠️ [SPEC-单出口 2026-09-27] Test-NewBuyerMessage 已按 spec §4.1 **整体删除**(它的回退分支
-#     "文本 hash 不同即算新消息"是第 6 次修复失效的直接原因)。本文件已改为对**唯一出口**
-#     reply_engine.ps1::Test-ShouldReply 断言, 并新增"旧格式账本键必须 fail-closed"一节。
-#     本文件的历史价值(顺序无关性的复现证据)保持不变; 断言只加强, 不放松。
-# Do NOT loosen an assertion here to make it green. If case B cannot be made to
+# [SPEC-待回复列表 2026-09-27] 判据**再次换掉**: docs\specs\判据改为待回复列表_20260927.md
+#   旧(SPEC-单出口)锚点 = 账本 HASH|count vs 最后一条买家消息; 新锚点 = **该会话此刻在不在页面的
+#   待回复列表里**(连续 2 轮确认) + 发送后冷却/最小间隔。账本仍继续写(§2.2), 但不再参与判定。
+#
+#   本文件的历史价值 = **顺序无关性的复现证据**。换判据之后这条性质不但保留, 而且变成结构性的:
+#   判据的入参里**根本没有任何"消息顺序/条数/hash"维度** ⇒ 顺序翻转不可能再改变结论。
+#   故本文件的断言只加强、不放松, 并按 §3.3 把"旧证据锚点已失效"写成显式断言:
+#     (a) 同一内容集合、两种相反顺序 ⇒ 结论必须相同(历史主题);
+#     (b) 账本 key 取 $ledger / 旧格式 key / 空串 ⇒ 结论必须相同("锚点已退出判定");
+#     (c) 买家真说新话仍必须能回(防"修成哑巴") —— 措辞改为: 会话在待回复列表里就必须回,
+#         不再要求"账本条数必须增长"才回(那正是 §1.2 的病灶)。
+# Do NOT loosen an assertion here to make it green. If a case cannot be made to
 # pass by changing production code, the diagnosis is wrong -- stop and report.
 $ErrorActionPreference = "Stop"
 $here = Split-Path $MyInvocation.MyCommand.Path -Parent
@@ -39,7 +41,7 @@ Write-Output "== dedup_order tests =="
 function Get-MsgPlain([string]$line) {
     return ($line -replace '^\[(BUYER|ME)\]\s*', '' -replace '@@TS:.*$', '').Trim()
 }
-# Reproduces monitor.ps1 L942-944 under test: buyerMsgs[0] is treated as "latest".
+# Reproduces monitor.ps1 under test: buyerMsgs[0] is treated as "latest".
 function Get-LedgerKeyLikeCurrentCode([string[]]$Lines) {
     $bm = @($Lines | Where-Object { $_ -match '^\[BUYER\]' })
     $first = Get-MsgPlain $bm[0]
@@ -53,21 +55,43 @@ function Get-LedgerKeyFromNewest([string[]]$Lines) {
     return (Get-DedupKey $newest @($bm).Count)
 }
 
-# The judge under test: the SINGLE exit (spec §4.1).
-#   与 monitor.ps1 的真实数据面逐字同构: 先用 Select-LatestBuyerLine(按账本 hash 内容匹配)
-#   挑出"我们上一次回复针对的那条" —— 顺序漂移时它不会误取位置 0/末位 —— 再喂给 Test-ShouldReply。
-function Test-Judge([string[]]$Lines, [string]$LedgerKey) {
-    $bm = @($Lines | Where-Object { $_ -match '^\[BUYER\]' })
-    $picked = Select-LatestBuyerLine -BuyerLines $bm -SavedKey $LedgerKey
-    $hLast = Get-StableHash (Get-NormalizedMsgText (Get-MsgPlain $picked))
-    return [bool](Test-ShouldReply -ConvoLines $Lines -LedgerKey $LedgerKey -NormLastBuyerHash $hLast).Reply
+# The judge under test: the SINGLE exit (SPEC-待回复列表 §2 判定表 5 行).
+#   ⚠️ 签名换了: 判定入参 = LedgerUsable / PendingSeenRounds / RequiredSeenRounds /
+#      MinutesSinceLastSend / MinGapMinutes / InPostSendCooldown / PostSendCooldownMinutes。
+#      $Lines / $LedgerKey / $NormLastBuyerHash 仍然逐字传进去 —— 但只为**证明它们不影响结论**
+#      (§2.2「保留但不参与判定」/ anchor-dead 一节)。
+function Invoke-Judge([string[]]$Lines, [string]$LedgerKey, [string]$Hash, [int]$SeenRounds) {
+    return Test-ShouldReply -LedgerUsable $true -PendingSeenRounds $SeenRounds -RequiredSeenRounds 2 `
+        -MinutesSinceLastSend -1 -MinGapMinutes 5 -InPostSendCooldown $false -PostSendCooldownMinutes 5 `
+        -ConvoLines $Lines -LedgerKey $LedgerKey -NormLastBuyerHash $Hash
 }
-# 最坏形态的判据入口: hash 取**数组里最后一条** [BUYER](不做内容匹配选择),
-#   用来直接压测 fail-closed 取向 —— 抽取漂移时也不得判"应回"。
-function Test-JudgeLastLine([string[]]$Lines, [string]$LedgerKey) {
+# 与 monitor.ps1 的真实数据面同构: 先用 Select-LatestBuyerLine(按账本 hash 内容匹配)挑出
+#   "我们上一次回复针对的那条"(顺序漂移时它不会误取位置 0/末位), 再喂给唯一出口。
+function Test-Judge([string[]]$Lines, [string]$LedgerKey, [int]$SeenRounds = 2) {
     $bm = @($Lines | Where-Object { $_ -match '^\[BUYER\]' })
-    $hLast = Get-StableHash (Get-NormalizedMsgText (Get-MsgPlain $bm[-1]))
-    return [bool](Test-ShouldReply -ConvoLines $Lines -LedgerKey $LedgerKey -NormLastBuyerHash $hLast).Reply
+    $h = ''
+    if ($bm.Count -gt 0) {
+        $picked = Select-LatestBuyerLine -BuyerLines $bm -SavedKey $LedgerKey
+        $h = Get-StableHash (Get-NormalizedMsgText (Get-MsgPlain $picked))
+    }
+    return [bool](Invoke-Judge $Lines $LedgerKey $h $SeenRounds).Reply
+}
+function Test-JudgeReason([string[]]$Lines, [string]$LedgerKey, [int]$SeenRounds = 2) {
+    $bm = @($Lines | Where-Object { $_ -match '^\[BUYER\]' })
+    $h = ''
+    if ($bm.Count -gt 0) {
+        $picked = Select-LatestBuyerLine -BuyerLines $bm -SavedKey $LedgerKey
+        $h = Get-StableHash (Get-NormalizedMsgText (Get-MsgPlain $picked))
+    }
+    return [string](Invoke-Judge $Lines $LedgerKey $h $SeenRounds).Reason
+}
+# 最坏形态的入口: hash 取**数组里最后一条** [BUYER](不做内容匹配选择) —— 旧判据下这是"抽取漂移"
+#   的压测点。新判据不看 hash ⇒ 结论必须与 Test-Judge 完全相同(这一条就是"锚点已死"的断言)。
+function Test-JudgeLastLine([string[]]$Lines, [string]$LedgerKey, [int]$SeenRounds = 2) {
+    $bm = @($Lines | Where-Object { $_ -match '^\[BUYER\]' })
+    $h = ''
+    if ($bm.Count -gt 0) { $h = Get-StableHash (Get-NormalizedMsgText (Get-MsgPlain $bm[-1])) }
+    return [bool](Invoke-Judge $Lines $LedgerKey $h $SeenRounds).Reply
 }
 
 # ---------------------------------------------------------------------------
@@ -95,94 +119,106 @@ Assert-Eq "buyer-count-is-3" $countA 3
 $ledger = Get-LedgerKeyFromNewest $linesB
 Assert-True "ledger-has-key-format" ($ledger -match '^[0-9A-F]{32}\|\d+$')
 Assert-Eq "ledger-count-segment-is-buyer-count" (($ledger -split '\|')[1]) '3'
+$legacyKey = (($ledger -split '\|')[0]) + '|1789826752752'
+# 与任何一条买家消息都对不上的假账本 hash(抽取漂移的极端形态), 后面多处复用
+$legacyOther = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA|1789826752752'
 
 # ---------------------------------------------------------------------------
-# Case A -- order = newest first. Buyer said nothing new since our reply.
-# A correct judge says "no new message" (do NOT send).
+# Anchor independence — [SPEC-待回复列表 §2.2/§9] 旧证据锚点(顺序 / 账本 hash / 条数)
+# 必须**完全退出**判定。判据的 7 个判定入参里没有任何一个是"消息顺序"或"账本内容"。
 # ---------------------------------------------------------------------------
-Assert-True "A-no-new-message" (-not (Test-Judge $linesA $ledger))
-# Control: in order A the current (position-based) code happens to agree, because
-# here the first line IS the newest one. So case B alone isolates the order defect.
+$judgeParams = @((Get-Command Test-ShouldReply).Parameters.Keys)
+foreach ($need in @('LedgerUsable', 'PendingSeenRounds', 'RequiredSeenRounds', 'MinutesSinceLastSend', 'MinGapMinutes', 'InPostSendCooldown', 'PostSendCooldownMinutes')) {
+    Assert-True ("judge-has-new-param[{0}]" -f $need) ($judgeParams -contains $need)
+}
+foreach ($gone in @('BuyerCount', 'ConvoLineCount', 'LedgerCount', 'MessageOrder', 'MinuteOfDay')) {
+    Assert-True ("judge-has-no-positional-bias-param[{0}]" -f $gone) (-not ($judgeParams -contains $gone))
+}
+
+# 两种顺序 + 三种账本 key(现行 $ledger / 旧格式 13 位 / 空串) = 6 种组合 ⇒ 结论必须完全一致
+$grid = @()
+foreach ($L in @($linesA, $linesB)) {
+    foreach ($k in @($ledger, $legacyKey, '')) {
+        $grid += ("{0}|{1}" -f (Test-Judge $L $k), (Test-JudgeReason $L $k))
+    }
+}
+Assert-Eq "anchor-grid-single-verdict" (@($grid | Sort-Object -Unique).Count) 1
+Assert-Eq "anchor-grid-verdict" $grid[0] 'True|IN_PENDING_LIST'
+Write-Output ("  锚点已退出判定: 2 种顺序 × 3 种账本 key = 6 种组合, 结论全部 = {0}" -f $grid[0])
+
+# 抽取漂移的最坏形态(hash 取数组末位、不做内容匹配, 且账本 hash 与任何一条都对不上)
+#   必须与常规入口给出**同一个**结论 —— 若哪天有人把 hash 重新接回判定, 这里立刻变红。
+Assert-Eq "drift-worst-case-same-verdict-A" (Test-JudgeLastLine $linesA $legacyOther) (Test-Judge $linesA $ledger)
+Assert-Eq "drift-worst-case-same-verdict-B" (Test-JudgeLastLine $linesB $legacyOther) (Test-Judge $linesB $ledger)
+
+# ---------------------------------------------------------------------------
+# Case A / Case B — 历史上的重复发送复现用例。
+# 旧判据: 顺序翻转 ⇒ hash 变 ⇒ 判"有新消息" ⇒ 重复发送(本文件就是为复现它而建的)。
+# 新判据: 顺序完全不参与判定 ⇒ 两种顺序结论必须相同, 且**不得**因为顺序翻转而多发。
+# ---------------------------------------------------------------------------
+Assert-True "A-and-B-same-verdict" ((Test-Judge $linesA $ledger) -eq (Test-Judge $linesB $ledger))
+Assert-Eq "A-verdict" (Test-Judge $linesA $ledger) $true
+Assert-Eq "B-verdict" (Test-Judge $linesB $ledger) $true
+Assert-Eq "A-B-same-reason" (Test-JudgeReason $linesA $ledger) (Test-JudgeReason $linesB $ledger)
+
+# 旧实现的对照: "位置 0 当最新"确实会算出**不同**的账本 key(这就是历史缺陷的形态)。
+#   保留它作为"为什么顺序无关性重要"的证据, 但断言方向已改为: 两个 key 不同, 结论却必须相同。
 Assert-Eq "A-current-code-ledger-key" (Get-LedgerKeyLikeCurrentCode $linesA) $ledger
+Assert-True "B-position-zero-key-differs" ((Get-LedgerKeyLikeCurrentCode $linesB) -ne $ledger)
+Assert-True "A-B-verdict-identical-despite-different-derived-keys" ((Test-Judge $linesA (Get-LedgerKeyLikeCurrentCode $linesB)) -eq (Test-Judge $linesB $ledger))
 
 # ---------------------------------------------------------------------------
-# Case B -- SAME conversation, SAME ledger, only the extracted order flipped.
-# Still "no new message" (do NOT send). This is the reproduction: the current
-# implementation reads the OLDEST line as "latest", computes a different hash,
-# and concludes "new message" -> duplicate send.
-# ---------------------------------------------------------------------------
-Assert-True "B-no-new-message" (-not (Test-Judge $linesB $ledger))
-
-# Order independence must hold in both directions for the same content set.
-Assert-Eq "A-B-same-verdict" (Test-Judge $linesA $ledger) (Test-Judge $linesB $ledger)
-
-# ---------------------------------------------------------------------------
-# Guard: a genuinely NEW buyer message (count grows) must still be detected.
-# A fix that always says "already replied" would silence real replies -- that is
-# worse than the duplicate send, so this must stay false.
+# Not-in-list must not send, even when the buyer count grew.
+# [SPEC-待回复列表 §2 行 2] 判据看的是"在不在待回复列表", 不再看条数是否增长。
 # ---------------------------------------------------------------------------
 $linesNew = @($linesB + '[BUYER] one more thing, what is the ETA')
-$ledgerNew = Get-LedgerKeyFromNewest $linesNew
 Assert-Eq "new-msg-count-is-4" (@($linesNew | Where-Object { $_ -match '^\[BUYER\]' }).Count) 4
-# ledger built when count was 3 -> buyer count is now 4 -> must be judged as NEW.
-#   [SPEC-单出口] 走的是 Test-JudgeLastLine(hash 取"数组最后一条", 模拟抽取漂移的最坏形态):
-#   条数不等 ⇒ 账本记录的不是这一批 ⇒ 说明买家又说话了 ⇒ 应回(且 Reason 必须是 BUYER_AFTER_ME)。
 $ledgerOld = Get-DedupKey ((Get-NormalizedMsgText (Get-MsgPlain $newest))) 3
-Assert-True "genuinely-new-msg-detected" (Test-JudgeLastLine $linesNew $ledgerOld)
-$rNew = Test-ShouldReply -ConvoLines $linesNew -LedgerKey $ledgerOld `
-    -NormLastBuyerHash (Get-StableHash (Get-NormalizedMsgText 'one more thing, what is the ETA'))
-Assert-Eq "genuinely-new-msg-reason" $rNew.Reason 'BUYER_COUNT_INCREASED'
-
-# 而"账本 hash 正是数组最后一条买家消息"时(已回过这条) ⇒ 必须不发
-Assert-Eq "ledger-hash-of-last-line-not-reply" (Test-JudgeLastLine $linesNew $ledgerNew) $false
+# 不在列表(轮数 0) ⇒ 一律不发, 即使买家确实说了新话、账本条数也确实"增加了"
+Assert-Eq "not-in-list-no-reply-despite-new-msg" (Test-JudgeReason $linesNew $ledgerOld 0) 'NOT_IN_PENDING_LIST'
+Assert-Eq "not-in-list-rounds-1-no-reply" (Test-Judge $linesNew $ledgerOld 1) $false
+# 在列表里连读 2 轮 ⇒ 必须回 —— **不再要求**账本条数增长(§1.2: 旧要求正是"无限跳过"的病灶)
+Assert-Eq "in-list-2-rounds-replies" (Test-Judge $linesNew $ledgerOld 2) $true
+Assert-Eq "in-list-2-rounds-reason" (Test-JudgeReason $linesNew $ledgerOld 2) 'IN_PENDING_LIST'
+# 反过来: 条数没变也要回(旧判据在这里判 LEDGER_COUNT_MATCH ⇒ false ⇒ 永不回)
+Assert-Eq "unchanged-count-still-replies-when-in-list" (Test-Judge $linesB $ledger 2) $true
+Write-Output "  防哑巴: 会话在待回复列表里(连续 2 轮) ⇒ 必回, 与账本条数是否增长无关"
 
 # ---------------------------------------------------------------------------
-# Legacy ledger keys. 110 of the 135 live ledger entries carry the OLD key format
+# Legacy ledger keys. 110 of the 137 live ledger entries carry the OLD key format
 # <hash>|<epoch-ms> (13-digit 2nd segment) instead of <hash>|<count>.
-# [SPEC-单出口 2026-09-27] 行为**已变更**(spec §4.1 必须删掉的旧出口):
-#   旧实现 Test-NewBuyerMessage 的第二段不可解析时会退回"文本 hash 不同即算新消息" ⇒ 误发;
-#   新实现的唯一出口 Test-ShouldReply 对旧格式键一律 **fail-closed**(证明不了就不发)。
-#   本节断言据此改写: 旧格式键在两种形态下都不得判"应回"。
+# [SPEC-待回复列表 2026-09-27] 新判据**不解析账本键** ⇒ 旧格式与任何异常段都不再是判定输入;
+#   唯一剩下的要求是"不得因为传入这种键而抛异常"(第 6 次修复曾因 [int] 溢出崩在真实账本上)。
 # ---------------------------------------------------------------------------
-$legacyKey = (($ledger -split '\|')[0]) + '|1789826752752'
-
-# (a) 旧格式键的 hash 能对上"我方回复针对的那条"(选择器按内容匹配) ⇒ 命中行2, 不发
-Assert-Eq "legacy-key-selector-hash-match" (Test-Judge $linesA $legacyKey) $false
-$rLegacy = Test-ShouldReply -ConvoLines $linesA -LedgerKey $legacyKey `
-    -NormLastBuyerHash (Get-StableHash (Get-NormalizedMsgText (Get-MsgPlain $newest)))
-Assert-Eq "legacy-key-selector-reason" $rLegacy.Reason 'LEDGER_HASH_MATCH'
-
-# (b) 账本 hash 与快照里任何一条买家消息都对不上(抽取漂移) + 第二段不可解析:
-#     判据此时**不能**证明"是新消息"(hash 对不上、条数不可解析) ⇒ 只要不是"买家又开口",
-#     一律 fail-closed(不发)。这是旧代码 Test-NewBuyerMessage 的回退分支
-#     ("文本 hash 不同即算新消息")会**误发**的那条路径。
-$legacyOther = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA|1789826752752'
-Assert-Eq "legacy-key-other-hash-me-tail-failclosed" (Test-JudgeLastLine @($olderB, $meA) $legacyOther) $false
-#     反过来: 我方回复之后买家又开口(最后一行是 [BUYER]) ⇒ 必须仍能回(行6 BUYER_AFTER_ME),
-#     否则就是"修成哑巴"。两者一起才说明 fail-closed 没有过度收紧。
-Assert-Eq "legacy-key-other-hash-buyer-tail-still-replies" (Test-JudgeLastLine $linesA $legacyOther) $true
-
-# (b2) 同一旧格式键 + "我方消息排在最后"(订单已收尾) ⇒ 同样不得判"应回"
-Assert-Eq "legacy-key-me-tail-failclosed" (Test-JudgeLastLine @($olderB, $meA) $legacyOther) $false
-
-# (c) 旧格式键绝不抛异常(第 6 次修复曾因 [int] 溢出崩在真实账本上)
 $legacyThrew = $false
 try { Test-Judge $linesA $legacyKey | Out-Null } catch { $legacyThrew = $true }
 Assert-True "legacy-key-does-not-throw" (-not $legacyThrew)
-
-# (d) 旧出口函数必须已经不存在(spec §4.1: 整体删除, 不是改)
-Assert-True "legacy-fn-removed" ($null -eq (Get-Command Test-NewBuyerMessage -EA SilentlyContinue))
-
-# (e) 哨兵 -1(未知) 与缺失第 2 段一律 fail-closed
+# 旧格式键与原格式键必须给出**同一个**结论(判据已不看键内容)
+Assert-Eq "legacy-key-same-verdict-as-current" (Test-Judge $linesA $legacyKey) (Test-Judge $linesA $ledger)
+Assert-Eq "legacy-key-same-reason-as-current" (Test-JudgeReason $linesA $legacyKey) (Test-JudgeReason $linesA $ledger)
+# 与任何买家消息都对不上的 hash(抽取漂移的极端形态)同样不影响结论
+Assert-Eq "unknown-hash-same-verdict" (Test-Judge $linesA $legacyOther) (Test-Judge $linesA $ledger)
+# 哨兵 -1(未知) 与缺失第 2 段
 $sentinelKey = (($ledger -split '\|')[0] + '|-1')
-Assert-Eq "sentinel-minus1-not-reply" (Test-JudgeLastLine @($olderB, $meA) $sentinelKey) $false
-# 缺失 key(从未回复过) ⇒ 首次问询, 必须仍能回(防"修成哑巴")
-Assert-True "empty-key-is-new" (Test-JudgeLastLine $linesA '')
+Assert-Eq "sentinel-minus1-same-verdict" (Test-Judge $linesA $sentinelKey) (Test-Judge $linesA $ledger)
+# 缺失 key(从未回复过) ⇒ 在列表里就必须回(防"修成哑巴")
+Assert-True "empty-key-in-list-still-replies" (Test-Judge $linesA '' 2)
+# 空 key + 不在列表 ⇒ 不发(列表是唯一判据)
+Assert-Eq "empty-key-not-in-list-no-reply" (Test-Judge $linesA '' 0) $false
+# 账本不可用 ⇒ fail-closed(§2 行 1 / §4.1 裁决 = 方案甲: 账本读不到, 一条都不发)
+$rLed = Test-ShouldReply -LedgerUsable $false -PendingSeenRounds 9 -LedgerKey $ledger -ConvoLines $linesA
+Assert-Eq "ledger-unusable-failclosed-Reason" $rLed.Reason 'LEDGER_UNUSABLE_FAILCLOSED'
+Assert-Eq "ledger-unusable-failclosed-Reply" $rLed.Reply $false
+
+# (d) 旧出口函数必须已经不存在(spec 单出口 §4.1: 整体删除, 不是改)
+Assert-True "legacy-fn-removed" ($null -eq (Get-Command Test-NewBuyerMessage -EA SilentlyContinue))
 
 # ---------------------------------------------------------------------------
 # Select-LatestBuyerLine -- picks the message the ledger says we replied to,
 # instead of whatever happens to sit at index 0. Used for the log line and the
 # LLM input, so the operator sees the message we actually answered.
+#   [SPEC-待回复列表 2026-09-27 §2.2] 该选择器**继续有效且继续被调用**, 但只服务日志/LLM 输入,
+#   不再参与"是否回复"的判定 —— 故本节的断言逐字保留(它的价值与判据无关)。
 # ---------------------------------------------------------------------------
 Assert-True "selector-fn-exists" ($null -ne (Get-Command Select-LatestBuyerLine -EA SilentlyContinue))
 # ledger was written for $newest -> selector must find it in EITHER order

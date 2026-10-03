@@ -122,26 +122,30 @@ if ($viol -gt 0) {
 Write-Output ""
 Write-Output "=== §5.2-A10 事故现场回归（5 份快照）==="
 # 账本口径: 现役 state.json 即事故时段副本(11:42-11:49 由 monitor 写入);
-#   Ganesan 114510 一例按"11:42:28 那次回复 + 11:45:19 本该写入的条数 8"重建(日志证据见 REPORT)。
+#   买家G 114510 一例按"11:42:28 那次回复 + 11:45:19 本该写入的条数 8"重建(日志证据见 REPORT)。
 $acc = @(
-    @{ f = 'msgs_20260927_114208.txt'; buyer = 'erico Rodrigues'; ov = $null },
-    @{ f = 'msgs_20260927_114219.txt'; buyer = 'Ganesan Krishnasamy'; ov = $null },
-    @{ f = 'msgs_20260927_114235.txt'; buyer = 'Riyad Tantawi'; ov = $null },
-    @{ f = 'msgs_20260927_114453.txt'; buyer = 'erico Rodrigues'; ov = $null },
-    @{ f = 'msgs_20260927_114510.txt'; buyer = 'Ganesan Krishnasamy'; ov = '5A32DC15E20319AAC7349A9FF44CDEB2|8' }
+    @{ f = 'msgs_20260927_114208.txt'; ov = $null },
+    @{ f = 'msgs_20260927_114219.txt'; ov = $null },
+    @{ f = 'msgs_20260927_114235.txt'; ov = $null },
+    @{ f = 'msgs_20260927_114453.txt'; ov = $null },
+    @{ f = 'msgs_20260927_114510.txt'; ov = '5A32DC15E20319AAC7349A9FF44CDEB2|8' }
 )
 $a10Green = 0
 foreach ($a in $acc) {
     $p = Join-Path $DataDir $a.f
     if (-not (Test-Path $p)) { Write-Output ("  {0}  (快照不存在)" -f $a.f); continue }
+    # [脱敏] 买家名不落仓库字面量: 从快照首行 `# BUYER:` 读, 展示用哈希代号
+    $buyer = ''
+    try { $h0 = Get-Content -Path $p -Encoding UTF8 -TotalCount 1; if ($h0 -match '^# BUYER:\s*(.+)$') { $buyer = $Matches[1].Trim() } } catch { }
+    $label = if ($buyer) { '买家#' + (Get-StableHash $buyer).Substring(0,8) } else { '(快照无 # BUYER 头)' }
     $lines = Get-SnapLines $p
     $b = @($lines | Where-Object { $_ -match '^\[BUYER\]' })
     $h = Get-StableHash (Get-NormalizedMsgText (Get-SnapOrig $b[$b.Count - 1]))
-    $sk = $a.buyer.ToLowerInvariant()
-    $lk = if ($a.ov) { $a.ov } elseif ($ledMap.ContainsKey($sk)) { $ledMap[$sk] } else { '' }
+    $sk = $buyer.ToLowerInvariant()
+    $lk = if ($a.ov) { $a.ov } elseif ($buyer -and $ledMap.ContainsKey($sk)) { $ledMap[$sk] } else { '' }
     $r = Test-ShouldReply -ConvoLines $lines -LedgerKey $lk -NormLastBuyerHash $h
     if (-not $r.Reply) { $a10Green++ }
-    Write-Output ("  {0}  {1,-22} ledger={2,-40} -> Reply={3,-5} Reason={4}" -f $a.f, $a.buyer, $lk, $r.Reply, $r.Reason)
+    Write-Output ("  {0}  {1,-22} ledger={2,-40} -> Reply={3,-5} Reason={4}" -f $a.f, $label, $lk, $r.Reply, $r.Reason)
 }
 Write-Output ("A10: {0}/{1} 为 Reply=false" -f $a10Green, $acc.Count)
 

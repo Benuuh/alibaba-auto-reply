@@ -69,6 +69,21 @@ if (Test-Path $ex) {
     } else {
         Write-Output "  skip scripts\config.json 不存在（新克隆/未部署），只校验模板本身"
     }
+
+    # ---- 3b: [SPEC-待回复列表 2026-09-27 §0.1/§3.4] 两个新限流键必须**同时**在模板与现役配置里, 且值 = 5 ----
+    #   为什么单列一条: "模板键集 ⊇ 现役键集"只保证"现役有的模板都有"; 若两个键被误从**两边同时**
+    #   删掉, 上面那条仍然全绿 —— 而 monitor 会静默回落到内部缺省。这条断言把这对键钉死。
+    $rlKeys = @('reply_min_gap_min', 'reply_post_send_cooldown_min')
+    $exObj = $null; $liveObj = $null
+    try { $exObj = Get-Content $ex -Raw | ConvertFrom-Json } catch { }
+    try { $liveObj = Get-Content $live -Raw | ConvertFrom-Json } catch { }
+    foreach ($k in $rlKeys) {
+        Check ("config.json.example 含 $k = 5") ($exObj -and ($exObj.PSObject.Properties.Name -contains $k) -and ([int]$exObj.$k -eq 5)) ("值为 " + $(if ($exObj -and ($exObj.PSObject.Properties.Name -contains $k)) { $exObj.$k } else { '<缺失>' }))
+        Check ("config.json 含 $k = 5") ($liveObj -and ($liveObj.PSObject.Properties.Name -contains $k) -and ([int]$liveObj.$k -eq 5)) ("值为 " + $(if ($liveObj -and ($liveObj.PSObject.Properties.Name -contains $k)) { $liveObj.$k } else { '<缺失>' }))
+    }
+    if ($liveObj -and ($liveObj.PSObject.Properties.Name -contains 'reply_min_gap_min') -and ($liveObj.PSObject.Properties.Name -contains 'reply_post_send_cooldown_min')) {
+        Check "发送后冷却 ≥ 最小间隔（§0.1 硬要求）" ([int]$liveObj.reply_post_send_cooldown_min -ge [int]$liveObj.reply_min_gap_min) ("cooldown=" + $liveObj.reply_post_send_cooldown_min + " < gap=" + $liveObj.reply_min_gap_min)
+    }
 }
 
 # ---- 4: 文档里不得写死"易漂数字"（规则三）----

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$LogDir = "",
     [string]$CredFile = "",
     [switch]$ForceRestart,          # [FIX-DATAPLANE 2026-09-25] 数据面断连时由 monitor 传入
@@ -67,25 +67,63 @@ function Test-PageDataPlane {
     }
 }
 
+function Get-MonitorChromeProcesses {
+    # [SPEC-公海独立Chrome 2026-09-27 §4-P2] 精确定位**本实例**(自动回复那个 Chrome)的进程。
+    #
+    # 🔴 本条是本 spec 实机验收中**真实踩到**的缺陷(spec §4-P2"不许动自动回复那个 Chrome"的镜像面:
+    #    也不许动**别人**的 Chrome)。原实现:
+    #        $_.CommandLine -match 'remote-debugging-port' -or $_.CommandLine -match [regex]::Escape($profileDir)
+    #    第一个子句匹配"**任何**带调试端口的 chrome"⇒ 公海(9225)、okki(9223)、waimao(9224)
+    #    的进程全部入选。实测 2026-09-27 15:14:36:monitor 自愈触发 FORCE-RESTART,
+    #    targets=**20** pids(含 9225 的 7 个)⇒ **把公海刚建好的独立实例一起杀了**,
+    #    公海探针下一轮直接 `无法连接到远程服务器`。这与本 spec 的整个目的正好相反。
+    #
+    # 现在的判据(**唯一**必要条件,与 gonghai_ensure.ps1 同款思路):
+    #    命令行必须含**本实例的 profile 目录**。
+    #    · 本机四个实例的 profile 前缀互不相同(chrome-profile / -okki / -waimao / -gonghai),
+    #      但 `chrome-profile` 是另外三个的**前缀** ⇒ 必须用**带边界**的匹配,否则
+    #      `chrome-profile` 会误命中 `chrome-profile-gonghai`(这就是"精确匹配"的要害)。
+    #    · 允许 `--remote-debugging-port=` 存在,但**不作为**入选条件(用户本人的普通 Chrome
+    #      没有该标志,也不会带本 profile 目录,天然不会入选)。
+    $needle = $profileDir.TrimEnd('\')
+    $pat = [regex]::Escape($needle) + '(?![A-Za-z0-9._-])'
+    return @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and ($_.CommandLine -match $pat) })
+}
+
+function Start-ChromeDetached([string]$ChromePath, [string[]]$ArgList) {
+    # [GH-38b 2026-09-28] **脱离父进程**启动 Chrome。
+    #   为什么:`Start-Process` 让 Chrome 成为调用方的**子进程**,而 Windows 作业对象会在父进程结束时
+    #   把子进程一并回收 ⇒ 由工具命令/后台作业触发的 ensure,拉起的 Chrome **几分钟后就消失**
+    #   (公海侧 2026-09-28 实测三连:GH-38)。WMI `Win32_Process.Create` 的父进程是 WmiPrvSE(系统服务),
+    #   不在调用方作业对象里 ⇒ 母进程退出后 Chrome 继续活着。
+    #   ⚠️ 参数要拼成**一条命令行字符串**;路径含空格必须加引号(WMI 不吃参数数组)。
+    $cmdLine = '"' + $ChromePath + '" ' + (@($ArgList) -join ' ')
+    try {
+        $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmdLine } -ErrorAction Stop
+        if ($r -and $r.ReturnValue -eq 0) { return $true }
+    } catch { }
+    try { Start-Process -FilePath $ChromePath -ArgumentList $ArgList; return $true } catch { return $false }
+}
 function Restart-DebugChrome {
     param([string]$Reason)
     # 先断言（§4-11）：把"要重启"的意图与依据写进日志
     Write-Log ("CHROME-ENSURE: FORCE-RESTART triggered by $Reason")
-    $targets = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -match 'remote-debugging-port' -or $_.CommandLine -match [regex]::Escape($profileDir) })
-    Write-Log ("CHROME-ENSURE: FORCE-RESTART targets=" + $targets.Count + " pids=" + (($targets | ForEach-Object { $_.ProcessId }) -join ','))
+    $targets = @(Get-MonitorChromeProcesses)
+    Write-Log ("CHROME-ENSURE: FORCE-RESTART targets=" + $targets.Count + " pids=" + (($targets | ForEach-Object { $_.ProcessId }) -join ',') + " (profile-scoped, 其他实例一律不碰)")
     if ($targets.Count -eq 0) {
         Write-Log "CHROME-ENSURE: FORCE-RESTART no matching chrome.exe (profile-scoped) - skip kill, will launch"
     }
     foreach ($t in $targets) { try { Stop-Process -Id $t.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
     Start-Sleep -Seconds 3
     if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-    Start-Process -FilePath $chromePath -ArgumentList `
-        "--remote-debugging-port=$cdpPort", "--user-data-dir=$profileDir", `
-        "--no-first-run", "--no-default-browser-check", `
-        "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", `
+    # [GH-38b] 必须脱离父进程启动(见 Start-ChromeDetached 注释):否则母进程一退,Chrome 就被作业对象回收
+    $null = Start-ChromeDetached -ChromePath $chromePath -ArgList @(
+        "--remote-debugging-port=$cdpPort", "--user-data-dir=`"$profileDir`"",
+        "--no-first-run", "--no-default-browser-check",
+        "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
         "about:blank"
-    $deadline = (Get-Date).AddSeconds(40)
+    )    $deadline = (Get-Date).AddSeconds(40)
     while ((Get-Date) -lt $deadline) { if (Test-CdpReady) { break }; Start-Sleep -Seconds 1 }
     if (-not (Test-CdpReady)) { Write-Log "CHROME-ENSURE: FORCE-RESTART FAILED to start Chrome"; return $false }
     Write-Log "CHROME-ENSURE: FORCE-RESTART chrome up, CDP ready"
@@ -115,22 +153,23 @@ if ($pd.Down) {
     }
 }
 
-# 1. 若 CDP 未就绪：杀掉残留的调试 Chrome 进程并重启带调试端口的 Chrome
+# 1. 若 CDP 未就绪：杀掉残留的**本实例**Chrome 进程并重启带调试端口的 Chrome
 if (-not (Test-CdpReady)) {
     Write-Log "CHROME-ENSURE: CDP not ready, restarting Chrome..."
-    # 只终止调试实例(带 remote-debugging 标志或使用本技能 profile 的进程),
-    # 不误杀用户个人 Chrome(默认 profile 的浏览器会话)
-    Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -match 'remote-debugging-port' -or $_.CommandLine -match [regex]::Escape($profileDir) } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    # [SPEC-公海独立Chrome 2026-09-27 §4-P2] 只终止**本实例**(profile 精确匹配)的进程。
+    #   ⚠️ 原判据 `-match 'remote-debugging-port' -or -match $profileDir` 会把公海 9225 /
+    #      okki 9223 / waimao 9224 的实例一起杀掉(实测 15:14:36 一次杀掉 20 个进程)。
+    #      这里必须走 Get-MonitorChromeProcesses(带边界的 profile 匹配)。
+    Get-MonitorChromeProcesses | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Seconds 3
     if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-    Start-Process -FilePath $chromePath -ArgumentList `
-        "--remote-debugging-port=$cdpPort", "--user-data-dir=$profileDir", `
-        "--no-first-run", "--no-default-browser-check", `
-        "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", `
+    # [GH-38b] 必须脱离父进程启动(见 Start-ChromeDetached 注释):否则母进程一退,Chrome 就被作业对象回收
+    $null = Start-ChromeDetached -ChromePath $chromePath -ArgList @(
+        "--remote-debugging-port=$cdpPort", "--user-data-dir=`"$profileDir`"",
+        "--no-first-run", "--no-default-browser-check",
+        "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
         "about:blank"
-    $deadline = (Get-Date).AddSeconds(40)
+    )    $deadline = (Get-Date).AddSeconds(40)
     while ((Get-Date) -lt $deadline) {
         if (Test-CdpReady) { break }
         Start-Sleep -Seconds 1
@@ -144,6 +183,11 @@ if (-not (Test-CdpReady)) {
 }
 
 # 2. 导航到 OneTalk
+#    [SPEC-公海独立Chrome 2026-09-27 §2.2] 上一版 [SPEC-公海页面隔离 2026-09-27] 在本文件里加的
+#      "若存在带标记的公海页则跳过导航(markedTabExists / dshgh=1)"这一块**已整体撤销**。
+#      为什么可以撤:公海现在有自己的 Chrome(9225 + chrome-profile-gonghai,见 gonghai_ensure.ps1),
+#        9222 这个实例上**再也不会**出现公海页 ⇒ 本文件不需要为公海做任何让步。
+#      ⚠️ 本文件对公海**零依赖**(不得 dot-source/调用任何 gonghai 模块),行为与本 spec 之前逐字一致。
 powershell -ExecutionPolicy Bypass -File $cdp -Action navigate -Url "https://onetalk.alibaba.com/message/weblitePWA.htm" | Out-Null
 Start-Sleep -Seconds 8
 

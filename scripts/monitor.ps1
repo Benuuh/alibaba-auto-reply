@@ -53,6 +53,32 @@ if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_round_budget_sec'
 }
 if ($script:replyRoundBudgetSec -lt 30) { $script:replyRoundBudgetSec = 30 }
 
+# ===== [SPEC-待回复列表 2026-09-27 §0.1] 观察窗口上限 = 5 分钟: 两个值都必须走配置键, 不得再硬编码 =====
+#   最小发送间隔 reply_min_gap_min: 原 L1073 硬编码 15 ⇒ 新缺省 **5**。
+#     张力(已登记 §0.1/§10-R1b): 同一买家每小时最多可收到 12 条(原 4 条), 这是老板为缩短观察窗口
+#     主动接受的代价; 若日后出现重复打扰投诉, **第一个要调回的就是这个键**。
+#   发送后冷却 reply_post_send_cooldown_min: 原 L1302/L885 里的 3 ⇒ 新缺省 **5**, §0.1 要求不得小于最小间隔。
+#   两者缺省一致(5/5)时, 判据第 3 行(POST_SEND_COOLDOWN)会先于第 4 行(RATE_MIN_GAP)命中。
+$script:replyMinGapMin = 5
+if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_min_gap_min' -and $script:skillCfg.reply_min_gap_min) {
+    $script:replyMinGapMin = [int]$script:skillCfg.reply_min_gap_min
+}
+if ($script:replyMinGapMin -lt 1) { $script:replyMinGapMin = 1 }
+$script:replyPostSendCooldownMin = 5
+if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_post_send_cooldown_min' -and $script:skillCfg.reply_post_send_cooldown_min) {
+    $script:replyPostSendCooldownMin = [int]$script:skillCfg.reply_post_send_cooldown_min
+}
+if ($script:replyPostSendCooldownMin -lt 1) { $script:replyPostSendCooldownMin = 1 }
+# §0.1 硬要求: 发送后冷却**不得小于**最小间隔。配错了(冷却 < 间隔)就抬到与间隔一致, 并留痕
+#   (告警落到 monitor.log —— 见 Initialize-MonitorRuntime 的 COOLDOWN-RAISED 行; 此处只记标记)。
+$script:cooldownRaisedToGap = $false
+if ($script:replyPostSendCooldownMin -lt $script:replyMinGapMin) {
+    $script:cooldownRaisedToGap = $true
+    $script:replyPostSendCooldownMin = $script:replyMinGapMin
+}
+# 连续确认轮数门槛(§0.1: 2 轮 ≈ 9 秒, 唯一的"冷启动延迟", 不可再降; Test-ShouldReply 内还有一道下限)
+$script:requiredSeenRounds = 2
+
 # 发送前拦截安全兜底句（spec 禁词拦截 Phase 4 + 2026-09-10 责任承诺拦截）：命中禁词/责任承诺且重写仍越线/引擎路径命中时整体替换；争议与通用场景安全，纯 ASCII，非空保证
 $script:banSafeFallback = "Thanks for your patience - I've noted this and I'm checking with the team. I'll get back to you with a clear update shortly."
 
@@ -872,20 +898,36 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
         return
     }
-    # dedup 跳过会话进冷却（3→6→12→15 分钟递增）
+    # 会话短冷却(省页面负担): 基准值 = 配置键 reply_post_send_cooldown_min(§0.1 缺省 5, 原硬编码 3)
     # [FIX-DUP 2026-09-25] 方案甲：冷却期内不再"预览变化即提前解除"。列表预览含未读计数/翻译标记等 UI 噪声
     #   （实测两轮预览只差未读计数 "1"），且我方回复本身就会改变预览 → 原逻辑必然误判为"买家新动态"而提前解除冷却。
-    #   现改为冷却期内一律 TEMP-SKIP，到期后自然处理；买家新消息最晚延迟一个冷却周期（默认 3 分钟）。
+    # [FIX-COOLDOWN-LIFT 2026-09-27] 上述结论**不等于**"预览变了就一律不过问": 那样会把买家真正的新消息
+    #   一起按到冷却到期(实测买家 17:24:47 发来我们要的重量数据, 被按到 17:33:30 才回, 8 分 43 秒)。
+    #   故现在把"预览变化"降级为**下探信号**: 变化时不再直接发送(方案甲的教训), 也不直接跳过,
+    #   而是继续打开会话、用账本证据(Test-BuyerMsgAlreadyAnswered)判断"是不是新消息", 再见下方分流。
+    # [FIX-WAIT-STACK 2026-09-27] 冷却的**到期时刻锚在阻塞条件到期的那一刻**(记录里的 until), 不是"此刻 + N 分钟":
+    #   旧写法用 [int] 取整判到期 ⇒ 冷却最早 4.5 分钟就放行, 而同一笔发送的最小间隔要满 5 分钟,
+    #   于是每次都在 RATE_MIN_GAP 处被挡(实测 gap=4.63m)、又被补装一整段 5 分钟冷却 ⇒ 两段叠加。
+    $cooldownRecheck = $false
     if ($ctx.skipCooldown.ContainsKey($key)) {
         $co = $ctx.skipCooldown[$key]
         $pkeyNow = Get-NormalizedMsgText $item.preview   # [FIX-DUP 2026-09-25] 归一化预览仅用于日志留痕
         $skipMins = [int]((Get-Date) - $co.time).TotalMinutes
-        # 冷却随重复命中次数递增（3→6→12→15 分钟封顶）：
-        # 已回复且无新消息的会话不必每 3 分钟重新打开一次，减少页面负担
-        $coolMin = [Math]::Min(3 * [Math]::Pow(2, ([int]$co.count - 1)), 15)
-        if ($skipMins -lt $coolMin) {
-            Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m pkey=[$($co.pkey) -> $pkeyNow] buyers=$($co.buyers)"
-            return
+        # 冷却随重复命中次数递增(基准 ×2, 15 分钟封顶)。基准不再是硬编码的 3 ——
+        #   §0.1 要求发送后冷却走配置键(缺省 5), 否则"改了配置却没生效"。
+        $coolMin = [Math]::Min($script:replyPostSendCooldownMin * [Math]::Pow(2, ([int]$co.count - 1)), 15)
+        # 到期时刻: 优先用记录里的 until(写入时按阻塞条件锚定); 老记录没有该字段时按 time + 冷却值兜底。
+        $holdUntil = (Get-Date).AddMinutes($coolMin)
+        if ($co.ContainsKey('until') -and $co['until']) { $holdUntil = [datetime]$co['until'] }
+        if ((Get-Date) -lt $holdUntil) {
+            # buyers = -1 = 该分支记的冷却"买家条数未知"(人工插话让路 / 抽到空消息), 一律不解除。
+            # 预览也没变 ⇒ 连"可能有新消息"的迹象都没有 ⇒ 直接跳过, 省一次页面打开。
+            if ([int]$co.buyers -eq -1 -or $pkeyNow -eq $co.pkey) {
+                Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m pkey=[$($co.pkey) -> $pkeyNow] buyers=$($co.buyers)"
+                return
+            }
+            $cooldownRecheck = $true
+            Write-Log "COOLDOWN-RECHECK $($key): preview changed during cooldown - verifying by ledger before any send"
         } else {
             $ctx.skipCooldown.Remove($key)
         }
@@ -969,7 +1011,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
             if ($rtNow.items -and $rtNow.items.ContainsKey($key.ToLower())) { Remove-PendingRetry $key }
         } catch { Write-Log "HUMAN-REPLIED-SKIP $($key): retry-table check failed - $($_.Exception.Message)" }
         # 短冷却只为省页面负担(不写去重账本): 冷却期内不再重复打开该会话
-        $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
+        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
         return
     }
     $humanWasPending = [bool]$ctx.humanPending[$key]
@@ -1018,7 +1060,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         if ($latest.Trim().Length -eq 0) {
             Write-Log "SKIP $($key): empty latest message"
             # [FIX-DUP 2026-09-25] buyers=-1 表示"未知"（该分支尚未计算买家条数），判定侧按"不解除冷却"处理
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
             return
         }
         # ===== 判据口径的"买家最后一条消息"(与 $latest 可能不同, 见上) =====
@@ -1052,50 +1094,122 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         # $newKey 仅用于日志留痕; 真正写账本的是发送成功后下方的 Set-StateHash(同一 hash 与条数)。
         #   条数口径 = 该会话买家消息条数(与 $lastBuyer 同一次抓取), 保证"账本条数 vs 当前条数"可比。
         $newKey = Get-DedupKey (Get-NormalizedMsgText $lastBuyerOrig) $buyerCount
-        # ===== [SPEC-单出口 2026-09-27] 「是否回复」的唯一出口: Test-ShouldReply =====
-        # 旧实现的三套并存判据(Test-DedupHit / Test-NewBuyerMessage / $already 兜底闸门)已整体删除,
-        # 由下面这一次调用单点取代(spec §4.1「必须删掉的旧出口」)。理由见 §3-R2:
-        #   「是否回复」没有唯一出口 ⇒ 改一处不影响另一处 ⇒ 修了 6 次仍然误发。
-        # 账本键按**原样**取出后直接交给判据, 本处不再解析第二段(§4.1 入参契约)。
+        # ===== [SPEC-待回复列表 2026-09-27 §2] 「是否回复」的唯一出口: Test-ShouldReply =====
+        # 判据已**换掉**(不是新增第二个出口): 旧证据锚点 = 账本 hash / 买家消息条数;
+        #   新证据锚点 = **该会话此刻在不在页面的待回复列表里**(连续 2 轮确认)+ 冷却/最小间隔兜底。
+        # 依据: docs\specs\判据改为待回复列表_20260927.md(唯一事实源)。
+        #   §1.2 实证: 旧判据只答"我发过消息了吗" —— 买家G 问了 6 次报价, 我方回了 6 次"马上给你报价"、
+        #   真实价格 0 条, 而旧判据每 9 秒判一次 LEDGER_COUNT_MATCH ⇒ 无限跳过。
+        #   §1.3 老板裁决: 「回复的核心是该对话在页面待回复的列表里」。
+        # §2.2: 账本**继续写、继续留痕**(删了会连带破坏补发队列 / Test-RepliedStateUsable / 快照保留),
+        #   但判定不再读它 —— 本处取出 $ledgerKey 仅为日志。
         $ledgerKey = ''
         if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
             $ledgerKey = [string]$ctx.state.replied.$skey
         }
-        $shouldReply = Test-ShouldReply -ConvoLines $cdpLines -LedgerKey $ledgerKey -NormLastBuyerHash $hLastBuyer
-        Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) buyerMsgs=$buyerCount ledgerKey=$ledgerKey lastBuyerHash=$($hLastBuyer.Substring(0,[Math]::Min(8,$hLastBuyer.Length)))"
-        # ===== [SPEC §4.3-G4 最小实现 2026-09-27] 同一买家最小间隔 15 分钟(抖动兜底) =====
-        #   依据 §0 判据 3「同一买家在 15 分钟内不可能收到第 2 条」+ §5.1-A5。
-        #   §4.3 的**完整**限流(日上限 / 整轮上限 / 整日上限 + data\reply_rate.json)属阶段 B;
-        #   阶段 A 只落地"最小间隔"这一条 —— 它是 A5 的验收对象, 且独立于判据(即使判据判错也发不出去)。
-        #   命中即跳过本次发送(不写账本), 但必须留日志。
+        # --- 判定入参的数据面(全部来自本轮快照与既有运行态; 不新增第二套记录, §3.2) ---
+        # §4.1 裁决 = **方案甲**(保守): 账本不可读 ⇒ 一条都不发。整轮开头已挡一道(见 STATE-UNUSABLE),
+        #   此处按 §2 行 1 再挡一道, 避免判据自身在账本异常时仍然放行。
+        $ledgerUsableNow = (Test-RepliedStateUsable $ctx.state).Ok
+        # §2 行 2 的数据面: 由 Update-PendingSeen 在每轮 Get-Snapshot 后整表对齐(命中 +1 / 未命中删键)。
+        $seenRounds = 0
+        if ($ctx.pendingSeen -and $ctx.pendingSeen.ContainsKey($key)) { $seenRounds = [int]$ctx.pendingSeen[$key] }
+        # §2 行 3/4 的**同一个**数据面: 距上次成功发送的分钟数(-1 = 从未发过)。§3.2 明令不得各记一套。
+        $gapMin = -1
+        if ($ctx.lastSendAt.ContainsKey($skey)) { $gapMin = [int]((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes }
+        $inPostSendCooldown = ($gapMin -ge 0 -and $gapMin -lt $script:replyPostSendCooldownMin)
+        # ===== [FIX-DUP-GUARD 2026-09-27] 同一条买家消息不得重复回复(实测 Bohdana 9 分半被连回 3 次) =====
+        #   证据 = 同一轮抓取里的 (买家条数, 最后一条买家原文 hash) 与账本键**逐字相等** ⇒ 最后这条已回过。
+        #   用法: 把它当作**判据的入参**(连续确认轮数按 0 计 = 没有待回复的新内容), 由唯一出口
+        #   Test-ShouldReply 返回 NOT_IN_PENDING_LIST —— 这里不判"发不发", 不新增第二个出口。
+        #   买家只要再说一句, 条数或 hash 必变 ⇒ $alreadyAnswered=false ⇒ 立刻恢复正常放行。
+        $seenRoundsRaw = $seenRounds
+        $alreadyAnswered = Test-BuyerMsgAlreadyAnswered -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer
+        if ($alreadyAnswered) { $seenRounds = 0 }
+        elseif ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds) { $ctx.dupGuardHolds.Remove($skey) }   # 买家说了新话 ⇒ 连挂结束
+        # [FIX-COOLDOWN-LIFT 2026-09-27] 冷却期内预览变了、且账本证明**买家确实说了新话** ⇒ 解除"省页面负担"的
+        #   跳过并进入正常判定。注意本行只解除**页面跳过**: 冷却/最小间隔这两道时间闸门照常生效(不得绕过限流)。
+        if ($cooldownRecheck -and -not $alreadyAnswered) {
+            Write-Log "COOLDOWN-LIFT $($key): ledger proves a NEW buyer message - cooldown bypassed (time gates still apply)"
+        }
+        $shouldReply = Test-ShouldReply -LedgerUsable $ledgerUsableNow `
+            -PendingSeenRounds $seenRounds -RequiredSeenRounds $script:requiredSeenRounds `
+            -MinutesSinceLastSend $gapMin -MinGapMinutes $script:replyMinGapMin `
+            -InPostSendCooldown $inPostSendCooldown -PostSendCooldownMinutes $script:replyPostSendCooldownMin `
+            -ConvoLines $cdpLines -LedgerKey $ledgerKey -NormLastBuyerHash $hLastBuyer
+        Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) seen=${seenRoundsRaw}/$($script:requiredSeenRounds) gapMin=$gapMin minGap=$($script:replyMinGapMin)m cooldown=$inPostSendCooldown ledgerUsable=$ledgerUsableNow buyerMsgs=$buyerCount alreadyAnswered=$alreadyAnswered ledgerKey=$ledgerKey lastBuyerHash=$($hLastBuyer.Substring(0,[Math]::Min(8,$hLastBuyer.Length)))"
+        # ===== [SPEC §4.3-G4 最小实现 2026-09-27 / P7] 同一买家最小间隔(抖动兜底; 纵深防御) =====
+        #   依据 §0 硬判据 2「同一买家在最小间隔内不可能收到第 2 条」。
+        #   值来自配置键 reply_min_gap_min(§0.1: 缺省 **5**, 原硬编码 15), 且**与判据第 4 行共用同一个
+        #   $ctx.lastSendAt[$skey]** —— 不得各记一套(§3.2 明文)。判据第 4 行命中时这里不会触发;
+        #   保留它是为了"即使判据判错也发不出去"。
         if ($shouldReply.Reply -and $ctx.lastSendAt.ContainsKey($skey)) {
-            $gapMin = ((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes
-            if ($gapMin -lt 15) {
-                Write-Log ("RATE-SKIP buyer={0} gap={1}m (min-gap 15m, stage-A minimal G4)" -f $skey, [int]$gapMin)
+            $gapMin2 = ((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes
+            if ($gapMin2 -lt $script:replyMinGapMin) {
+                Write-Log ("RATE-SKIP buyer={0} gap={1}m (min-gap {2}m, config key reply_min_gap_min)" -f $skey, [int]$gapMin2, $script:replyMinGapMin)
                 $shouldReply = [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
             }
         }
         if (-not $shouldReply.Reply) {
-            # 判定表命中"不发"(LEDGER_COUNT_MATCH / LEDGER_HASH_MATCH / UNCERTAIN_FAILCLOSED)
-            # [FIX-DUP 2026-09-25] removed DEDUP-UPGRADE (key no longer carries ts)
-            $prev = $null
-            if ($ctx.skipCooldown.ContainsKey($key)) { $prev = $ctx.skipCooldown[$key] }
-            $count = 1
-            if ($prev -and $prev.count) { $count = [int]$prev.count + 1 }
-            # [FIX-COOLDOWN-NOISE 2026-09-27] 原实现每轮都写 COOLDOWN-KEYCHECK, 且恒为 prevFound=False
-            #   (该函数与预热 TEMP-SKIP 路径不共享 skipCooldown, 故必然取不到 prev) ⇒ 刷屏且误导运维
-            #   以为冷却在生效。现改为: **仅在冷却真的升级时**写一行(每会话每轮最多一行),
-            #   并直接给出冷却升级结论; 非升级轮次只保留 ALREADY-REPLIED-WAIT 一行。
-            if ($count -gt 1) {
-                Write-Log ("COOLDOWN-KEYCHECK key=[$key] prevFound=$([bool]$prev) escalated count=$($prev.count)->$($count) (quiet-round logging removed)")
+            # ===== [SPEC-待回复列表 2026-09-27 §3.2] 判"不发"时: 冷却原因**按新 Reason 区分** =====
+            # 旧实现的 ALREADY-REPLIED-WAIT(写 skipCooldown 并按 3/6/12/15 递增)是为旧 Reason 设计的 ——
+            #   那批 Reason 全是"已回过这条"(LEDGER_COUNT_MATCH / LEDGER_HASH_MATCH / UNCERTAIN_FAILCLOSED),
+            #   而本次裁决恰恰推翻了它: 那类会话现在**在列表里就该回**(§1.2)。新判据的 Reason 全是
+            #   时间性(POST_SEND_COOLDOWN / RATE_MIN_GAP)或异常(LEDGER_UNUSABLE_FAILCLOSED), 故冷却表
+            #   不再递增, 一律按配置的发送后冷却写一次"省页面负担"的短冷却。
+            # ⚠️ 唯一的例外, 必须单独处理: NOT_IN_PENDING_LIST(轮数不足) **绝不能**写多分钟冷却 ——
+            #   §2.1/§0.1 明说这条路的代价是"多等 1 轮(约 9 秒)", 且"这是唯一的冷启动延迟"。
+            #   若给它写 5 分钟冷却, 下一轮会在 L879 的 TEMP-SKIP 处就被挡回 ⇒ 第 2 轮永远等不到,
+            #   §0 硬判据 1 与 §7-E1 直接失效(推演: 第 1 轮跳过后 5 分钟内全程 TEMP-SKIP)。
+            #   故只留一行等待日志, **不动**冷却表 ⇒ 下一轮(约 9 秒)即可确认并发出。
+            if ($shouldReply.Reason -eq 'NOT_IN_PENDING_LIST') {
+                if ($alreadyAnswered) {
+                    # [FIX-DUP-GUARD 2026-09-27] 这里的"不在待回复列表"= 账本已证明最后一条买家消息回过
+                    #   (**不是**轮数没攒够)。上面 §2.1 那条"绝不能写多分钟冷却"约束针对的是"轮数不足、
+                    #   但买家确有新消息"的情形; 本分支前提恰恰相反: 买家只要再说一句, 条数或 hash 必变
+                    #   ⇒ $alreadyAnswered=false ⇒ 根本不走这里。故此处写短冷却不会破坏 2 轮确认机制。
+                    $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin)
+                                                 preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview)
+                                                 buyers = $buyerCount; count = 1 }
+                    if ($cooldownRecheck) {
+                        # 冷却期内的"预览变化"是我方回复自己造成的假信号: 重新校准预览基准, 继续让路, 不再开页面。
+                        Write-Log "COOLDOWN-HOLD $($key): preview changed but ledger proves the last buyer msg was already answered (buyers=$buyerCount) - no send"
+                        return
+                    }
+                    # 连挂计数: 同一会话连续 N 轮"在待回复列表里、但账本证明没有新内容" ⇒ 告警交人工判断。
+                    #   不静默、也不拿买家的耐心去试 —— 这是 买家G 事故(无限跳过)与 Bohdana 事故(重复打扰)
+                    #   之间唯一诚实的落点: 机器人不重复发, 但把"页面待回复标记可能是陈旧的"这件事说出去。
+                    $holds = 0
+                    if ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds -and $ctx.dupGuardHolds.ContainsKey($skey)) { $holds = [int]$ctx.dupGuardHolds[$skey] }
+                    $holds++
+                    if (-not $ctx.ContainsKey('dupGuardHolds') -or -not $ctx.dupGuardHolds) { $ctx.dupGuardHolds = @{} }
+                    $ctx.dupGuardHolds[$skey] = $holds
+                    Write-Log "DUP-GUARD-HOLD $($key): last buyer msg already answered (buyers=$buyerCount ledgerKey=$ledgerKey holds=$holds) - no send"
+                    if ($holds -eq 3) {
+                        try { Send-WecomMessage ("[ALERT] DUP-GUARD: " + $key + " still in the pending list while the ledger proves its last buyer message was already answered (3 consecutive holds). Check whether the page pending flag is stale.") | Out-Null } catch { }
+                        Write-Log "DUP-GUARD-ALERT $($key) holds=$holds (pushed via dsh-im)"
+                    }
+                    return
+                }
+                Write-Log "PENDING-CONFIRM-WAIT $($key) seen=${seenRounds}/$($script:requiredSeenRounds) round(s); waiting for consecutive confirmation (no cooldown written, re-checked next round ~9s)"
+                return
             }
-            # [Phase3] 已回复且无新消息: 冷却按 3/6/12/15 分钟递增(既有设计意图),并标明等待状态,
-            #   避免每 9 秒刷一行 TEMP-SKIP 让运维误判为"漏回"。
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview
+            $coolReason = [string]$shouldReply.Reason
+            # [FIX-WAIT-STACK 2026-09-27] 冷却必须锚在**阻塞条件到期的那一刻**, 不得从"此刻"重新计时 ——
+            #   否则 RATE_MIN_GAP 每次被挡都要再等一整段冷却(实测 5 分钟的最小间隔被等成 8 分 43 秒:
+            #   17:28:42 判据说该回 → RATE-SKIP 挡下 → 又装 5 分钟 → 17:33:30 才发出)。
+            $coolUntil = (Get-Date).AddMinutes($script:replyPostSendCooldownMin)
+            if ($ctx.lastSendAt.ContainsKey($skey)) {
+                $sentAt = [datetime]$ctx.lastSendAt[$skey]
+                if ($coolReason -eq 'RATE_MIN_GAP') { $coolUntil = $sentAt.AddMinutes($script:replyMinGapMin) }
+                elseif ($coolReason -eq 'POST_SEND_COOLDOWN') { $coolUntil = $sentAt.AddMinutes($script:replyPostSendCooldownMin) }
+                # 兜底: 锚出来的时刻若已过去(时钟回拨/配置刚改小), 至少让出一轮, 避免同一轮反复打开页面。
+                if ($coolUntil -le (Get-Date)) { $coolUntil = (Get-Date).AddMinutes(1) }
+            }
+            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = $coolUntil; preview = $item.preview
                                          pkey = (Get-NormalizedMsgText $item.preview)
-                                         buyers = $buyerCount; count = $count }
-            $coolMin2 = [Math]::Min(3 * [Math]::Pow(2, ($count - 1)), 15)
-            Write-Log "ALREADY-REPLIED-WAIT $($key) no new buyer message; next check in ${coolMin2}m (count=$count)"
+                                         buyers = $buyerCount; count = 1 }
+            Write-Log "ALREADY-REPLIED-WAIT $($key) reason=$coolReason no send; next check at $($coolUntil.ToString('HH:mm:ss')) (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min)"
             return
         } else {
             # A1 new inquiry alert (24h throttle)
@@ -1298,10 +1412,14 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     # [FIX-DUP 2026-09-25] 写新格式去重键（归一化原文 hash + 买家消息条数）
                     Set-StateHash $ctx $skey $newKey
                     Remove-PendingRetry $key          # [Phase3] 发送成功即出补发表
-                    # 发送成功后短冷却:同一会话 3 分钟内不再重复处理（方案甲：冷却期内不再提前解除）
-                    $ctx.skipCooldown[$key] = @{ time = Get-Date; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }   # [FIX-DUP 2026-09-25]
-                    Write-Log "POST-SEND-COOLDOWN $($key) 3min"
-                    # [SPEC §4.3-G4 2026-09-27] 记录成功发送时刻(最小间隔判据的数据面, 见上方 RATE-SKIP)
+                    # 发送成功后短冷却:同一会话在 reply_post_send_cooldown_min 分钟内不再重复处理
+                    #   (§0.1: 配置键控制, 缺省 **5**, 原硬编码 3; 与最小间隔对齐且不得小于它)。
+                    $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }   # [FIX-DUP 2026-09-25]
+                    # [FIX-DUP-GUARD 2026-09-27] 真发出去了 ⇒ 重复回复的连挂计数归零(该计数语义是"连续")。
+                    if ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds) { $ctx.dupGuardHolds.Remove($skey) }
+                    Write-Log "POST-SEND-COOLDOWN $($key) $($script:replyPostSendCooldownMin)min (config key reply_post_send_cooldown_min)"
+                    # [SPEC §4.3-G4 2026-09-27 / SPEC-待回复列表 §2 行3-4] 记录成功发送时刻
+                    #   —— 这是最小间隔与发送后冷却**共用**的唯一数据面(见上方 RATE-SKIP 与判据入参)。
                     $ctx.lastSendAt[$skey] = Get-Date
                     # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
                     try {
@@ -1315,7 +1433,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     }
                 } else {
                     # ===== [SPEC §4.2-G2 2026-09-27] 发对人校验失败 ⇒ **整轮中止**(不只是跳过该会话) =====
-                    # 依据 §7-R6: 本次事故里该闸门确实被触发(11:49:35 expected=Lena Fixari, current=Ganesan
+                    # 依据 §7-R6: 本次事故里该闸门确实被触发(11:49:35 expected=买家L, current=买家G
                     #   Krishnasamy), 但旧行为只报错、继续处理后续会话 ⇒ 页面已错位仍继续发。spec §4.4-4
                     #   明令禁止"只跳过该会话、继续处理下一个"。
                     if ($sendRes -match 'ABORT_WRONG_CONVO') {
@@ -1351,6 +1469,34 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         }
     } else {
         Write-Log "SKIP $($key): no buyer msgs found"
+    }
+}
+
+# [SPEC-待回复列表 2026-09-27 §2.1/§3.2] 用**本轮快照的会话名集合**更新 $ctx.pendingSeen(连续确认轮数)。
+#   命中则 +1; 未命中则**删键**(§2.1 原文:「命中则 +1, 未命中则删除」)。
+#   为什么必须每轮整表对齐、而不是"逐会话在循环里 +1":
+#     ① 同一轮内多个会话会互相干扰 —— 循环里更新时, 先处理的会话可能把后处理会话的轮数写成脏值;
+#     ② "不在列表"必须由**快照整体**判定。逐会话更新的话, 一个本轮没出现在列表里的会话
+#        根本不会被访问 ⇒ 计数永远不删 ⇒ 上次的 2 轮会被跨中断复用, 瞬态防线形同虚设。
+#   位置(§3.2 硬要求): 在 Invoke-ScanRound 主线、`foreach ($item in $snap)` **之前**调用。
+function Update-PendingSeen($ctx, $snap) {
+    if (-not $ctx) { return }
+    if (-not $ctx.ContainsKey('pendingSeen') -or -not $ctx.pendingSeen) { $ctx.pendingSeen = @{} }
+    $seen = @{}
+    foreach ($it in @($snap)) {
+        if (-not $it) { continue }
+        $n = [string]$it.name
+        if ([string]::IsNullOrWhiteSpace($n)) { continue }
+        $seen[$n.Trim()] = $true
+    }
+    # 先删"本轮不在列表里"的键(必须在累加之前: 否则同名会话会在同一轮里既删又加)
+    foreach ($k in @($ctx.pendingSeen.Keys)) {
+        if (-not $seen.ContainsKey($k)) { $ctx.pendingSeen.Remove($k) }
+    }
+    foreach ($k in @($seen.Keys)) {
+        $cur = 0
+        if ($ctx.pendingSeen.ContainsKey($k)) { $cur = [int]$ctx.pendingSeen[$k] }
+        $ctx.pendingSeen[$k] = $cur + 1
     }
 }
 
@@ -1462,6 +1608,14 @@ function Invoke-ScanRound($ctx) {
                 $script:pageDownStreak = 0
             }
             $script:pageHealFails = 0
+            # ===== [SPEC-待回复列表 2026-09-27 §2.1/§3.2] 连续确认轮数: 每轮用本轮快照整表对齐 =====
+            # 位置说明(与 §3.2 的"约 L1403–1405"的差异, 已在 REPORT 登记):
+            #   §3.2 的硬约束是"必须在 foreach ($item in $snap) 之前、且在**主线**上"。放在
+            #   Get-Snapshot 之后紧邻处也不违规, 但会带来一个真实风险: 页面已被 G1 判为不可用
+            #   (无 OneTalk 页 / 数据面断)的那一轮, 快照本身就不值得信任; 若照样给它 +1,
+            #   等页面恢复时这份**坏快照**已经攒够 2 轮 ⇒ 恰好绕开 §2.1 要挡的误发。
+            #   故放在 G1 门禁**之后**、foreach 之前: 只有"这一轮的列表可信"才计入确认。
+            Update-PendingSeen $ctx $snap
             # (c) G3 冷启动: monitor 启动后的第 1 个 scan cycle 只观察不发送(允许写快照/日志/推提醒)。
             $script:scanCycleNo++
             $observeOnly = ($script:scanCycleNo -le 1)
@@ -1621,6 +1775,11 @@ function Initialize-MonitorRuntime {
     } catch { }
     Invoke-LayoutMigration
     Write-Log "=== Monitor started (PID $PID, auto-reply engine built-in) ==="
+    # [SPEC-待回复列表 2026-09-27 §0.1] 两个新配置键的实际生效值 —— 必须留痕, 否则"配置改了没生效"无从判断。
+    Write-Log ("REPLY-RATE-CONFIG min_gap_min={0} post_send_cooldown_min={1} required_seen_rounds={2}" -f $script:replyMinGapMin, $script:replyPostSendCooldownMin, $script:requiredSeenRounds)
+    if ($script:cooldownRaisedToGap) {
+        Write-Log ("COOLDOWN-RAISED: reply_post_send_cooldown_min was below reply_min_gap_min; raised to {0}m (SPEC §0.1: 冷却不得小于最小间隔)" -f $script:replyPostSendCooldownMin)
+    }
     Cleanup-LegacyQueues
     Cleanup-StaleState
     $script:emptyStreak = 0
@@ -1656,7 +1815,14 @@ function Start-Monitor {
         sendFailCount = @{}
         failAlertAt = @{}
         humanPending = @{}   # [2026-09-26 S2] 买家 -> $true: 该会话"我方尾部是人工消息", 自动回复正让路中
-        lastSendAt = @{}     # [SPEC §4.3-G4 2026-09-27] statekey -> 最近一次**成功发送**时刻(最小间隔 15 分钟兜底)
+        lastSendAt = @{}     # [SPEC §4.3-G4 2026-09-27] statekey -> 最近一次**成功发送**时刻(最小间隔兜底, 值见配置键)
+        # [SPEC-待回复列表 2026-09-27 §2.1] 会话名 -> **连续**在待回复列表里出现的轮数(瞬态误读防线)。
+        #   命中 +1, 未命中**删键**(不是置 0 —— 置 0 会让"曾经连读两轮"的旧计数在中断后仍被当成已确认)。
+        #   内存态: monitor 重启即归零, 每个会话重新攒满 2 轮(§10-R3, 代价约 9 秒, 可接受)。
+        pendingSeen = @{}
+        # [FIX-DUP-GUARD 2026-09-27] statekey -> "在待回复列表里、但账本证明最后一条买家消息已回过"的**连续**轮数。
+        #   连挂 3 次即告警(见 NOT_IN_PENDING_LIST 分支); 真发出去或买家说了新话即归零(不归零就失去"连续"语义)。
+        dupGuardHolds = @{}
         lastActivity = Get-Date
     }
     while ($true) {
