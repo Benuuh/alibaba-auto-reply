@@ -1,6 +1,53 @@
-# CHANGELOG - alibaba-auto-reply
+﻿# CHANGELOG - alibaba-auto-reply
+
+## 0.0.1 - 2026-10-04
+
+- 首次编号版本，汇总自然回复链重构、模块加载修复、waimao 移除、文档重写及发布脱敏。
+- 版本号以根目录 VERSION 为准，Git 标签为 v0.0.1。通过离线验证；真实模型和发送验收仍待完成，已知缺口见当前状态文档。
+
+## 2026-10-04 - GitHub 发布前脱敏与验收工具整理
+
+- 文档本机路径改为占位说明，注释买家名和邮箱示例脱敏；真实配置与运行数据保持本机私有。
+- 三个一次性排查脚本加入 gitignore，仅保留在本机。
+- 离线回放按本机配置保护运行数据目录，移除硬编码路径；旧引擎比较固定基线 5356302，避免提交后 HEAD 改变导致工具失效。
+- 补充验收工具说明与发布后的回滚方法。业务服务和计划任务状态未改变。
+
+
+## 2026-10-04 - 当前架构与运维文档重写
+
+- 重写 README、部署手册与项目地图，按实际调用链描述模块、路径和操作。
+- 新增带日期的当前状态快照，记录停用任务、离线验证边界与尚未接通的功能。
+- 同步 SKILL 和文档维护约定，撤下旧规则自动追加、退休模块入口及过时启停说明。
+- 明确 nudge 已无买家自动发送；记录新消息豁免被额外限流覆盖、语料消费和人工交接等缺口。
+- 本次只维护文档，未修改业务实现、配置或计划任务，未启动服务或发送消息。
+
+
+## 2026-10-04 - 移除 waimao 模块
+
+- 删除 scripts/waimao 下的专用 CDP 桥和只读侦察脚本，并移除本机配置与配置模板中的六项 waimao_* 配置。
+- 更新项目结构说明与浏览器隔离测试；外贸获客设计文档标注为历史资料。
+- 保留历史运行数据和浏览器 profile。自动回复、OKKI、公海模块的业务逻辑未改动。
+
+## 2026-10-03 - 自然回复 / 结构精简 / 效率（隔离分支 natural-reply-20261003，生产保持停用）
+
+**背景**：老板确认四件事——回复太像 AI（以 Sandy 对话为样本）、每条新消息都涉及回复时效考核、自动优化必须改为"经审阅采纳后生效"的建议制、对客户回复统一使用美式英文。执行稿见会话产出 `spec_自然回复与结构精简_v0.1.md`。
+
+- **消息顺序以前是未定义的**：页面抽取保留 DOM 顺序并如此注明，但三个消费方对"哪一端是最新"意见不一致——`lib\msg_source.ps1` 的防抢话闸门（依据 1812 条真实消息设计）把**尾部**当最新；判据 hash 取**最后一条**买家消息；而附件却从**下标 0** 读取，提示词还写着"第一条是最新"。**修法**：新增 `scripts\lib\msg_norm.ps1`，用页面本来就有的每条 `showTime` 判定方向，统一归一到**时间正序**，证据矛盾时进入**显式异常态**（记 `MSG-ORDER-UNVERIFIED`）而不是猜。附件改取**最新**买家消息。
+- **短消息被静默丢弃**：抽取 JS 里 `if (clean.length <= 2) { ...; return; }`（带图除外）⇒ `ok`/`si`/`no` **根本不构成消息事件**，永远不会被回复，与 spec 4.1"每条新消息都要回应"直接冲突。已删除该长度过滤，被跳过的行改为带原因记录。
+- **业务政策曾有四份实现**：提示词（场景表 + 追问上限 + 尺寸话术 + 红线 + 55 行自动追加归档 + 指向一个从未加载的手册）、`reply_rules.json`（40 条 never，7 条为语义重复）、`reply_engine.ps1` 的意图引擎、`monitor.ps1` 内联的图片回退话术。**现在只有一份**：`lib\reply_policy.ps1` 决定"说什么"、`lib\reply_gen.ps1` 决定"怎么说"（含回退话术），精简提示词只管语言表达，`reply_scenarios.md` 才是**真正按场景注入**的示例。
+- **假加载已消除**：`reply_playbook.md` 以前只在提示词里被**点名**，正文从未进入请求。已归档到 `docs\archive\reply_playbook_zh_20261003.md`，其内容改写为 `scripts\reply_scenarios.md`（`Get-ScenarioGuidance` 按命中的场景只注入该小节）。
+- **旧意图引擎整体删除**（`Detect-Lang`/`New-ReplyContext`/`Resolve-IntentEarly|Info|Data`/`Build-MissingQuestion`/`Resolve-Template`/`Generate-Reply`/`$script:SupplierContactAsk`）：`Get-ReplyLang` 早已恒返回 `en`，多语言分支是**不可达的生产代码**；其余部分是对同一政策竞争性的第二实现。`reply_engine.ps1` 803 → 500 行，只保留纯原语。
+- **模型调用最多 4 次 → 最多 2 次**：旧流程对同一稿可能先跑禁词重写、再跑责任承诺重写（各自一整轮）；现在**只允许一次重写**，由完整违规清单驱动，且剩余预算 < 30s 时直接跳过重写走回退。注入字符数 29718 → 12479（**-58%**）。
+- **自动优化改为建议制**：`auto_optimize.ps1` 不再写任何生效文件，只把建议写入 `<运行数据根>\data\suggestions\`；`analyze_replies.ps1 -ApplyNever` 这**第二条直改通道**也一并改道。新增 `review_suggestions.ps1`（查看/采纳/拒绝）与 `apply_suggestion.ps1`（**仅**对已采纳者生效：基准哈希校验 + 备份 + 离线校验 + 失败回滚）。**移除了"never 只保留最新 40 条"的截断**——它可能挤掉硬约束。
+- **判据新增正向证据**：spec 4.1 要求"5 分钟间隔与冷却只用于抑制**旧消息**的重复响应，不得无条件挡住已确认的新消息"。新增 `Test-ConfirmedNewBuyerMessage`（只有账本键可解析**且**条数增加或原文 hash 变化才给正向证据）与 `Test-ShouldReply` 行 4b（新消息只受 `reply_new_msg_floor_sec`（缺省 20s）的墙钟下限约束）。身份校验、账本闸、2 轮瞬态防线、写锁与页面健康闸一律不动。
+- **修掉一个真 bug**：`\bdimension\b` **匹配不到复数** `dimensions`，而"我把尺寸发给你"正是最常见的买家句式 ⇒ 承诺字段识别静默失效、下一轮又会追问同一个字段。已补复数形态。
+- **接回一个从未被调用的检查**：`Test-NoDimensionQuoteHint`（"没尺寸也能报价"的暗示检测）此前**没有任何生产调用点**，其保护的定价红线实际未生效。现接入 `Test-ReplyCompliance`，成为发送前硬拦截。
+- **BOM 修复**：`scripts\watchdog.ps1` 缺 UTF-8 BOM 且字符串字面量内含中文 ⇒ PS 5.1 按 ANSI 解码，**日志里是乱码**。已补 BOM（另补 `tests\accio.tests.ps1`、`tests\daemon_launch.tests.ps1`、`tests\page_heal_throttle.tests.ps1`）。
+- **验证**：安全子集 17 个测试文件 817 断言全绿；其中 `reply_engine.tests.ps1`(73)、`reply_chain.tests.ps1`(148)、`dimension_guidance.tests.ps1`(44)、`suggestions.tests.ps1`(25) 为本轮新增或重写。离线回放与新旧对比见 `tools\acceptance\`。**未做真实模型调用与真实发送**；本地待办/通知链路（spec 4.4）尚未接线，因此当前配置下**任何回复都不会承诺具体时限**。
+- **交付与回滚**：`docs\change_report_20261003.md`（变化、限制、未做项）、`docs\rollback_20261003.md`（回滚步骤）、`docs\efficiency_20261003.md`（前后数据）、`docs\inventory_20261003.md` 与 `docs\test_audit_20261003.md`（只读审计）。生产仍停用：Watchdog/Health 保持 Disabled，未启用或新增任何计划任务，未发送任何买家消息或企微通知。
 
 > 注：历史条目中提到的部分脚本（如 notify / task_health / health_report / wecom_command）已于 2026-09-12 归档至 `backups\精简优化_20260912\`，条目内容保留当时事实。
+> 另：`reply_playbook.md` 与 `consolidate_prompt.ps1` 已于 2026-10-03 归档至 `docs\archive\`（见当天条目）。
 
 ## 2026-09-28（凌晨二） - 浏览器"失踪"的根因 / OneTalk 客户端空壳 / 搜索框污染 / 我的一次回归与回收
 

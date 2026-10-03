@@ -2,7 +2,7 @@
 #
 # 本文件取代 tests\gonghai_page_isolation.tests.ps1(那份锁的是**已被 §2.2 撤销**的 URL 标记方案)。
 # 覆盖 spec 的硬判据:
-#   A(§2.1/§3.1) 配置:gonghai_cdp_port=9225(不是 9222)、gonghai_profile 独立、与 9222/9223/9224 都不撞;
+#   A(§2.1/§3.1) 配置:gonghai_cdp_port=9225(不是 9222)、gonghai_profile 独立、与 9222/9223 都不撞;
 #   B(§3.3)      公海取页 = "这个端口上的 OneTalk 页",**不含任何标记**;标记常量/函数必须已消失;
 #   C(§3.4)      `Send-OneTalkMessage` 保留可选 `-Page`(公海发送落点)+ **端口闸**;不传时行为不变;
 #   D(§3.2)      启动脚本:按 profile **精确匹配**(绝不裸杀 chrome / 绝不碰 9222);
@@ -129,12 +129,12 @@ Assert-True "A-example-has-gonghai_profile" ($exNames -contains 'gonghai_profile
 Assert-True "A-live-has-gonghai_profile"    ($lvNames -contains 'gonghai_profile')
 Assert-True "A-example-profile-nonempty"    (-not [string]::IsNullOrWhiteSpace([string]$cfgEx.gonghai_profile))
 Assert-True "A-live-profile-nonempty"       (-not [string]::IsNullOrWhiteSpace([string]$cfgLv.gonghai_profile))
-# 四个实例的 profile 必须两两不同(共用 profile ⇒ 同一个 Chrome 进程 ⇒ 白做)
-$profiles = @([string]$cfgLv.chrome_profile, [string]$cfgLv.okki_profile, [string]$cfgLv.waimao_profile, [string]$cfgLv.gonghai_profile)
-Assert-Eq "A-four-distinct-profiles" (@($profiles | Sort-Object -Unique).Count) 4
-# 四个端口必须两两不同
-$ports = @([int]$cfgLv.cdp_port, [int]$cfgLv.okki_cdp_port, [int]$cfgLv.waimao_cdp_port, [int]$cfgLv.gonghai_cdp_port)
-Assert-Eq "A-four-distinct-ports" (@($ports | Sort-Object -Unique).Count) 4
+# 三个实例的 profile 必须两两不同(共用 profile ⇒ 同一个 Chrome 进程 ⇒ 白做)
+$profiles = @([string]$cfgLv.chrome_profile, [string]$cfgLv.okki_profile, [string]$cfgLv.gonghai_profile)
+Assert-Eq "A-three-distinct-profiles" (@($profiles | Sort-Object -Unique).Count) 3
+# 三个端口必须两两不同
+$ports = @([int]$cfgLv.cdp_port, [int]$cfgLv.okki_cdp_port, [int]$cfgLv.gonghai_cdp_port)
+Assert-Eq "A-three-distinct-ports" (@($ports | Sort-Object -Unique).Count) 3
 Assert-True "A-gonghai-profile-name"     ([string]$cfgLv.gonghai_profile -match 'chrome-profile-gonghai$')
 Assert-True "A-gonghai-profile-not-monitor" ([string]$cfgLv.gonghai_profile -ne [string]$cfgLv.chrome_profile)
 
@@ -333,7 +333,7 @@ Assert-False "D-ensure-does-not-call-chrome-ensure" ($ensCode -match 'chrome_ens
 
 # ===========================================================================
 # F —— chrome_ensure.ps1(自动回复那个实例)对公海**零依赖**,标记块已撤销,
-#      且**杀进程必须按 profile 精确匹配**(不得连坐公海/okki/waimao)
+#      且**杀进程必须按 profile 精确匹配**(不得连坐公海/okki/其他 Chrome)
 # ===========================================================================
 $chromSrc = Get-Content $chromPath -Raw
 $chromCode = Get-CodeOnly $chromPath
@@ -364,8 +364,8 @@ $rtRoot = Split-Path $monProfile.TrimEnd('\') -Parent
 Assert-True "F-matcher-hits-own-profile" (('"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir=' + $monProfile + ' --no-first-run') -match $boundPat)
 Assert-False "F-matcher-ignores-gonghai-profile" (('"chrome.exe" --remote-debugging-port=9225 --user-data-dir=' + $rtRoot + '\chrome-profile-gonghai') -match $boundPat)
 Assert-False "F-matcher-ignores-okki-profile" (('"chrome.exe" --remote-debugging-port=9223 --user-data-dir=' + $rtRoot + '\chrome-profile-okki') -match $boundPat)
-Assert-False "F-matcher-ignores-waimao-profile" (('"chrome.exe" --remote-debugging-port=9224 --user-data-dir=' + $rtRoot + '\chrome-profile-waimao') -match $boundPat)
-Assert-False "F-matcher-ignores-user-chrome" (('"chrome.exe" --user-data-dir=D:\Users\x\AppData\Local\Google\Chrome\User Data') -match $boundPat)
+Assert-False "F-matcher-ignores-unrelated-profile" (('"chrome.exe" --remote-debugging-port=9224 --user-data-dir=' + $rtRoot + '\chrome-profile-unrelated') -match $boundPat)
+Assert-False "F-matcher-ignores-user-chrome" (('"chrome.exe" --user-data-dir=C:\path\to\ordinary-chrome-profile') -match $boundPat)
 
 Write-Output ""
 Write-Output ("RESULT: pass={0} fail={1}" -f $script:pass, $script:fail)

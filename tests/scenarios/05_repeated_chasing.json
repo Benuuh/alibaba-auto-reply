@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "05_repeated_chasing",
+  "title": "Buyer chases the same question a second time",
+  "category": "repeated chasing",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The prior [ME] line is the fact that we already sent exactly that holding line; the reply must add something new rather than repeat it.",
+  "conversationLines": [
+    "[ME] Thanks for your patience - I am checking with the warehouse and will update you shortly. @@TS:1791018000000",
+    "[BUYER] any update on this? I asked twice already. @@TS:1791019200000 @@OT:YW55IHVwZGF0ZSBvbiB0aGlzPyBJIGFza2VkIHR3aWNlIGFscmVhZHku"
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "delivery_status",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:10:00Z",
+    "sentAt": "2026-10-03T09:21:00Z"
+  },
+  "fakeModel": {
+    "mode": "violation_then_compliant",
+    "violationReply": "Thanks for your patience. I will check with my manager and get back to you shortly.",
+    "compliantReply": "I am confirming the actual status right now and I will come back to you as soon as I have something concrete."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "fulfillment_status",
+    "allowTimeCommitment": false,
+    "guidanceKey": "delivery_status"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)checking with the warehouse and will update you shortly",
+      "why": "must not resend the previous holding line"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\bmanager|supervisor|boss\\b",
+      "why": "banned phrase: never defer to a superior"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "new-information",
+      "check": "notSameAsPriorMe",
+      "value": true,
+      "why": "the reply must differ from what we already sent"
+    },
+    {
+      "id": "concrete-next-step",
+      "check": "mustMatch",
+      "value": "(?i)(confirm|check|status|concrete)",
+      "why": "must add a concrete action, not another apology"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "delivery_status is at most two sentences"
+    },
+    {
+      "id": "no-deadline",
+      "check": "noTimeCommitment",
+      "value": true,
+      "why": "no verified notification channel, so no deadline"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "any update on this? I asked twice already.",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true,
+  "expectModelCalls": 2,
+  "expectSource": "LLM_REWRITE"
+}

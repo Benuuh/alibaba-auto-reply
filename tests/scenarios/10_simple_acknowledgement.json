@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "10_simple_acknowledgement",
+  "title": "Bare 'ok' with no new information",
+  "category": "simple acknowledgement",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. 'ok' is 2 characters: under the HEAD extractor it never became a message event (monitor.ps1:274 skips clean.length <= 2), so this fixture only exists because of the normalization fix.",
+  "conversationLines": [
+    "[ME] Could you share the total weight when you have it? @@TS:1791018000000",
+    "[BUYER] ok @@TS:1791018420000 @@OT:b2s="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "short_ack",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:06:00Z",
+    "sentAt": "2026-10-03T09:08:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Got it, thanks. I will keep an eye on this and let you know if anything needs you."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "askFields": [],
+    "guidanceKey": "short_ack"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "\\?",
+      "why": "a content-free acknowledgement must not be turned into a new task"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)(weight)[^.!?]{0,60}(dimension|size)[^.!?]{0,60}(address|image)",
+      "why": "the old four-item questionnaire is forbidden"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)^\\s*you'?re welcome\\b",
+      "why": "a bare 'You're welcome!' is explicitly listed as forbidden"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "one-short-line",
+      "check": "maxChars",
+      "value": 140,
+      "why": "a bare acknowledgement gets one short line"
+    },
+    {
+      "id": "acknowledges",
+      "check": "mustMatch",
+      "value": "(?i)(got it|thanks|noted|sure|will do)",
+      "why": "must acknowledge the message"
+    },
+    {
+      "id": "no-new-question",
+      "check": "asksAQuestion",
+      "value": false,
+      "why": "no forced new task"
+    },
+    {
+      "id": "no-field-ask",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "the decision allows no question at all"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "ok",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

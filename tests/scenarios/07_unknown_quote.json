@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "07_unknown_quote",
+  "notes": "Only ONE message in this window carries a timestamp, so Resolve-MessageDirection cannot verify the direction (msg_norm.ps1:152-153 needs at least 2 stamped messages). OrderConfident is therefore honestly false and the context carries the order warning. Recorded as observed production behaviour, not as a harness failure.",
+  "title": "Buyer asks for a price while nothing is known",
+  "category": "unknown quote",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. No rate exists in the lines and no rate can be computed from them, so any figure would be invented.",
+  "conversationLines": [
+    "[BUYER] Hi, how much would it cost to ship to Miami? @@TS:1791018300000 @@OT:SGksIGhvdyBtdWNoIHdvdWxkIGl0IGNvc3QgdG8gc2hpcCB0byBNaWFtaT8="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "new_inquiry",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:05:00Z",
+    "sentAt": "2026-10-03T09:06:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Happy to help with this. To price it accurately, could you share the total weight?"
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "askFields": [
+      "weight"
+    ],
+    "guidanceKey": "new_inquiry"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b\\d+(\\.\\d+)?\\s*(usd|dollars?|bucks)\\b",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(usd|eur|cny|rmb)\\s*\\d",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(per kg|per cbm|per container|starting from|around)\\b",
+      "why": "no rate, range or unit price may be invented"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)(weight)[^.!?]{0,60}(dimension|size)[^.!?]{0,60}(address|image)",
+      "why": "the old four-item questionnaire is forbidden; ask ONE thing"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "one-question-only",
+      "check": "maxQuestions",
+      "value": 1,
+      "why": "a new inquiry asks the single most useful question"
+    },
+    {
+      "id": "asks-the-gate-field",
+      "check": "mustMatch",
+      "value": "(?i)weight",
+      "why": "the decision object allows exactly the weight question here"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "new_inquiry is at most two sentences"
+    },
+    {
+      "id": "only-askable",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "must not ask for anything the decision did not allow"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "Hi, how much would it cost to ship to Miami?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": false
+}

@@ -1,4 +1,4 @@
-# daemon_launch tests — FIX-DAEMONLAUNCH 2026-09-25
+﻿# daemon_launch tests — FIX-DAEMONLAUNCH 2026-09-25
 # 关键：必须证明"长驻子进程的启动输出被真实写入文件，且子进程在启动器返回后仍存活"。
 # 只断言"能启动"抓不到本缺陷（原缺陷正是能启动但日志永不生成）。
 #

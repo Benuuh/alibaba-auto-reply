@@ -181,21 +181,27 @@ Write-Output "quality report: $outFile"
 # A 包: 报告生成后自动推企微摘要(失败只记日志, 不影响报告任务退出码)
 try { . (Join-Path $PSScriptRoot "lib\report_push.ps1"); Send-ReportWecomSummary $outFile 'quality' | Out-Null } catch {}
 
-# 负面案例自动入规（可选）
+# Negative-case rules become SUGGESTIONS (spec 5 2026-10-03), never a direct corpus edit.
+# This was the SECOND auto-append path: with -ApplyNever it wrote straight into
+# reply_rules.reply_rules.never, bypassing review exactly like the old auto_optimize did. Both paths
+# now funnel into <data_dir>\suggestions\ and require a human accept plus an explicit apply.
 if ($ApplyNever -and $negCases.Count -gt 0) {
+    . (Join-Path $PSScriptRoot "lib\suggestions.ps1")
+    $dataDir = Get-SkillPath "data"
     $rulesFile = Join-Path $LogDir "reply_rules.json"
-    $rules = Get-Content $rulesFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    $never = @($rules.reply_rules.never)
+    $baseHash = Get-FileSha256 $rulesFile
+    $added = 0
     foreach ($c in $negCases) {
         $rule = $null
         if ($c.line.ToLower() -match 'read|看懂|听|understand') { $rule = "If the buyer is frustrated that we misread details, apologize briefly and re-confirm only the disputed point - never re-ask for information already provided" }
         elseif ($c.line.ToLower() -match 'repeat|重复|same question') { $rule = "Never ask the same question twice - if already answered, acknowledge and move forward" }
         elseif ($c.line.ToLower() -match 'price|quote|报价|贵') { $rule = "Never appear evasive about pricing - give the billing rule and request missing data in one short message" }
-        if ($rule -and $never -notcontains $rule) { $never += $rule; Write-Output "ADDED never rule: $rule" }
+        if (-not $rule) { continue }
+        $res = Add-Suggestion -DataDir $dataDir -TargetFile "reply_rules.json" -TargetPointer "reply_rules.never" -Proposed $rule -Title "Quality-report negative case" -Evidence ("negative case detected by analyze_replies in " + (Split-Path $outFile -Leaf)) -ExpectedImpact "reduces the repeated negative pattern" -BaseHash $baseHash
+        if ($res.Refused) { Write-Output ("SUGGESTION REFUSED (hard constraint): " + $rule); continue }
+        if ($res.Created) { Write-Output ("SUGGESTION ADDED " + $res.Id + ": " + $rule); $added++ }
+        elseif ($res.Merged) { Write-Output ("SUGGESTION MERGED " + $res.Id + " (status=" + $res.Status + ")") }
     }
-    if ($never.Count -gt $rules.reply_rules.never.Count) {
-        $rules.reply_rules.never = $never
-        $rules | ConvertTo-Json -Depth 6 | Set-Content -Path $rulesFile -Encoding UTF8
-        Write-Output "reply_rules.json updated"
-    } else { Write-Output "no new never rules to add" }
+    Write-Output ("suggestions written: " + $added + " (review with review_suggestions.ps1; nothing was applied)")
+    Write-Output "reply_rules.json was NOT modified by this run"
 }

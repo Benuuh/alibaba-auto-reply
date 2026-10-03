@@ -53,7 +53,7 @@ function Exit-With([int]$code, [string]$msg) {
 # ---- 精确匹配"公海自己的 Chrome"(spec §3.2:**不许**按进程名裸杀) ----
 # 判据(必须**同时**满足):命令行含本 profile 目录 **且** 含"调试端口"标志。
 #   · 用 [regex]::Escape($profileDir) —— `D:\...\chrome-profile-gonghai` 是唯一前缀,
-#     **不会**误命中 chrome-profile(自动回复)、chrome-profile-okki、chrome-profile-waimao。
+#     **不会**误命中 chrome-profile(自动回复)、chrome-profile-okki 或其他相邻 profile。
 #   · 再要求含 `--remote-debugging-port=` ⇒ 用户本人的普通 Chrome 窗口(没有该标志)永不入选。
 #   · ⚠️ 命令行自匹配陷阱(spec §6.5):调用方的进程名是 powershell,不在 chrome.exe 集合里,天然免疫。
 function Get-GonghaiChromeProcesses([string]$ProfileDir) {

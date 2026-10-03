@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "08_dimensions_already_given",
+  "title": "Dimensions were just given; they must not be asked again",
+  "category": "dimensions already given",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The buyer line carries the carton size, so HasDimensions is a buyer statement read from the lines. The [ME] line is the fact that we already asked once.",
+  "conversationLines": [
+    "[ME] Could you confirm the carton sizes and the total weight? @@TS:1791018000000",
+    "[BUYER] The cartons are 60x40x30 cm each. @@TS:1791018480000 @@OT:VGhlIGNhcnRvbnMgYXJlIDYweDQweDMwIGNtIGVhY2gu"
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "details_given",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:07:00Z",
+    "sentAt": "2026-10-03T09:09:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Perfect, thanks - I have noted the carton measurements you sent. To finish the rate I just need the total weight and the delivery address."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "guidanceKey": "details_given"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(share|send|provide|confirm|need|tell me|let me know|what(?:'s| is| are))\\b[^.!?]{0,40}\\b(sizes?|dimensions?|measurements?|l\\s?x\\s?w\\s?x\\s?h)\\b",
+      "why": "the buyer already gave the size; asking again is the repeated-question failure"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\b\\d+\\s*(kg|kgs|usd)\\b",
+      "why": "no weight or price was given, so it must not appear"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "confirms-receipt",
+      "check": "mustMatch",
+      "value": "(?i)(noted|thanks|perfect|got it|received)",
+      "why": "confirm what was received"
+    },
+    {
+      "id": "asks-next-missing-field",
+      "check": "mustMatch",
+      "value": "(?i)(weight)",
+      "why": "weight is genuinely missing and is the next gate for a rate"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "details_given is at most two sentences"
+    },
+    {
+      "id": "only-askable",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "may only ask for fields the decision allows (weight, address here)"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "The cartons are 60x40x30 cm each.",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

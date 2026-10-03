@@ -1,4 +1,4 @@
-# page_heal_throttle tests — FIX-THROTTLE 2026-09-26
+﻿# page_heal_throttle tests — FIX-THROTTLE 2026-09-26
 # 纯逻辑：覆盖静默期 / 退避阶梯 / 硬上限 / 边界。不触碰页面与 Chrome。
 $ErrorActionPreference = "Stop"
 $here = Split-Path $MyInvocation.MyCommand.Path -Parent

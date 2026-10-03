@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "13_several_short_messages",
+  "title": "Three short messages in a row",
+  "category": "several short messages in a row",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. All three buyer lines are 2-11 character messages that the HEAD extractor dropped (monitor.ps1:274). The newest one ('ok') is the current message the reply must answer.",
+  "conversationLines": [
+    "[ME] Could you send the packing details? @@TS:1791018000000",
+    "[BUYER] wait @@TS:1791018180000 @@OT:d2FpdA==",
+    "[BUYER] it is coming @@TS:1791018240000 @@OT:aXQgaXMgY29taW5n",
+    "[BUYER] ok @@TS:1791018300000 @@OT:b2s="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "short_ack",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:02:00Z",
+    "sentAt": "2026-10-03T09:06:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Got it, thanks. I will keep an eye on this and let you know if anything needs you."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "askFields": [],
+    "guidanceKey": "short_ack"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "\\?",
+      "why": "the latest message carries no new information; no new task"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)(weight|dimension|carton|address|supplier)",
+      "why": "no cargo questionnaire in response to 'ok'"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "answers-the-newest-line",
+      "check": "mustMatch",
+      "value": "(?i)(got it|thanks|noted|sure|will do)",
+      "why": "must answer the newest message, not an older one"
+    },
+    {
+      "id": "one-short-line",
+      "check": "maxChars",
+      "value": 140,
+      "why": "one short line for a content-free acknowledgement"
+    },
+    {
+      "id": "no-field-ask",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "the decision allows no question at all"
+    }
+  ],
+  "expectBuyerCount": 3,
+  "expectLatestBuyerText": "ok",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

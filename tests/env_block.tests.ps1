@@ -19,10 +19,20 @@ $groups = $names | Group-Object { $_.ToLower() }
 Assert-True "no-case-insensitive-duplicates" (@($groups | Where-Object Count -gt 1).Count -eq 0)
 
 # 2) 父进程环境的真实重复键已被折叠（本机为 NO_PROXY / https_proxy / http_proxy 三组）
+#    [2026-10-03] 这两条断言的前提是"**调用方进程**的环境块里恰好存在仅大小写不同的重复键"——
+#    那是本机的既有事实，不是仓库的性质。从别的宿主（例如自动化环境）调用本测试时，父进程没有
+#    重复键，于是断言必红，而这与去重逻辑是否正确毫无关系。改为**有重复才断言、没有就记 NOTE**：
+#    覆盖强度不变（真有重复时照样判真假），但不再把"本机恰好有这个毛病"当成通过条件。
+#    判据只读 [System.Environment]，不涉及任何仓库内容 —— 故这确实是环境相关而非回归。
 $raw = [System.Environment]::GetEnvironmentVariables('Process').Keys
 $rawDup = @($raw | Group-Object { $_.ToLower() } | Where-Object Count -gt 1)
-Assert-True "parent-had-duplicates(raw count>0)" ($rawDup.Count -gt 0)
-Assert-True "clean-count-lt-raw" ($names.Count -lt @($raw).Count)
+if ($rawDup.Count -gt 0) {
+    Assert-True "parent-had-duplicates(raw count>0)" ($rawDup.Count -gt 0)
+    Assert-True "clean-count-lt-raw" ($names.Count -lt @($raw).Count)
+} else {
+    Write-Output "  NOTE: parent process has no case-insensitive duplicate env keys, skipping the folding assertions (environment-dependent, not a regression)"
+}
+Assert-True "snapshot-never-exceeds-raw" ($names.Count -le @($raw).Count)
 
 # 3) 干净启动可成功（不带重定向——本函数故意不支持重定向，见 S2-2 注释）
 $p = Start-ProcessClean -FilePath "powershell.exe" -ArgumentList @('-NoProfile','-Command','exit 0') -WaitSeconds 15

@@ -1,4 +1,4 @@
-# BrowserSkill 使用约定（2026-09-26 起）
+﻿# BrowserSkill 使用约定（2026-09-26 起）
 
 > 适用范围：**项目的部署根目录**（下称 `<部署根>`）这套 24/7 阿里卖家自动回复系统的**调试 profile**
 > （`chrome-profile`，`--remote-debugging-port=9222`）。
@@ -19,7 +19,7 @@
 5. **不要用 BrowserSkill 替代 24/7 路径**：生产回复仍走自研 CDP（`lib\cdp.ps1` + `scripts\cdp.ps1`）；
    BrowserSkill 是**人的工具**，不得让 `monitor` 依赖它。
 6. **`FORCE-RESTART` 之后必须重新初始化**：`monitor.log` 出现 `FORCE-RESTART`
-   （`chrome_ensure.ps1` 会按 profile 杀掉该 profile 下**所有** chrome 进程、且只回到 `about:blank`）
+   （`chrome_ensure.ps1` 会按 profile 杀掉该 profile 下**所有** chrome 进程、随后尝试导航回 OneTalk 并恢复登录）
    ⇒ agent 的窗口会全部消失、扩展会话需重建。
    **在重新确认 `Get-Page` 指向 OneTalk 之前，不得继续 agent 操作。**
 7. **写锁只是约定级保护**：BrowserSkill 扩展**不认识** `onetalk-write` 锁，

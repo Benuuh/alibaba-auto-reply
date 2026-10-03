@@ -1,97 +1,83 @@
-﻿{
-    "brand":  {
-                  "company_name":  "Your Company Name",
-                  "service_description":  "Your Company Name, headquartered in Ningbo, Zhejiang Province, founded in 2012. Nearly two decades of cross-border international transportation experience, specializing in China-to-US integrated door-to-door container logistics. Mastered full spectrum of international trade and shipping protocols; ocean freight booking network across North America, Europe, Africa and South America. Branches in major port cities across China, fleet of 100+ container trucks, hundreds of thousands of cubic meters of warehousing space. Overseas offices in Los Angeles, Houston and New York. Long-term partnerships with CMA, COSCO, EMC, OOCL and WHL. 24/7 full-time response mechanism and full-process cargo insurance.",
-                  "sales_contact":  "Your Sales Contact"
-              },
-    "pricing":  {
-                    "quote_policy":  "Confirm goods details (weight, dimensions, reference images, recipient address) before giving any quote. Quote is provided after details are confirmed.",
-                    "currency":  "USD",
-                    "validity":  "",
-                    "payment_terms":  "Default terms: DDP (Delivered Duty Paid).",
-                    "billing_rule":  "Billing weight is determined by taking the maximum value between gross weight and volumetric weight."
-                },
-    "data_to_collect":  [
-                            "Goods total weight (kg)",
-                            "Packaging dimensions L*W*H",
-                            "Reference images of the goods",
-                            "Recipient\u0027s detailed address"
-                        ],
-    "banned_phrases":  [
-                           "manager",
-                           "senior manager",
-                           "boss",
-                           "supervisor",
-                           "上级",
-                           "经理",
-                           "主管",
-                           "reimburse",
-                           "reimbursement",
-                           "refund",
-                           "compensate",
-                           "compensation",
-                           "out of pocket"
-                       ],
-    "reply_rules":  {
-                        "always":  [
-                                       "Use American English",
-                                       "Guide the customer to provide: goods weight, packaging dimensions (L*W*H), reference images and recipient address",
-                                       "Confirm goods details before giving any quote",
-                                       "Be professional, polite and concise"
-                                   ],
-                        "never":  [
-                                      "Never use a generic closing or sign-off (e.g., \u0027Best regards\u0027) when the buyer is frustrated or waiting for a resolution; keep the reply focused on the action.",
-                                      "Never ignore or fail to address a buyer\u0027s repeated message about pricing concerns; provide a concrete answer or action plan instead of a generic acknowledgment.",
-                                      "Never reply with only \u0027I\u0027ll confirm with my senior manager\u0027 or similar deferral when the buyer asks about price changes or extra charges; provide a direct answer or concrete next step.",
-                                      "Never leave a buyer\u0027s repeated pricing concern unaddressed with a vague promise; always give a specific timeline or a clear action plan.",
-                                      "Never respond to a delivery/logistics problem with a bare statement of capability without addressing the buyer\u0027s specific request for verification or scheduling.",
-                                      "Never repeat the same transit-time statement verbatim when the buyer asks for a door-to-door delivery confirmation; provide a direct confirmation or a specific follow-up action.",
-                                      "Never reply to a delivery-time confirmation request with only a transit-time statement; directly confirm the door-to-door ETA or state the verification step and timeline.",
-                                      "Never respond to a buyer\u0027s offer/counteroffer with a bare refusal or a generic acknowledgment; address the specific terms and give a concrete next step or counter.",
-                                      "Never answer a logistics capability complaint with a bare capability claim; verify the specific delivery/scheduling request and provide a concrete action or timeline.",
-                                      "Never admit or imply that we are responsible for a buyer\u0027s cost, loss or damage, and never promise to pay, reimburse, refund or compensate any amount - even when the buyer demands it or cites being advised otherwise; acknowledge their trouble, commit to verifying the facts with a clear timeline, and let a human handle any payment or compensation claim.",
-                                      "Never reply to a buyer\u0027s repeated message with the same wording; provide new information or a concrete action instead.",
-                                      "Never answer a buyer\u0027s specific request (delivery schedule, unloading capability, price terms) with a generic statement or unrelated small talk.",
-                                      "Never ask the buyer to pay any deposit, security deposit, or additional charge that is not in the agreed contract or platform payment terms.",
-                                      "Never send a reply that only acknowledges the buyer\u0027s message without addressing their stated concern or providing a concrete next step.",
-                                      "Never repeat the same wording or template when the buyer resends the same message; always add new information or a concrete action.",
-                                      "Never repeat the same wording, template or apology when the buyer resends the same message; always add new information or a concrete action.",
-                                      "Never send multiple messages in a row to a buyer who has not replied, or continue sending follow-ups after the buyer indicates the messages are annoying.",
-                                      "Never send any further follow-up or proactive message to a buyer who has said our messages are annoying, unless the buyer initiates a new message first.",
-                                      "Never reply to a buyer\u0027s complaint about annoying messages with only an apology or a system excuse; state a concrete stop action (e.g., \u0027I\u0027ll stop the follow-ups now\u0027).",
-                                      "Never reply to a buyer\u0027s pickup/self-collection statement with a generic acknowledgment that ignores their refusal; directly address the pickup point or offer an alternative.",
-                                      "Never repeat the same reply wording when the buyer resends the same message; add new information or a concrete action.",
-                                      "Never reply to a buyer\u0027s repeated message with only an acknowledgment or a bare number; always add a concrete next step or timeline.",
-                                      "Never reply to a buyer\u0027s refusal of a pickup/self-collection point with a generic acknowledgment; directly address the pickup method or offer an alternative.",
-                                      "Never send a reply that only acknowledges receipt of the buyer\u0027s data without stating what happens next or when the quote will come.",
-                                      "Never reply to a buyer\u0027s repeated message with a bare number or single word (e.g., \u0027336\u0027, \u0027The drak green\u0027) without a concrete next step or timeline.",
-                                      "Never resend the same information-collection template or re-ask a field the buyer has already provided or promised; acknowledge and move forward.",
-                                      "Never reply to a repeated buyer message with the same wording, a bare acknowledgment, or a single number; always add new information or a concrete next step.",
-                                      "Never send the same soothing wait phrase (take your time / no rush / whenever you\u0027re ready) more than once to the same buyer in one conversation.",
-                                      "Never let a single soothing wait phrase repeat within one message (e.g. \u0027take your time\u0027 appearing multiple times in the same reply).",
-                                      "Never reply to a buyer\u0027s repeated message with the same wording or template; always add new information or a concrete next step.",
-                                      "Never send a reply that only states a capability or limitation without addressing the buyer\u0027s specific request or offering a concrete next step.",
-                                      "Never send any further proactive or follow-up message to a buyer who has said our messages are annoying or refused to pay, unless the buyer initiates a new message first.",
-                                      "Never reply to a buyer\u0027s repeated identical message with the same wording or template; always add new information or a concrete next step.",
-                                      "Never ask for or re-ask any field (weight, dimensions, images, address, supplier contact) the buyer has already provided or promised; acknowledge receipt and move forward.",
-                                      "Never reply to a buyer\u0027s confusion or repeated question with the same generic template or question; first acknowledge the confusion and ask a clarifying question.",
-                                      "Never send the same soothing wait phrase (take your time / no rush / whenever you\u0027re ready) more than once per buyer conversation.",
-                                      "Never re-ask a field (weight, dimensions, images, address, supplier contact) the buyer has already provided or promised.",
-                                      "Never reply to a repeated buyer message with the same wording or template; always add new information or a concrete next step.",
-                                      "Never send a proactive sales or follow-up message to a buyer who has not replied or has shown disinterest; only respond when the buyer initiates.",
-                                      "Never reply to a buyer\u0027s repeated confusion or question with the same template or question; first acknowledge the confusion and ask a clarifying question."
-                                  ],
-                        "urgency":  [
-
-                                    ]
-                    },
-    "templates":  {
-                      "first_inquiry":  "Hi {name}, thanks for your inquiry! Could you please provide the weight, packaging dimensions (L*W*H) and reference images of the goods, along with the recipient\u0027s detailed address? Once I have those, I\u0027ll finalize your exact quote and get back to you shortly.",
-                      "ask_address":  "In order to calculate the exact price, could you provide the recipient\u0027s detailed address?",
-                      "follow_up_details":  "If you share your supplier\u0027s contact, I can confirm the cargo details with them directly - faster quote, less back-and-forth for you.",
-                      "process_overview":  "The overall process will be as follows: your supplier will deliver the goods to our warehouse in China (we have warehouses in major cities across China and will allocate them based on your supplier\u0027s address to maximize cost efficiency). If you need, we can also arrange for pickup, with the cost determined by your supplier\u0027s address. We will then collect the data, issue an invoice, and reserve a space. After you make the payment, we will begin the formal shipping process. If it\u0027s under DDP terms, we will be responsible for delivering the package to your designated address as agreed upon, and you only need to prepare for unloading.",
-                      "billing_rule":  "Billing weight is determined by taking the maximum value between gross weight and volumetric weight.",
-                      "our_contact":  "Feel free to reach out if you have any other questions: [Your Contact Info]",
-                      "ack_only":  ""
-                  }
+{
+    "_meta": {
+        "schema_version": 2,
+        "role": "Authoritative structured business policy: the HARD BOUNDS of the reply chain. Wording and tone live in reply_agent_prompt.md; reviewed examples live in reply_scenarios.md; the code that decides scenario and enforces these bounds is scripts/lib/reply_policy.ps1.",
+        "consolidated": "2026-10-03. reply_rules.never went from 40 entries with heavy semantic overlap to the distinct rules below. History: scripts/auto_optimize.ps1 used to APPEND a new never rule every day at 05:30 and rewrite reply_agent_prompt.md directly; that mechanism is now suggestion-only and never edits an active file.",
+        "removed_keys": [
+            "templates.first_inquiry, templates.ask_address, templates.ack_only, templates.our_contact, templates.follow_up_details - no production consumer after the retired intent engine was removed; the same wording is generated by the scenario fallbacks in lib/reply_gen.ps1. our_contact also held a [Your Contact Info] placeholder and contradicted the platform rule that contact details are never exchanged.",
+            "brand.sales_contact - held the placeholder 'Your Sales Contact' and had no production consumer."
+        ],
+        "open_item_for_owner": "brand.company_name and brand.service_description previously began with the literal placeholder 'Your Company Name'. That token was replaced with 'The company' so the model can never echo a fill-in-the-blank placeholder into a buyer reply. Replace it with the real registered name when you review this file."
+    },
+    "brand": {
+        "company_name": "",
+        "service_description": "The company is headquartered in Ningbo, Zhejiang Province, founded in 2012. Nearly two decades of cross-border international transportation experience, specializing in China-to-US integrated door-to-door container logistics. Mastered full spectrum of international trade and shipping protocols; ocean freight booking network across North America, Europe, Africa and South America. Branches in major port cities across China, fleet of 100+ container trucks, hundreds of thousands of cubic meters of warehousing space. Overseas offices in Los Angeles, Houston and New York. Long-term partnerships with CMA, COSCO, EMC, OOCL and WHL. 24/7 full-time response mechanism and full-process cargo insurance."
+    },
+    "pricing": {
+        "quote_policy": "Confirm goods details (weight, dimensions, reference images, recipient address) before giving any quote. Quote is provided after details are confirmed.",
+        "currency": "USD",
+        "validity": "",
+        "payment_terms": "Default terms: DDP (Delivered Duty Paid).",
+        "billing_rule": "The chargeable weight is the higher of the actual gross weight and the volumetric weight, so accurate weight and dimensions are what keep the rate competitive."
+    },
+    "data_to_collect": [
+        "Goods total weight (kg)",
+        "Packaging dimensions L*W*H",
+        "Recipient's detailed address",
+        "Supplier contact (optional; lets us confirm the cargo details directly)",
+        "Reference images of the goods (optional; helps confirm what is shipping)"
+    ],
+    "banned_phrases": [
+        "manager",
+        "senior manager",
+        "boss",
+        "supervisor",
+        "上级",
+        "经理",
+        "主管",
+        "reimburse",
+        "reimbursement",
+        "refund",
+        "compensate",
+        "compensation",
+        "out of pocket"
+    ],
+    "reply_rules": {
+        "always": [
+            "Reply in American English, regardless of the language the buyer writes in.",
+            "Answer the buyer's current question first, before anything else in the message.",
+            "Keep it short: one or two sentences by default, and a single short line for a bare acknowledgment.",
+            "Use only facts established in this conversation. Distinguish what the buyer stated, what the owner confirmed directly, what we previously said ourselves, and what is still unknown.",
+            "Confirm the goods details before any quote is given.",
+            "When no real answer exists yet, say plainly that it is being confirmed and name the verifiable next step."
+        ],
+        "never": [
+            "Never state, estimate or imply a price, a rate, a range or a discount. Confirm the goods details first and let a human confirm the actual figure.",
+            "Never give, offer or request the buyer's own contact details, and never move the conversation off the platform. Requesting the SUPPLIER's contact is allowed because it is a cargo information source, not a platform red line.",
+            "Never invent a status, a date, a number, a shipment position, a document or a warehouse capability that is not established in this conversation. Say it is being confirmed instead.",
+            "Never claim that we have contacted, or will contact, the buyer's supplier or factory, and never say the supplier will contact the buyer. The assistant has no such capability.",
+            "Never promise a specific deadline unless the request has a real local todo and the owner has actually been notified.",
+            "Never admit or imply that we are responsible for the buyer's cost, loss or damage, and never promise to pay, reimburse, refund or compensate any amount, even when the buyer demands it. Acknowledge the trouble, commit to verifying the facts with a timeline, and let a human handle any payment claim.",
+            "Never ask the buyer to pay any deposit, security deposit or additional charge that is not in the agreed contract or the platform payment terms.",
+            "Never defer a pricing, delivery or cost answer to a manager, supervisor or boss; give a direct answer or a concrete next step.",
+            "Never leave a pricing or cost question with a vague promise; give a specific timeline or a clear action plan.",
+            "Never repeat the same wording, template or apology when the buyer resends or repeats a message; add new information or a concrete next step.",
+            "Never answer with only an acknowledgment, a bare number or a single word; include the concrete next step or the timeline.",
+            "Never answer a specific delivery, scheduling or price-term request with a statement of capability or unrelated small talk; verify the specific request and give a concrete action or timeline.",
+            "Never repeat the same transit-time statement when the buyer asks to confirm door-to-door delivery; confirm directly or state the verification step and the timeline.",
+            "Never answer an offer or counteroffer with a bare refusal or a generic acknowledgment; address the specific terms and give a concrete next step.",
+            "Never re-ask for any field (weight, dimensions, images, address, supplier contact) the buyer has already provided or already promised; acknowledge it and move forward.",
+            "Never use a soothing wait phrase (take your time / no rush / whenever you're ready) more than once in a conversation, or more than once inside a single message.",
+            "Never answer confusion or a repeated question with the same template or question again; acknowledge it and ask one clarifying question.",
+            "Never use a generic closing or sign-off when the buyer is frustrated or waiting for a resolution; keep the message focused on the action.",
+            "Never send a proactive or follow-up message to a buyer who has declined or said our messages are annoying, unless the buyer writes first.",
+            "Never answer a complaint about our messaging with only an apology or a system excuse; state the concrete action being taken to stop it.",
+            "Never answer a refusal of a pickup or self-collection point with a generic acknowledgment; address the pickup method or offer an alternative."
+        ],
+        "urgency": []
+    },
+    "templates": {
+        "process_overview": "It is straightforward: your supplier delivers the cargo to our warehouse in China (we have warehouses in major cities and allocate by the supplier's address to keep costs down). If you need it, we can also arrange pickup, priced by the supplier's address. We then collect the data, issue the invoice and reserve the space. After payment we start the formal shipping process. Under DDP terms we deliver to the address we agreed, and you only need to prepare for unloading.",
+        "billing_rule": "The chargeable weight is the higher of the actual gross weight and the volumetric weight, so accurate weight and dimensions are what keep the rate competitive."
+    }
 }

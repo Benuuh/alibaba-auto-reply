@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "11_image_only_message",
+  "title": "Message is only an image",
+  "category": "image-only message",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The buyer line carries @@IMG markers and the original text is the literal '[IMG]', exactly what the page produces for an image-only message (no @@TS is emitted for it, which is why the order cannot be verified).",
+  "conversationLines": [
+    "[ME] Could you send a photo of the cartons? @@TS:1791018000000",
+    "[BUYER] [IMG] @@IMG:https://example.invalid/img/carton-a.jpg|https://example.invalid/img/carton-b.jpg @@OT:W0lNR10="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "attachment_only",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:05:00Z",
+    "sentAt": "2026-10-03T09:07:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Thanks for the images. I am looking at them now - if the carton sizes or the total weight are handy, send them over and I can price this accurately."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "orderConfident": false,
+    "guidanceKey": "attachment_only"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b\\d+\\s*(kg|kgs|cm|mm|cartons?|ctns|pcs|pallets?)\\b",
+      "why": "nothing can be read out of the image in this offline replay; a value would be invented"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(i can see|the label (says|shows))\\b",
+      "why": "must not claim to have read details it cannot have read"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "acknowledges-attachment",
+      "check": "mustMatch",
+      "value": "(?i)(image|photo|picture)",
+      "why": "acknowledge the images"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "attachment_only is at most two sentences"
+    },
+    {
+      "id": "only-askable",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "ask only for fields the decision allows"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "[IMG]",
+  "expectSkippedZero": true,
+  "expectOrderConfident": false,
+  "expectOrderWarningInContext": true
+}

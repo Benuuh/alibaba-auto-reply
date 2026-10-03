@@ -1,50 +1,95 @@
-﻿# dimension_guidance tests — 「买家说没有尺寸」时的引导话术 (spec 更像真人销售_20260926 S4 / §12.2-A9)
-# 纯逻辑 + 文档一致性: 不碰页面 / Chrome / LLM。
-# 判定强度说明(A9/S4 的退化方案): 测试无法在没有 LLM 的情况下断言"任意一次生成的回复"必然命中引导问法,
-#   故断言的是**生产侧的引导话术定义**(Get-DimensionGuidance)与**提示词是否真的带上了这些成品话术**,
-#   外加"没尺寸也能报价"的禁止暗示检测(Test-NoDimensionQuoteHint)本身可判真假。
-#   这比纯关键词扫描强: 关键词必须与生产函数的返回值逐字一致, 改了一边不改另一边会立刻变红。
+﻿# dimension_guidance tests - the "buyer cannot give sizes" guidance (spec 更像真人销售_20260926 S4 / 12.2-A9)
+# Rewritten 2026-10-03 for the reply-chain refactor. Pure logic + document consistency: no page,
+# no Chrome, no model, no network.
+#
+# WHAT CHANGED AND WHY: the old version asserted that the approved sentences appeared VERBATIM inside
+# reply_agent_prompt.md and reply_playbook.md. That is no longer the architecture. The prompt now
+# carries language rules only, and the scenario material lives in reply_scenarios.md, which is
+# injected ONE SECTION AT A TIME by lib\reply_gen.ps1::Get-ScenarioGuidance. So this test now asserts
+# the stronger property: the approved sentences are defined once in code AND are actually reachable
+# through the injection path the model uses. Asserting "the string is somewhere in a file nobody
+# loads" was exactly the fake-load bug this refactor removed.
 $ErrorActionPreference = "Stop"
 $here = Split-Path $MyInvocation.MyCommand.Path -Parent
 $repo = Split-Path $here -Parent
 $scripts = Join-Path $repo "scripts"
 . (Join-Path $scripts "reply_engine.ps1")
+. (Join-Path $scripts "lib\msg_norm.ps1")
+. (Join-Path $scripts "lib\reply_policy.ps1")
+. (Join-Path $scripts "lib\reply_gen.ps1")
 
 $script:pass = 0; $script:fail = 0
 function Assert-Eq([string]$n, [object]$a, [object]$b) { if ($a -eq $b) { $script:pass++ } else { $script:fail++; Write-Output "  FAIL: $n | got:[$a] want:[$b]" } }
 function Assert-True([string]$n, [bool]$c) { if ($c) { $script:pass++ } else { $script:fail++; Write-Output "  FAIL: $n" } }
 Write-Output "== dimension_guidance tests =="
 
-# --- 1) 话术定义存在 ---
+# --- 1) the wording has exactly one definition, in code --------------------------------------
 Assert-True "Get-DimensionGuidance-exists" ($null -ne (Get-Command Get-DimensionGuidance -EA SilentlyContinue))
 Assert-True "Test-NoDimensionQuoteHint-exists" ($null -ne (Get-Command Test-NoDimensionQuoteHint -EA SilentlyContinue))
 $g = Get-DimensionGuidance
-$promptPath = Join-Path $scripts "reply_agent_prompt.md"
-$prompt = [System.IO.File]::ReadAllText($promptPath)
 
-# --- 2) 主推说法: "我直接联系供应商" (spec §12.2: 这是第一反应, 三种问法降为退一步) ---
+# --- 2) the preferred sentence offers to do the work, and never quotes a number --------------
 Assert-True "primary-mentions-supplier-contact" ($g.primary -match "supplier's contact")
 Assert-True "primary-promises-direct-confirm" ($g.primary -match 'confirm the cargo details with them directly')
 Assert-True "primary-no-price-number" (-not ($g.primary -match '\$\s?\d|USD\s?\d|\d+\s*(usd|dollars)'))
-Assert-True "primary-in-prompt" ($prompt.Contains([string]$g.primary))
-
-# --- 3) 三种退一步问法都必须在, 且逐字出现在提示词里(与生产定义一致) ---
-# 注: Where-Object 的输出被 @(...) 包裹时, 单元素会被解包成字符串, 其 .Count 对字符串同样返回 1 但
-#     对"恰好 1 个匹配"的情形不可靠, 故此处的存在性判断统一走"外层再包一层 @() 后用 -ge 1"。
-Assert-Eq "fallback-count" (@($g.fallbacks).Count) 3
+Assert-Eq   "fallback-count" (@($g.fallbacks).Count) 3
 Assert-True "fallback-packing-list" (@(@($g.fallbacks) | Where-Object { $_.text -match 'packing list' }).Count -ge 1)
 Assert-True "fallback-rough-size-estimate" (@(@($g.fallbacks) | Where-Object { $_.text -match 'rough size is fine' }).Count -ge 1)
 Assert-True "fallback-lwh-cm" (@(@($g.fallbacks) | Where-Object { $_.text -match 'L x W x H in cm' }).Count -ge 1)
-foreach ($f in @($g.fallbacks)) {
-    Assert-True ("fallback-in-prompt: " + $f.case) ($prompt.Contains([string]$f.text))
-}
 
-# --- 4) 提示词必须带"边界"说明: 不得暗示没尺寸也能报价 / 不得声称已联系供应商 ---
-Assert-True "prompt-forbids-no-dim-quote" ($prompt -match 'We can quote you without the dimensions')
-Assert-True "prompt-forbids-claiming-contacted-supplier" ($prompt -match 'I will have the supplier contact you')
-Assert-True "prompt-keeps-2x-rule-reference" ($prompt -match '最多追问 2 次')
+# --- 3) the scenario manual really is the injection source, and it is reachable --------------
+$scenPath = Join-Path $scripts "reply_scenarios.md"
+Assert-True "scenario-manual-exists" (Test-Path $scenPath)
+$scenTxt = [System.IO.File]::ReadAllText($scenPath)
+Assert-True "primary-in-scenario-manual" ($scenTxt.Contains([string]$g.primary))
+foreach ($f in @($g.fallbacks)) { Assert-True ("fallback-in-scenario-manual: " + $f.case) ($scenTxt.Contains([string]$f.text)) }
+$section = Get-ScenarioGuidance -Path $scenPath -Key 'dimension_missing'
+Assert-True "dimension-section-is-injectable" (-not [string]::IsNullOrWhiteSpace($section))
+Assert-True "injected-section-carries-primary" ($section.Contains([string]$g.primary))
+foreach ($f in @($g.fallbacks)) { Assert-True ("injected-section-carries-fallback: " + $f.case) ($section.Contains([string]$f.text)) }
 
-# --- 5) "没尺寸也能报价"的暗示检测: 真的能判真假(正例命中 / 反例不命中) ---
+# --- 4) the fallback path actually returns the approved sentence ----------------------------
+$LF = [string][char]10
+$line = '[BUYER] I cannot get the dimensions from the factory, they do not reply @@TS:1759400000000'
+$conv = ConvertTo-MessageList $line 'Buyer A'
+$facts = Get-ConversationFacts $conv
+$dec = Get-ReplyDecision -Conversation $conv -Facts $facts
+Assert-Eq "decision-is-dimension-missing" $dec.Scenario 'dimension_missing'
+Assert-True "decision-asks-for-supplier-contact" ($dec.AskFields -contains 'supplier')
+$fb = Get-ScenarioFallback -Decision $dec -Rules $null
+Assert-Eq "fallback-equals-approved-primary" $fb ([string]$g.primary)
+
+# --- 5) once the field limit is used up, the third ask must be replaced by a step-back -------
+$askTwice = @(
+    '[ME] Could you share your supplier''s contact? @@TS:1759400100000',
+    '[ME] Any luck with the supplier contact? @@TS:1759400200000',
+    '[BUYER] still no sizes from me @@TS:1759400300000'
+) -join $LF
+$conv2 = ConvertTo-MessageList $askTwice 'Buyer A'
+$dec2 = Get-ReplyDecision -Conversation $conv2 -Facts (Get-ConversationFacts $conv2)
+Assert-True "ask-limit-blocks-supplier-ask" (-not ($dec2.AskFields -contains 'supplier'))
+$fb2 = Get-ScenarioFallback -Decision $dec2 -Rules $null
+Assert-True "third-ask-replaced-by-stepback" (-not ($fb2 -match "supplier's contact"))
+Assert-Eq "stepback-is-the-approved-second-fallback" $fb2 ([string](@($g.fallbacks)[1].text))
+
+# --- 6) the enforced ask limit, not prose about the ask limit -------------------------------
+Assert-Eq "policy-ask-limit-is-two" $script:PolicyMaxAskPerField 2
+Assert-True "AskCounts-exists" ($null -ne (Get-Command Get-AskCounts -EA SilentlyContinue))
+$counts = Get-AskCounts @(
+    [pscustomobject]@{ Role = 'me'; Text = 'Could you share the carton sizes?' },
+    [pscustomobject]@{ Role = 'me'; Text = 'Any luck with the sizes?' },
+    [pscustomobject]@{ Role = 'me'; Text = 'What is the total weight?' }
+)
+Assert-Eq "ask-counts-dimension" $counts.dimension 2
+Assert-Eq "ask-counts-weight" $counts.weight 1
+
+# --- 7) the forbidden phrasings are present in the material that IS sent --------------------
+Assert-True "manual-forbids-no-dim-quote" ($scenTxt -match 'We can quote you without the dimensions')
+Assert-True "manual-forbids-claiming-contacted-supplier" ($scenTxt -match 'I will have the supplier contact you')
+Assert-True "manual-forbids-already-contacted" ($scenTxt -match 'I have already contacted your supplier')
+Assert-True "manual-no-price-number" (-not ($scenTxt -match '\$\s?\d|USD \d|discount \d'))
+
+# --- 8) "no dimensions needed" hints are really detectable ----------------------------------
 $bad1 = "We can quote you without the dimensions."
 $bad2 = "No need for the dimensions - just tell us the weight."
 $bad3 = "Dimensions are not required for a quote."
@@ -60,23 +105,13 @@ Assert-Eq "hint-good1" (Test-NoDimensionQuoteHint $good1) $false
 Assert-Eq "hint-good2" (Test-NoDimensionQuoteHint $good2) $false
 Assert-Eq "hint-good3" (Test-NoDimensionQuoteHint $good3) $false
 Assert-Eq "hint-empty" (Test-NoDimensionQuoteHint '') $false
+# and the send-time gate must actually consult it
+$chk = Test-ReplyCompliance -Text $bad2 -Rules $null
+Assert-True "compliance-uses-the-hint-check" (-not $chk.Ok)
 
-# --- 6) 手册(指南 1)必须与提示词同源: 主推说法逐字一致, 且明确三种退一步 ---
-$pb = Join-Path $scripts "reply_playbook.md"
-Assert-True "playbook-exists" (Test-Path $pb)
-if (Test-Path $pb) {
-    $pbtxt = [System.IO.File]::ReadAllText($pb)
-    # 手册里用的是长破折号 — 与乘号 × ; 生产字符串用 ASCII '-' 与 'x'。
-    # 两侧必须做**同一套**排版归一化后再比对, 否则第 3 句会假红(此处踩过一次: 只归一化了手册一侧)。
-    function ConvertTo-PrintNorm([string]$s) { return ([string]$s).Replace([char]0x2014, '-').Replace([char]0x00D7, 'x') }
-    $normPb = ConvertTo-PrintNorm $pbtxt
-    Assert-True "playbook-has-primary" ($normPb.Contains((ConvertTo-PrintNorm $g.primary)))
-    Assert-True "playbook-has-fallback-1" ($normPb.Contains((ConvertTo-PrintNorm @($g.fallbacks)[0].text)))
-    Assert-True "playbook-has-fallback-2" ($normPb.Contains((ConvertTo-PrintNorm @($g.fallbacks)[1].text)))
-    Assert-True "playbook-has-fallback-3" ($normPb.Contains((ConvertTo-PrintNorm @($g.fallbacks)[2].text)))
-    Assert-True "playbook-forbids-claiming-contacted" ($pbtxt -match '我已经联系上你供应商了')
-    Assert-True "playbook-no-price-number" (-not ($pbtxt -match '\$\s?\d|USD \d|discount \d'))
-}
+# --- 9) the old fake load is gone, and the file was archived rather than silently dropped ----
+Assert-True "playbook-no-longer-claimed-as-loaded" (-not ([System.IO.File]::ReadAllText((Join-Path $scripts 'reply_agent_prompt.md')) -match 'reply_playbook'))
+Assert-True "playbook-archived-not-deleted" (Test-Path (Join-Path $repo 'docs\archive\reply_playbook_zh_20261003.md'))
 
 Write-Output ("RESULT: pass=$($script:pass) fail=$($script:fail)")
 if ($script:fail -gt 0) { Write-Output "FAILED"; exit 1 }

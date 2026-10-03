@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "03_supplier_handoff_failure",
+  "title": "Buyer cannot reach their supplier",
+  "category": "supplier handoff failure",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The lines prove the buyer cannot reach the supplier; they do NOT prove that we contacted anyone, so any claim of a call is invented.",
+  "conversationLines": [
+    "[ME] Hi, happy to help with your shipment. @@TS:1791018000000",
+    "[BUYER] I can't reach my supplier, he is not answering me since Monday. Can you help? @@TS:1791018240000 @@OT:SSBjYW4ndCByZWFjaCBteSBzdXBwbGllciwgaGUgaXMgbm90IGFuc3dlcmluZyBtZSBzaW5jZSBNb25kYXkuIENhbiB5b3UgaGVscD8="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "supplier_unreachable",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:02:00Z",
+    "sentAt": "2026-10-03T09:05:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "That is frustrating, and I do not want to leave you stuck. I am having this checked from our side so it does not sit with you."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "supplier_handoff",
+    "allowTimeCommitment": false,
+    "guidanceKey": "supplier_unreachable"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(i|we)\\s+(have\\s+)?(already\\s+)?(called|contacted|emailed|reached out to)\\b",
+      "why": "unsupported promise: the assistant cannot call anyone"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(i will|i'll|we will|we'll)\\s+(call|contact|chase)\\s+(them|your supplier|the supplier|the factory)\\b",
+      "why": "unsupported promise about a capability we do not have"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(the|your)\\s+(supplier|factory|vendor)\\s+will\\s+(contact|call|reach)\\s+you\\b",
+      "why": "the assistant cannot make the supplier act"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)(weight)[^.!?]{0,80}(dimension|size)[^.!?]{0,80}(address)",
+      "why": "a fresh three-item questionnaire ignores the handoff problem"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "takes-it-on",
+      "check": "mustMatch",
+      "value": "(?i)(from our side|checked|checking|look into|handle|take it)",
+      "why": "treat it as a handoff problem we act on"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "supplier_unreachable is at most two sentences"
+    },
+    {
+      "id": "asks-nothing",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "no cargo questionnaire in the same message"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "I can't reach my supplier, he is not answering me since Monday. Can you help?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

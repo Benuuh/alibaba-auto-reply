@@ -1,4 +1,4 @@
-# accio adapter regression tests (config parsing / line conversion / shadow compare / fallback safety)
+﻿# accio adapter regression tests (config parsing / line conversion / shadow compare / fallback safety)
 # Run via run_tests.ps1 or: powershell -ExecutionPolicy Bypass -NoProfile -File tests\accio.tests.ps1
 $ErrorActionPreference = "Stop"
 $here = Split-Path $MyInvocation.MyCommand.Path -Parent

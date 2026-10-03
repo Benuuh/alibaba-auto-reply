@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "16_notification_failure",
+  "title": "Human todo is needed but the notification channel is down",
+  "category": "notification failure",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The notify-channel state is a harness input (reply_engine/reply_policy consume -NotifyChannelAvailable); it is set false here, exactly as monitor.ps1 does when the notify path is unverified (monitor.ps1:436).",
+  "conversationLines": [
+    "[ME] Thanks for your patience - I am checking with the warehouse. @@TS:1791018000000",
+    "[BUYER] has it shipped yet? I need to know before I book the next order. @@TS:1791018600000 @@OT:aGFzIGl0IHNoaXBwZWQgeWV0PyBJIG5lZWQgdG8ga25vdyBiZWZvcmUgSSBib29rIHRoZSBuZXh0IG9yZGVyLg=="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "delivery_status",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:09:00Z",
+    "sentAt": "2026-10-03T09:11:00Z"
+  },
+  "fakeModel": {
+    "mode": "null",
+    "compliantReply": "Thanks for checking in. I do not want to give you a guess, so I am confirming the current status and will come back to you as soon as I have it."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "fulfillment_status",
+    "allowTimeCommitment": false,
+    "guidanceKey": "delivery_status"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\bby\\s+(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+      "why": "no verified notification channel exists, so a deadline may not be promised"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\bwithin\\s+\\d+\\s*(hour|hours|hrs|day|days|business day|business days)\\b",
+      "why": "same hard bound"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\bby\\s+end\\s+of\\s+(day|business|week)\\b",
+      "why": "same hard bound"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(today|tomorrow)\\s+(morning|afternoon|evening)\\b",
+      "why": "same hard bound"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\bby\\s+\\d{1,2}(:\\d{2})?\\s*(am|pm)\\b",
+      "why": "same hard bound"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(arrived|on the water|in transit|already shipped)\\b",
+      "why": "no shipment status is established"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "no-deadline",
+      "check": "noTimeCommitment",
+      "value": true,
+      "why": "notification failed, so no specific deadline may be promised (spec 4.3)"
+    },
+    {
+      "id": "says-it-is-being-confirmed",
+      "check": "mustMatch",
+      "value": "(?i)(confirm|check)",
+      "why": "the only honest answer without a trusted record"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "delivery_status is at most two sentences"
+    },
+    {
+      "id": "asks-nothing",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "no new questionnaire"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "has it shipped yet? I need to know before I book the next order.",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true,
+  "extraProbes": [
+    {
+      "name": "notify-channel-verified-allows-deadline",
+      "notifyChannelAvailable": true,
+      "informational": true,
+      "expectDecision": {
+        "allowTimeCommitment": true
+      },
+      "expectFallbackMatches": "(?i)by tomorrow morning"
+    }
+  ]
+}

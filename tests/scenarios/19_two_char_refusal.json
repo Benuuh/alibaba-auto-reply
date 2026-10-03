@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "19_two_char_refusal",
+  "title": "Two-character 'no'",
+  "category": "two-character message",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. 'no' is 2 characters and was dropped by the HEAD extractor (monitor.ps1:274), so under the old chain no reply was produced at all for this conversation.",
+  "conversationLines": [
+    "[ME] Would you like me to send the rate now? @@TS:1791018000000",
+    "[BUYER] no @@TS:1791018240000 @@OT:bm8="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "refusal",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:03:00Z",
+    "sentAt": "2026-10-03T09:05:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "No problem at all - thanks for letting me know. If anything changes, I am here."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "askFields": [],
+    "allowAdvance": false,
+    "guidanceKey": "refusal"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "\\?",
+      "why": "no follow-up question after a decline"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(rate|quote|price|discount|offer|service)\\b",
+      "why": "no pitch after a decline"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(just in case|change your mind|are you sure)\\b",
+      "why": "no attempt to save the deal"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "accepts-the-decline",
+      "check": "mustMatch",
+      "value": "(?i)(no problem|thanks|noted|here|sure)",
+      "why": "one short, warm line"
+    },
+    {
+      "id": "one-short-line",
+      "check": "maxChars",
+      "value": 120,
+      "why": "one short line"
+    },
+    {
+      "id": "no-question",
+      "check": "asksAQuestion",
+      "value": false,
+      "why": "no follow-up question"
+    },
+    {
+      "id": "no-field-ask",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "no question at all"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "no",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

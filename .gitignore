@@ -113,3 +113,8 @@ scripts/last_sync.json
 # 注：归档目录是 2026-09-26 部署根改名前的产物，实际名仍为 Agent_work-*，此处按真实名排除
 /Agent_work-removed_*/
 
+
+# Local one-off buyer investigation scripts (retain on this machine only)
+/tools/_gh56_hunt.ps1
+/tools/_my.ps1
+/tools/_u.ps1

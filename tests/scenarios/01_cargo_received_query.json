@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "01_cargo_received_query",
+  "title": "Buyer asks whether we received the cargo",
+  "category": "cargo-received query",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The fulfillment status itself is NOT in the lines (there is no tracking feed), which is exactly the fact under test: the reply must not invent one.",
+  "conversationLines": [
+    "[ME] Thanks for the details - I am checking the rate for you. @@TS:1791018000000",
+    "[BUYER] hi, did you receive the cargo? @@TS:1791018300000 @@OT:aGksIGRpZCB5b3UgcmVjZWl2ZSB0aGUgY2FyZ28/"
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "delivery_status",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:04:00Z",
+    "sentAt": "2026-10-03T09:06:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Thanks for checking in. I am confirming the current status with the warehouse and will come back to you as soon as I have it."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "fulfillment_status",
+    "allowTimeCommitment": false,
+    "guidanceKey": "delivery_status"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(arrived|on the water|in transit|cleared customs|reached the port|already shipped|delivered on)\\b",
+      "why": "no shipment status is established anywhere in the conversation"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\b\\d{4}-\\d{2}-\\d{2}\\b",
+      "why": "no real date exists to quote"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(vessel|container number|bill of lading|b/l|tracking number)\\b",
+      "why": "no tracking record is available to the chain"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "acknowledges-and-confirms",
+      "check": "mustMatch",
+      "value": "(?i)(confirm|check|look into|verif)",
+      "why": "must say the status is being confirmed instead of guessing"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "delivery_status reply is at most two sentences"
+    },
+    {
+      "id": "no-deadline",
+      "check": "noTimeCommitment",
+      "value": true,
+      "why": "the notify channel is unverified, so no deadline may be promised"
+    },
+    {
+      "id": "asks-nothing",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "delivery_status must not open a new cargo questionnaire"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "hi, did you receive the cargo?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

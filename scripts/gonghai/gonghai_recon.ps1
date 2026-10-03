@@ -1,11 +1,11 @@
 ﻿# gonghai/gonghai_recon.ps1 - 阿里后台「公海」操作记录器(只读,零写入)。
 #
 #   目的(§6-S1):在不猜网页结构的前提下,把公海链路上**真实发生**的请求与 DOM 事实抓下来。
-#   原理:照搬 scripts\waimao\waimao_recon.ps1 的成熟做法 —— 向已登录页面注入 fetch/XHR 劫持钩子,
+#   原理:向已登录页面注入 fetch/XHR 劫持钩子,
 #         之后在页面上正常操作,钩子把每次调用的 path/方法/请求体/状态记进 window.__ghRecon.log,
 #         再用 -Action dump 取回。**这不是逆向:是记录你自己会话里的真实请求。**
 #
-#   安全(与 waimao 版同口径,§4-11/§4-12):
+#   安全(§4-11/§4-12):
 #     - 仅记录 **path(不含域)** 与请求体;**Authorization / Cookie 一律不记录**。
 #     - 响应只记录 path + code/msg 三元组(白名单提取),**不记录响应体原文**(避免 PII 落盘)。
 #       OneTalk 搜索接口可能在 **XHR 响应体**里返回客户名,故响应体只做白名单提取,绝不整存。
@@ -36,7 +36,7 @@ $here = $PSScriptRoot
 if (-not $OutFile) { $OutFile = Join-Path $env:TEMP "gonghai_20260926\recon_dump.json" }
 
 # ---- 注入钩子:劫持 fetch + XMLHttpRequest,只记 path/方法/请求体/状态(+白名单响应三元组) ----
-#     变量名 __ghRecon 与 waimao 版的 __wmRecon 区分,避免同页互相覆盖。
+#     使用公海专用变量名 __ghRecon,避免覆盖同页的其他记录器。
 $jsInstall = @'
 (function(){
   if (window.__ghRecon && window.__ghRecon.installed) { return "ALREADY-INSTALLED n=" + window.__ghRecon.log.length; }

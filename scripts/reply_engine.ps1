@@ -1,39 +1,31 @@
-﻿# 回复引擎(纯逻辑,无文件/网络依赖):语言检测/信息缺口核对/规则回复生成/模板解析。
-
-function Resolve-Template([string]$tpl, [hashtable]$vars) {
-    $result = $tpl
-    foreach ($k in $vars.Keys) {
-        $result = $result.Replace("{$k}", [string]$vars[$k])
-    }
-    return $result
-}
-
-# 语言检测：先西语后葡语（cuanto/para el 等词更常见；envio 无重音时西语优先），固定英文回复策略保留多语言分支
-function Detect-Lang([string]$text) {
-    $t = $text.ToLower()
-    if ($t -match 'gracias|hola|precio|cuánto|cuanto|envío|envio|por favor|claro|perfecto|dónde|donde|amigo|bien|buenas|para el|para la|cuesta|tarda|demora') { return 'es' }
-    if ($t -match 'obrigado|obrigada|preço|preco|qual|quanto|você|voce|amigo|não|nao|bom dia|perfeito|pode|fazer|enviar|carga|mercadoria|quero|para o|para a|custa|frete|prazo|orçamento|orcamento') { return 'pt' }
-    if ($t -match "d'accord|daccord|merci|oui|non|bonjour|très|tres bien|marchandise|livraison|remboursement|endroit|demain|ici|c'est|n'hésitez|je vous|tu vas|elle") { return 'fr' }
-    return 'en'
-}
+﻿# reply_engine.ps1 - Pure decision, dedup and validation primitives for the reply chain.
+#
+# SCOPE (spec 5): this file holds the small, side-effect-free primitives that more than one caller
+# needs. It reads no files, touches no page and calls no model.
+#
+# WHAT WAS REMOVED HERE (2026-10-03, spec 5 "one authoritative implementation" + spec 6 "remove
+# duplicated wording and retired production branches"):
+#   - Detect-Lang and the es/pt/fr reply branches. Get-ReplyLang has returned a hard 'en' since the
+#     American-English-only decision (spec 4.3), so every non-English branch was unreachable
+#     production code; Detect-Lang's only remaining caller was its own regression assertion.
+#   - New-ReplyContext and the three intent resolvers (Resolve-IntentEarly / -Info / -Data), plus
+#     Build-MissingQuestion and Resolve-Template. They were a SECOND, competing implementation of
+#     business policy: their own ask limits, their own scenario wording, their own idea of when to
+#     push for information. Business policy now has exactly one implementation in
+#     lib\reply_policy.ps1 (decision) and lib\reply_gen.ps1 (wording and fallbacks), shared by the
+#     model path and the fallback path.
+#   - Generate-Reply, the entry point of that second engine. Fallback wording is now
+#     lib\reply_gen.ps1::Get-ScenarioFallback, driven by the same decision object the model path uses.
+#   - $script:SupplierContactAsk, a duplicate of the first sentence in Get-DimensionGuidance below.
+#
+# Kept deliberately: Get-MissingInfo and Get-PromisedFields are still consumed (the policy layer
+# uses Get-PromisedFields; Get-MissingInfo remains under regression test).
+#
+# Callers: monitor.ps1, auto_optimize.ps1, analyze_replies.ps1, lib\msg_norm.ps1,
+#          lib\reply_policy.ps1, lib\reply_gen.ps1, lib\send.ps1 and tests\.
 
 # 统一回复语言：当前强制美式英文（规则引擎所有多语言分支走 en）
 function Get-ReplyLang { return 'en' }
-
-# 将缺失项组合成一句自然的问题
-function Build-MissingQuestion([object]$missing) {
-    $names = @()
-    foreach ($m in $missing) {
-        if ($m -match 'weight') { $names += "the total weight (kg)" }
-        elseif ($m -match 'dimension') { $names += "the packaging dimensions (L*W*H)" }
-        elseif ($m -match 'address') { $names += "the recipient's detailed address" }
-        elseif ($m -match 'image') { $names += "reference images of the goods" }
-        else { $names += $m }
-    }
-    if ($names.Count -eq 1) { return "Could you share $($names[0])?" }
-    if ($names.Count -eq 2) { return "Could you share $($names[0]) and $($names[1])?" }
-    return "Could you share $($names[0..($names.Count-2)] -join ', ') and $($names[-1])?"
-}
 
 # 信息缺口核对：返回缺失项列表
 function Get-MissingInfo([string]$ctxText, [object]$dataToCollect) {
@@ -72,356 +64,6 @@ function Get-PromisedFields([string[]]$context) {
     return $promised
 }
 
-# 构造回复上下文:一次性计算 Generate-Reply 各意图族共享的派生状态(显式返回,避免隐式作用域)
-function New-ReplyContext([object]$rules, [string]$convoName, [string]$latest, [string[]]$context) {
-    $vars = @{ name = $convoName; brand_sales = "" }
-    if ($rules -and $rules.brand) { $vars.brand_sales = $rules.brand.sales_contact }
-    $templates = @{}
-    if ($rules -and $rules.templates) { $templates = $rules.templates }
-    $dataCollect = @()
-    if ($rules -and $rules.data_to_collect) { $dataCollect = $rules.data_to_collect }
-
-    $latestLower = $latest.ToLower()
-    $ctxAll = ($context | ForEach-Object { ($_ -replace '^\[(BUYER|ME)\] ','') }) -join ' '
-    $ctxLower = $ctxAll.ToLower()
-    $lang = Get-ReplyLang
-    $missing = @(Get-MissingInfo $ctxAll $dataCollect)
-    # A2:买家承诺提供的字段不再追问(从缺失清单移除)
-    $promised = @(Get-PromisedFields $context)
-    if ($promised.Count -gt 0) {
-        $missing = @($missing | Where-Object {
-            $m = $_.ToLower()
-            -not (($m -match 'weight' -and $promised -contains 'weight') -or
-                  ($m -match 'dimension' -and $promised -contains 'dimension') -or
-                  ($m -match 'address' -and $promised -contains 'address') -or
-                  ($m -match 'image' -and $promised -contains 'image') -or
-                  ($m -match 'supplier' -and $promised -contains 'supplier'))
-        })
-    }
-    $hasAddr = $ctxLower -match 'address|addr|calle|rua|street|avenue|road|endere|direcci|地址|邮编|cep|postal|city|ciudad|cidade|country|país|pais|deliver to|consignee|destinatario'
-    $hasWeight = $ctxLower -match '\d+\s*(kg|kgs|kilo|kilos|千克|公斤)|weight|peso|gross'
-
-    # 追问计数:统计我方(ME)此前追问缺失信息的次数。同一字段累计追问 ≥2 次后,
-    # 不再重复问(转"收尾等待"语气防骚扰),与提示词"追问上限"规则保持一致
-    $meAskCount = 0
-    foreach ($_ctxLine in $context) {
-        if ($_ctxLine -match '^\[ME\]' -and $_ctxLine -match 'weight|dimension|address|image|photo|picture|supplier|share|provide|send (me|over)|need') { $meAskCount++ }
-    }
-    $waitTone = @{
-        en = "No rush at all - whenever you have the details, just send them over and I'll get your quote ready."
-        es = "Sin prisa - cuando tenga los datos, envíemelos y preparo su cotización."
-        pt = "Sem pressa - quando tiver os dados, me envie e preparo sua cotação."
-        fr = "Pas de presse - dès que vous avez les informations, envoyez-les-moi et je prépare votre devis."
-    }
-
-    return @{
-        vars = $vars
-        templates = $templates
-        dataCollect = $dataCollect
-        latestLower = $latestLower
-        ctxAll = $ctxAll
-        ctxLower = $ctxLower
-        lang = $lang
-        missing = $missing
-        hasAddr = $hasAddr
-        hasWeight = $hasWeight
-        meAskCount = $meAskCount
-        waitTone = $waitTone
-        context = $context
-    }
-}
-
-# 意图族 A(寒暄/情绪/终止):命中返回文本,未命中返回 $null
-function Resolve-IntentEarly($c) {
-    $latestLower = $c.latestLower
-    $lang = $c.lang
-    $vars = $c.vars
-
-    # A0. 买家指责"你们不读/看不懂/没看" → 先道歉并确认信息已收到，不追问（只做推进）
-    $cantReadPattern = '(vous (ne )?savez pas lire|vous lisez pas|vous n.avez pas lu|vous ne lisez|can.t you read|dont you read|don.t you read|you (don.t|dont) (even )?(read|listen|understand)|you are not reading|you.re not reading|you arent reading|no entiende|no lees|no entende|você não lê|nao le|no leen|no escuchan|não leram|nao leram|没有看|看不懂|根本不会看|根本不会读|不读|没看|vous savez pas compter|vous ne savez pas compter|dont you see|can.t you see|didnt you read|didn.t you read|did you not read)'
-    if ($latestLower -match $cantReadPattern) {
-        $sr = @{
-            en = "Sorry about that - my mistake. I do have your details; let me confirm the exact quote and get back to you shortly."
-            es = "Lo siento, fue un error mío. Ya tengo sus datos; confirmo la cotización exacta y le respondo en breve."
-            pt = "Desculpe, foi erro meu. Já tenho seus dados; vou confirmar a cotação exata e retorno em breve."
-            fr = "Désolé, c'est de ma faute. J'ai bien vos informations ; je confirme le devis exact et je reviens vers vous très vite."
-        }
-        return $sr[$lang]
-    }
-    # A1. 否定/拒绝/终止意图拦截：买家表示不要了/取消/不需要 → 返回友好收尾（不再推模板）
-    if ($latestLower -match '(no thanks|no thank|never mind|not interested|skip it|skip this|pass|cancel|stop|don.t need|dont need|no need|not needed|no longer|don.t want|dont want|no quiero|no necesito|não quero|nao quero|não preciso|nao preciso|no preciso|no necessito|another one|不用了|不需要|算了|取消|停止|退订|unsubscribe|laisser tomber|laisse tomber|forget it|forget about it|forget this|drop it|abandonner|abandonar|deixar de lado)' -or
-        ($latestLower -match '^(no|non|não|nao)\b' -and $latestLower.Length -lt 30)) {
-        $n = @{
-            en = "No problem at all - appreciate you reaching out. Should anything change, I'm here whenever you need."
-            es = "Sin problema, gracias por escribir. Si algo cambia, aquí estoy cuando lo necesite."
-            pt = "Sem problema, obrigado pelo contato. Se mudar de ideia, estarei aqui."
-            fr = "Pas de souci, merci de votre intérêt. Si quelque chose change, je suis là."
-        }
-        return $n[$lang]
-    }
-
-    # A. 区分感谢 vs 简短确认 vs 语气词，分别自然回应（避免把 ok 当 thanks）
-    # 注意：感谢词出现在业务内容中（询盘/报价/货物/重量等词并存）时不按感谢处理，避免对完整询盘回 "You're welcome!"
-    $inquiryWords = 'quote|price|cost|devis|how much|freight|ship|shipping|carton|poids|weight|dimension|envoi|envio|entrega|货物|报价|多少钱|寄|發|send|cargo|package'
-    if ($latestLower -match '(thank you|thanks|thx|gracias|obrigad|merci|spasibo)' -and $latestLower -notmatch "(no thanks|no thank|never mind|not interested|skip|pass|não|nao quero|no quiero|cancel|$inquiryWords)") {
-        $t = @{
-            en = "You're welcome! Happy to help - reach out anytime."
-            es = "¡De nada! Estoy a su disposición para lo que necesite."
-            pt = "Por nada! Estou à disposição para o que precisar."
-            fr = "Avec plaisir ! Je reste à votre disposition."
-        }
-        return $t[$lang]
-    }
-    # 简短确认（排除携带货物信息的确认，如 "yes it is 20 kg" 应走信息处理分支）
-    $confirmOnly = '^(ok|okay|okey|yes|yeah|yep|yup|perfect|fine|sure|got it|sounds good|roger|alright|de acuerdo|de acordo|vale|claro|perfeito|boa)\b'
-    if ($latestLower -match $confirmOnly -and $latestLower.Length -lt 40 -and $latestLower -notmatch '\d+\s*(kg|kgs|kilo|kilos)|(total|all|the) (weight|dimension)|cm\b|mm\b|carton|box|size|dimensions|address|weight') {
-        $a = @{
-            en = "That works - I'll finalize your quote and get back to you shortly. Anything else you'd like me to check?"
-            es = "¡Perfecto! Confirmaré la cotización con mi gerente y le aviso. ¿Necesita algo más?"
-            pt = "Perfeito! Vou confirmar a cotação com meu gerente e retorno. Precisa de mais alguma coisa?"
-            fr = "Parfait ! Je confirme le devis avec mon responsable et je reviens vers vous. Besoin d'autre chose ?"
-        }
-        return $a[$lang]
-    }
-    if ($latestLower -match '^(haha|lol|jk|nice|great|cool|amazing)\b') {
-        return "Haha indeed! Let me know if I can help you finalize the shipment details."
-    }
-
-    # 0.5 买家问是否 AI/机器人/闲聊/自我介绍
-    if ($latestLower -match 'are (you|u|ya) (ai|robot|bot|automatic|human|real|machine)|is this (ai|robot|bot)|am i (talking|speaking) (to|with)|你是|机器人|人工智能|真人|自动回复|人工|humano|robot|inteligencia artificial|é você|você é|você e|eres un|es usted|tu es|êtes') {
-        return "Haha, I'm Benjamin's assistant handling your messages to get you answers fast - but you're always welcome to talk to a real person if you prefer! Now, how can I help with your shipment today?"
-    }
-    # 0.6 纯问候（不含询价/货物等业务词）
-    if ($latestLower -match '^(hi|hello|hey|good (morning|afternoon|evening)|hola|bom dia|boa tarde|bonjour|salut|hello there|hi there)\b' -and $latestLower.Length -lt 40 -and $latestLower -notmatch 'quote|price|cost|ship|freight|how much|报价|precio|preco|enviar|cargo|goods') {
-        $greet = @{
-            en = "Hi {name}! Thanks for reaching out. We're a freight forwarder providing door-to-door shipping from China. What goods would you like to ship, and to where?"
-            es = "¡Hola {name}! ¿Qué mercancía desea enviar y a qué destino?"
-            pt = "Olá {name}! O que deseja enviar e para qual destino?"
-            fr = "Bonjour {name} ! Que souhaitez-vous expédier et vers quelle destination ?"
-        }
-        return (Resolve-Template $greet[$lang] $vars)
-    }
-
-    # 0.7 买家表示稍后回来/暂时离开 → 友好收尾，不强推
-    if ($latestLower -match "(get back|come back|later|tomorrow|check.*later|busy now|i will send|will share|let me (check|confirm|find)|i'll (check|confirm|send)|vou ver|me aviso|regreso|reviens|luego|depois|manana|amanha)") {
-        $b = @{
-            en = "Take your time - I'll be right here when you're ready. If it helps, just send over the weight/dimensions and destination whenever you have them."
-            es = "Tómate el tiempo que necesites, estaré aquí cuando quieras. Cuando tengas el peso, las dimensiones y el destino, me los envías."
-            pt = "Sem pressa, estarei aqui quando precisar. Assim que tiver o peso, dimensões e destino, me passe."
-            fr = "Prenez votre temps, je serai là quand vous voudrez. Dès que vous avez le poids, les dimensions et la destination, envoyez-les moi."
-        }
-        return $b[$lang]
-    }
-    return $null
-}
-
-# 意图族 B(业务咨询):联系方式/计费/流程/时效/电池/砍价/比价/供应商。命中返回文本,未命中返回 $null
-# [2026-09-26 更像真人销售 §12.2 冲突 A]
-# 场景 (b) 的成品话术("我直接联系供应商"): 买家**有**供应商但拿不到尺寸 / 不愿意给联系方式时用。
-# 放在本函数**最前面**是必须的: 实测这两类句子会被更早的分支抢走 ——
-#   "i'd rather not share their contact" 命中 #1(问联系方式) → 回了我们的联系方式模板;
-#   "i can't get the dimensions from them" 命中 #6(砍价) → 回了"要准确尺寸才能报最优价"。
-# 两条都不是本场景该说的话。本分支判据很窄(H1 供应商 且 H2 拿不到/不愿给), 不覆盖既有任何场景。
-$script:SupplierContactAsk = @{
-    en = "If you can share your supplier's contact, I can confirm the cargo details with them directly - that way I get you an accurate quote faster, and you don't have to go back and forth."
-    es = "Si puede compartir el contacto de su proveedor, puedo confirmar los detalles de la carga directamente con ellos: así le doy una cotización precisa más rápido y usted no tiene que ir y venir."
-    pt = "Se puder compartilhar o contato do seu fornecedor, posso confirmar os detalhes da carga diretamente com eles - assim consigo uma cotação precisa mais rápido e você não precisa ficar indo e voltando."
-    fr = "Si vous pouvez partager le contact de votre fournisseur, je peux confirmer les détails de la marchandise directement avec lui - ainsi je vous obtiens un devis précis plus vite, sans allers-retours de votre part."
-}
-
-function Resolve-IntentInfo($c) {
-    $latestLower = $c.latestLower
-    $ctxAll = $c.ctxAll
-    $ctxLower = $c.ctxLower
-    $lang = $c.lang
-    $vars = $c.vars
-    $templates = $c.templates
-    $dataCollect = $c.dataCollect
-
-    # 0. [§12.2 冲突 A 场景 (b)] 有供应商, 但拿不到尺寸 / 不愿意给联系方式 → 主推"我直接联系供应商"
-    $hasSupplier = $latestLower -match 'supplier|vendor|factory|proveedor|fornecedor|供应商'
-    if ($hasSupplier) {
-        $cantGetDims = $latestLower -match '(can''t|cannot|can not|unable to|no way to|hard to|difficult to|don''t have access).{0,30}(get|obtain|find|measure|know).{0,30}(dimension|size|measurement|spec|尺寸|规格)'
-        $wontShare = $latestLower -match "(rather not|prefer not|not allowed|not permitted|not comfortable|won''t|will not|can''t|cannot|no puedo|nao posso|não posso).{0,30}(share|give|send|provide|pass on|pass along|compartir|dar|enviar|fornecer)"
-        if ($cantGetDims -or $wontShare) {
-            return (Resolve-Template $script:SupplierContactAsk[$lang] $vars)
-        }
-    }
-
-    # 1. 客户询问我方联系方式 → 提供（被问到才给）
-    if ($latestLower -match 'contact|whatsapp|wechat|phone|number|email|reach you|how to contact|联系方式|telefono|whats') {
-        $tpl = $templates.our_contact
-        if ($tpl) { return (Resolve-Template $tpl $vars) }
-    }
-    # 2. 询问计费/体积重规则（在 process 之前：how do you calculate 等不应命中流程模板）
-    if ($latestLower -match 'billing|volumetric|charge|how.*(calculate|count)|fee|计费|体积重|重量|como.*(calcula|conta)|quanto.*(cobra|pesa)') {
-        $tpl = $templates.billing_rule
-        if ($tpl) { return (Resolve-Template $tpl $vars) }
-    }
-    # 3. 询问流程/如何运作
-    if ($latestLower -match 'process|procedure|how (does|is|do|does it|will|does this)|step|work flow|流程|como funciona|cómo funciona|como é que') {
-        $tpl = $templates.process_overview
-        if ($tpl) { return (Resolve-Template $tpl $vars) }
-    }
-    # 4. 问时效（补充法语/西语/葡语）
-    if ($latestLower -match 'how long|transit|eta|arrive.*(day|time)|when.*(arrive|deliver)|多久|几天|什么时候|demora|cuanto.*(tarda|demora)|quanto.*(demora|tempo)|days to|delivery time|shipping time|combien de temps|quel délai|quel delai|cuánto tiempo|cuanto tiempo|quanto tempo|prazo|plazo|délai|delai|tempo de entrega|tiempo de entrega|temps de livraison') {
-        return "For air freight it usually takes 5-10 days, sea freight 35-45 days depending on the route. Once I have your goods details and destination, I can give you a more precise estimate."
-    }
-    # 5. 电池/锂电池/DG 危险品货物：合规信息（SDS/UN38.3）+ 常规缺失项
-    if ($latestLower -match 'battery|batteries|lithium|li-ion|li ion|dangerous goods|hazmat|hazardous|锂电池|电池|危险品|bateria|baterías|baterias|batterie|piles|pilha|pilas|power bank|powerbank') {
-        $hasSds = $ctxLower -match 'sds|un38|un 38|msds|safety data sheet|declaration|鉴定书|运输鉴定'
-        $bt = @{
-            en = "Thanks! Since the goods include batteries, please share the SDS and UN38.3 test report for DG compliance. "
-            es = "¡Gracias! Como la mercancía incluye baterías, comparta la SDS y el informe de prueba UN38.3 para el cumplimiento DG. "
-            pt = "Obrigado! Como a carga inclui baterias, compartilhe a SDS e o relatório de teste UN38.3 para conformidade DG. "
-            fr = "Merci ! La marchandise contenant des batteries, veuillez fournir la SDS et le rapport de test UN38.3 pour la conformité DG. "
-        }
-        if (-not $hasSds) {
-            $rest = @(Get-MissingInfo $ctxAll $dataCollect)
-            $q = $bt[$lang]
-            if ($rest.Count -gt 0) { $q += (Build-MissingQuestion $rest) }
-            else { $q += "Once I have those, I'll finalize your quote." }
-            return $q
-        }
-    }
-    # 6. 砍价/太贵/预算（补充西语/葡语：mejor precio=最好价格, preço=价格, barato=便宜）
-    if ($latestLower -match 'expensive|too high|too much|cheap|discount|budget|best price|lower|reduc|太贵|贵了|更便宜|mais barato|caro|más barato|caro|mejor precio|melhor preço|melhor preco|preço|preco|barato|economizar|poupar|negociar|regatear') {
-        return "I understand you're looking for the best rate. Our billing is based on the higher of gross vs volumetric weight, so accurate weight/dimensions help us give you the most competitive price. Share the exact details and I'll finalize the best option for you."
-    }
-    # 7. 比价/其他同行
-    if ($latestLower -match 'compare|another|other company|other agent|competitor|别的|其他.*(公司|代理)|outra|otra|compara') {
-        return "We offer full door-to-door service with warehouses across major Chinese cities, our own truck fleet and cargo insurance, which helps avoid extra charges others may add later. If you share your goods details and destination, I'll make sure you get a fair, transparent quote."
-    }
-    # 8. 买家表示没有供应商/无法联系供应商 → 引导提供货物详情（别套 follow_up_details）
-    #    [2026-09-26 更像真人销售 §12.2 冲突 A] 本句按场景拆分（老板已批准）：
-    #      (a) 买家**真没有**供应商（终端用户 / 货还没定工厂）→ 保留原话（我们并不需要供应商联系方式）
-    #      (b) 买家**有**供应商但拿不到尺寸 → 走"我直接联系供应商"主推说法（替买家干活，
-    #          顺手拿到供应商联系方式，供应商手上有装箱数据）
-    #    注意 (b) 只在"同一句里既提到供应商、又提到给不了尺寸/数据"时命中，改动面尽量小。
-    if ($latestLower -match "(no|don't have|dont have|do not have|doesn't have|doesnt have|without|not (have|find)|can't (find|get|reach)|dont (have|find|get|reach)|cannot (find|get|reach)|unable|no tengo|nao tenho|never had).*(supplier|vendor|factory|proveedor|fornecedor|供应商)|没有供应商") {
-        # (b) 有供应商但不给尺寸/给不了数据 —— 话术定义见本文件顶部的 $script:SupplierContactAsk
-        if ($latestLower -match '(supplier|vendor|factory|proveedor|fornecedor|供应商)') {
-            if ($latestLower -match "(dimension|size|measurement|spec|sizes|尺寸|规格)|(can't|cannot|dont|don't|won't|not able to|unable|rather not|prefer not|not allowed|private|confidential).{0,40}(share|give|send|provide|量|给|提供)") {
-                return (Resolve-Template $script:SupplierContactAsk[$lang] $vars)
-            }
-        }
-        $noSup = @{
-            en = "No problem at all! We don't strictly need supplier contact info - just tell us what you're shipping (goods type, total weight, packaging dimensions L*W*H) and the destination address, and we'll handle the quote and shipping from there."
-            es = "¡No hay problema! No necesitamos estrictamente el contacto del proveedor - solo díganos qué mercancía envía, el peso, las dimensiones del embalaje (L*A*H) y la dirección de destino, y desde ahí hacemos la cotización y el envío."
-            pt = "Sem problema! Não precisamos estritamente do contato do fornecedor - basta nos dizer a mercadoria, o peso, as dimensões (C*L*A) e o endereço de destino, e seguimos com a cotação e o envio."
-            fr = "Pas de souci ! Le contact du fournisseur n'est pas indispensable : indiquez-nous simplement la marchandise, le poids, les dimensions (L*l*H) et l'adresse de destination, et nous nous occupons du devis et de l'expédition."
-        }
-        return (Resolve-Template $noSup[$lang] $vars)
-    }
-    # 9. 提及供应商 → 引导供应商联系我们
-    if ($latestLower -match 'supplier|vendor|factory|proveedor|fornecedor|供应商|fornecedor') {
-        $tpl = $templates.follow_up_details
-        if ($tpl) { return (Resolve-Template $tpl $vars) }
-    }
-    return $null
-}
-
-# 意图族 C(数据/售后):货物信息/地址/索赔/查件/询价/兜底。始终返回文本
-function Resolve-IntentData($c) {
-    $latestLower = $c.latestLower
-    $ctxLower = $c.ctxLower
-    $lang = $c.lang
-    $vars = $c.vars
-    $templates = $c.templates
-    $missing = $c.missing
-    $hasAddr = $c.hasAddr
-    $hasWeight = $c.hasWeight
-    $meAskCount = $c.meAskCount
-    $waitTone = $c.waitTone
-    $context = $c.context
-
-    # 10. 买家主动提供货物信息（含数字/尺寸/地址等）→ 确认并只问缺失项
-    if (($ctxLower -match '\d+\s*(kg|kgs|kilo|cm|mm|m\b)') -or ($ctxLower -match '\d+\s*[x×*]\s*\d+') -or ($ctxLower -match 'address|addr|calle|rua|street|endere|direcci|地址|cep|postal')) {
-        if ($missing.Count -eq 0) {
-            return "Thanks for all the details! I'll finalize your exact quote and get back to you shortly."
-        } elseif ($missing.Count -le 3) {
-            # 追问上限:已问过 2 次 → 收尾等待,不再重复问
-            if ($meAskCount -ge 2) { return $waitTone[$lang] }
-            # 若此前我们已问过信息（上下文里有我方问句），用跟进语气，避免机械重复
-            if ($context -match '^\[ME\].*\?' ) {
-                return "Just a couple more details and we're set: " + (Build-MissingQuestion $missing)
-            }
-            return "Almost there! " + (Build-MissingQuestion $missing)
-        } else {
-            if ($meAskCount -ge 2) { return $waitTone[$lang] }
-            $tpl = $templates.first_inquiry
-            if ($tpl) { return (Resolve-Template $tpl $vars) }
-        }
-    }
-    # 11. 地址相关（买家提供地址时确认，问地址时给出）
-    if ($latestLower -match 'address|addr|calle|rua|street|endere|direcci|地址|cep|postal code|warehouse|收货|destinatario|consignee') {
-        if ($missing.Count -eq 0) {
-            return "Got it, thank you! All the details are confirmed. I'll proceed with the quote and keep you updated."
-        }
-        if ($hasAddr) {
-            return "Got it, thank you! Your delivery address is confirmed. I'll proceed and keep you updated."
-        }
-        if ($meAskCount -ge 2) { return $waitTone[$lang] }
-        $tpl = $templates.ask_address
-        if ($tpl) { return (Resolve-Template $tpl $vars) }
-    }
-    # 12. 延误/费用/责任索赔（2026-09-10 事故整改）：买家主张或暗示我方承担费用/损失/赔偿 → 致歉共情+核实+时限，不揽责不承诺金额。
-    #     聚焦"钱+责任"双重信号与明确索赔词，先于查件/询价分支命中；纯催单/纯询价不得进入（由测试保障）。
-    #     此分支只是规则引擎兜底话术；真实运行时 LLM 回复另有发送前责任承诺双检拦截（Test-FinancialCommitment）。
-    $claimPat = '(responsible|responsibility|liab\w*|fault|blame|responsab\w*|culpa).{0,60}(cost|fee|expense|rental|charge|pay|compensat|damage|loss|costo|gastos)|(cost|fee|expense|rental|charge|costo|gastos).{0,60}(responsible|liab\w*|you pay|we pay|cover|owe|refund|reimburse|compensat)|reimburse|refund|compensat|crane\s*(rental|cost|fee)|demurrage|detention|storage\s*fee|someone\s+needs\s+to|it\s+(isn\x27t|is not)\s+me|shouldn\x27t\s+have\s+to|customs\s+(hold|delay|fee|charge)|(delay|delayed)\s*.{0,40}(cost|fee|expense|rental|pay)'
-    if ($latestLower -match $claimPat) {
-        $cl = @{
-            en = "I'm really sorry for the trouble this has caused - that's not the experience we want for you. I'm checking with the team right now to find out exactly what's happening with the release and delivery schedule, and I'll get back to you today with a clear update. Regarding the costs on your end, I'll have that reviewed properly and come back to you with a straight answer."
-            es = "Siento mucho las molestias causadas; no es la experiencia que queremos para usted. Estoy verificando con el equipo ahora mismo qué está pasando exactamente con la liberación y el cronograma de entrega, y hoy le daré una actualización clara. Sobre los costos de su lado, haré que los revisen debidamente y le daré una respuesta clara y directa."
-            pt = "Sinto muito pelo transtorno causado; não é essa a experiência que queremos para você. Estou verificando com a equipe agora mesmo o que está acontecendo com a liberação e o cronograma de entrega, e volto hoje com uma atualização clara. Sobre os custos do seu lado, farei uma revisão adequada e voltarei com uma resposta clara."
-            fr = "Je suis vraiment désolé pour les désagréments causés ; ce n'est pas l'expérience que nous voulons pour vous. Je vérifie avec l'équipe en ce moment même ce qui se passe avec la libération et le calendrier de livraison, et je reviens vers vous aujourd'hui avec une mise à jour claire. Concernant les coûts de votre côté, je vais faire examiner cela correctement et vous revenir avec une réponse claire."
-        }
-        return $cl[$lang]
-    }
-    # 13. 查件/催进度（售后）：不做编造，给出明确的跟进承诺时限（在询价之前：where is my cargo 不应收到询价模板）
-    if ($latestLower -match 'status|tracking|track|where is|where.s|my cargo|my shipment|my package|my parcel|did you check|current update|progress|update on|latest|check on|what.s the (status|update)|how far|how is it going|estado|rastreo|status do|onde esta|où en est|ou en est|suivi|avancement') {
-        $st = @{
-            en = "Sorry for the wait - let me check with the warehouse right now and I'll get back to you with the latest status today."
-            es = "Disculpe la espera - estoy consultando con el almacén ahora mismo y le vuelvo con el estado actual hoy."
-            pt = "Desculpe a demora - vou verificar com o armazém agora e volto com o status atual hoje."
-            fr = "Désolé de l'attente - je vérifie auprès de l'entrepôt tout de suite et je reviens vers vous avec le statut actuel aujourd'hui."
-        }
-        return $st[$lang]
-    }
-    # 14. 询价/货物/发货 → 动态追问缺失信息（补充西语/葡语询价词）
-    if ($latestLower -match 'quote|price|cost|how much|报价|precio|preco|orçamento|orcamento|cotizacion|cuánto cuesta|cuanto cuesta|quanto custa|freight rate|shipping cost|ship|cargo|goods|deliver|enviar|import|运输|发货|flete|mercancia|enviar|encomenda|pedido|mercadería|mercaderia|custo') {
-        if ($missing.Count -eq 0) {
-            if ($hasWeight) { return "Thanks for all the details! I'll finalize your exact quote and get back to you shortly." }
-            return "Thanks! All key details are noted - I'll finalize your exact quote and get back to you shortly."
-        } elseif ($missing.Count -le 3) {
-            if ($meAskCount -ge 2) { return $waitTone[$lang] }
-            return "Almost there! " + (Build-MissingQuestion $missing)
-        } else {
-            if ($meAskCount -ge 2) { return $waitTone[$lang] }
-            $tpl = $templates.first_inquiry
-            if ($tpl) { return (Resolve-Template $tpl $vars) }
-            return "Hi {name}, could you please provide the weight, packaging dimensions (L*W*H), reference images and the recipient's address so I can quote you accurately?"
-        }
-    }
-    # 15. 默认兜底：动态追问
-    if ($missing.Count -gt 0) {
-        if ($meAskCount -ge 2) { return $waitTone[$lang] }
-        $tpl = $templates.first_inquiry
-        if ($tpl) { return (Resolve-Template $tpl $vars) }
-    }
-    return "Thanks for your message! Could you share the goods details (weight, dimensions L*W*H, reference images) and the recipient's address? Then I can arrange everything for you."
-}
-
-# 内置回复引擎：根据完整对话上下文 + 语料库生成回复。不依赖任何外部 LLM 会话。
-function Generate-Reply([object]$rules, [string]$convoName, [string]$latest, [string[]]$context) {
-    $c = New-ReplyContext $rules $convoName $latest $context
-    $r = Resolve-IntentEarly $c
-    if ($null -ne $r) { return $r }
-    $r = Resolve-IntentInfo $c
-    if ($null -ne $r) { return $r }
-    return (Resolve-IntentData $c)
-}
-
 # state 键标准化：去空白 + 小写，避免大小写/空格差异导致 dedup 失效
 function Get-StateKey([string]$name) {
     return $name.Trim().ToLowerInvariant()
@@ -431,7 +73,9 @@ function Get-StateKey([string]$name) {
 # 依据: 实测 86.4% 的买家从未给过尺寸, 而尺寸是报价硬需求(不能用重量+件数代替)。
 # 主推 = 主动提出"我直接联系供应商"(替买家干活 + 顺手拿到供应商联系方式 + 供应商手上有装箱数据);
 # 三种退一步说法仅在"买家没有供应商/不愿意给/就是个普通纸箱"时用。
-# 消费方: reply_agent_prompt.md §第三步之二、reply_playbook.md 指南 1、tests\reply_engine.tests.ps1。
+# 消费方(2026-10-03 起): lib\reply_gen.ps1::Get-ScenarioFallback 与 lib\reply_policy.ps1 的
+#   dimension_missing 场景、reply_scenarios.md 的 dimension_missing 小节、tests\dimension_guidance.tests.ps1。
+#   (旧的 reply_playbook.md 已归档到 docs\archive\；它从未被真正加载过。)
 # ⚠️ 本函数**只提供话术**, 不含任何价格/区间/折扣; 机器人在任何情况下不得声称"已联系供应商"。
 function Get-DimensionGuidance {
     return @{
@@ -656,6 +300,20 @@ function Test-ShouldReply {
         [int]$MinGapMinutes           = 5,        # 最小间隔(配置键 reply_min_gap_min, 缺省 5)
         [bool]$InPostSendCooldown     = $false,   # 是否在发送后冷却期内
         [int]$PostSendCooldownMinutes = 5,        # 发送后冷却(配置键 reply_post_send_cooldown_min, 缺省 5)
+        # ===== [SPEC 4.1 2026-10-03] A CONFIRMED NEW message must not be blocked by the
+        # old-message cooldown. Spec 4.1: "the 5-minute interval and the cooldown only suppress a
+        # repeat response to an OLD message; they must not unconditionally block an already
+        # confirmed new message."
+        #   ConfirmedNewMessage is only ever set from POSITIVE evidence that the newest buyer
+        #   message is not the one we already answered (see Test-ConfirmedNewBuyerMessage). It is
+        #   never inferred from a fail-open path.
+        #   When it is set, rows 3 and 4 (post-send cooldown / min gap) are SKIPPED and row 4b
+        #   applies a small wall-clock floor instead, so two sends still cannot happen back to back
+        #   in the same instant. Identity checks, the ledger gate, the 2-round transient defence,
+        #   the write lock and the page-health gate are all unaffected.
+        [bool]$ConfirmedNewMessage    = $false,
+        [int]$NewMessageFloorSeconds  = 20,       # 新消息的最小墙钟间隔(秒); <=0 表示不设
+        [double]$SecondsSinceLastSend = -1,       # 距上次成功发送的秒数; -1 = 未知/从未发过
 
         # ===== 仅为日志与既有测试兼容保留; 判定逻辑**不得**再读它们(§2.2 / §3.1) =====
         [string[]]$ConvoLines,
@@ -677,23 +335,62 @@ function Test-ShouldReply {
     if ($PendingSeenRounds -lt $RequiredSeenRounds) {
         return [pscustomobject]@{ Reply = $false; Reason = 'NOT_IN_PENDING_LIST' }
     }
-    # 行 3: 发送后冷却期内 ⇒ 不发。数据面与行 4 共用 $ctx.lastSendAt(调用方传入判定结果)。
-    if ($InPostSendCooldown) {
-        return [pscustomobject]@{ Reply = $false; Reason = 'POST_SEND_COOLDOWN' }
-    }
-    # 行 4: 距上次成功发送 < 最小间隔 ⇒ 不发(§0 硬判据 2: 同一买家在最小间隔内不可能收到第 2 条)。
-    #   -1(= 从未发过)不命中本行; 间隔"刚好等于"最小间隔时放行(严格小于才拦)。
-    if ($MinutesSinceLastSend -ge 0 -and $MinutesSinceLastSend -lt $MinGapMinutes) {
-        return [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
+    # 行 3/4 的适用条件: 它们只用于抑制"旧消息"的重复响应。已确认的新消息走行 4b。
+    if (-not $ConfirmedNewMessage) {
+        # 行 3: 发送后冷却期内 ⇒ 不发。数据面与行 4 共用 $ctx.lastSendAt(调用方传入判定结果)。
+        if ($InPostSendCooldown) {
+            return [pscustomobject]@{ Reply = $false; Reason = 'POST_SEND_COOLDOWN' }
+        }
+        # 行 4: 距上次成功发送 < 最小间隔 ⇒ 不发(§0 硬判据 2: 同一买家在最小间隔内不可能收到第 2 条)。
+        #   -1(= 从未发过)不命中本行; 间隔"刚好等于"最小间隔时放行(严格小于才拦)。
+        if ($MinutesSinceLastSend -ge 0 -and $MinutesSinceLastSend -lt $MinGapMinutes) {
+            return [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
+        }
+    } else {
+        # 行 4b: [SPEC 4.1 2026-10-03] 已确认的新消息 —— 旧的冷却/最小间隔不再拦它, 只保留一个
+        #   很小的墙钟下限, 防止同一瞬间连发两条。这个下限不是平台规则, 是"两条消息不可能在
+        #   同一时刻各自被处理完"的物理下限; 取 -1(未知/从未发过)时不命中。
+        if ($NewMessageFloorSeconds -gt 0 -and $SecondsSinceLastSend -ge 0 -and $SecondsSinceLastSend -lt $NewMessageFloorSeconds) {
+            return [pscustomobject]@{ Reply = $false; Reason = 'NEW_MESSAGE_FLOOR' }
+        }
     }
     # 行 5: 以上都不命中 ⇒ **在待回复列表里且不在冷却/间隔内 ⇒ 必回**(§0 硬判据 1)。
     return [pscustomobject]@{ Reply = $true; Reason = 'IN_PENDING_LIST' }
 }
 
+# [SPEC 4.1 2026-10-03] Positive-evidence test for "the newest buyer message is genuinely new".
+#   Returns $true ONLY when the ledger is in the current "<hash>|<count>" format AND the freshly
+#   scraped conversation actually differs from what the ledger records - either the buyer wrote
+#   more messages, or the newest buyer text changed.
+#   Everything else returns $false (fail-closed), because this result is what authorises skipping
+#   the old-message cooldown. In particular an unparseable or legacy ledger key never authorises it.
+#   Pure function: no file access, no page access, no side effects.
+function Test-ConfirmedNewBuyerMessage {
+    [CmdletBinding()]
+    param(
+        [string]$LedgerKey,
+        [int]$BuyerCount = -1,
+        [string]$NormLastBuyerHash
+    )
+    if ($BuyerCount -lt 1) { return $false }
+    if ([string]::IsNullOrWhiteSpace($LedgerKey)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($NormLastBuyerHash)) { return $false }
+    $parts = @([string]$LedgerKey -split '\|')
+    if ($parts.Count -lt 2) { return $false }
+    if ([string]$parts[1] -notmatch '^\d+$') { return $false }
+    $savedCount = 0
+    if (-not [int]::TryParse([string]$parts[1], [ref]$savedCount)) { return $false }
+    $savedHash = [string]$parts[0]
+    if ([string]::IsNullOrWhiteSpace($savedHash)) { return $false }
+    if ($BuyerCount -gt $savedCount) { return $true }
+    if ($NormLastBuyerHash -ne $savedHash) { return $true }
+    return $false
+}
+
 # [FIX-DUP-GUARD 2026-09-27] 「这条买家消息是不是我们已经回过的同一条」—— 纯函数: 只比对证据, 不做决定。
 #
 #   为什么需要它(实测 2026-09-27 16:31-16:50): 新判据只答"该会话在不在待回复列表里", 按 §2.2 明文
-#   不再读账本 ⇒ "账本已经证明这条回过"这一事实**无处落地**。于是买家一句话没变(Bohdana:
+#   不再读账本 ⇒ "账本已经证明这条回过"这一事实**无处落地**。于是买家一句话没变(Buyer-A:
 #   buyerMsgs=9 恒定 / lastBuyerHash 恒定 / 列表预览逐字相同)却被连回 3 次
 #   (16:31:47 / 16:41:09 / 16:50:35, 间隔 9 分半) —— 每次都走"冷却到期 ⇒ 判据放行 ⇒ 再发一条"。
 #

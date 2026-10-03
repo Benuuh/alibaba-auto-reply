@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "09_material_promised",
+  "title": "Buyer promises the sizes tomorrow",
+  "category": "buyer promises details later",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The promise is a buyer statement in the lines; the promised field must be treated as promised, not as missing.",
+  "conversationLines": [
+    "[ME] Could you share the carton sizes when you have them? @@TS:1791018000000",
+    "[BUYER] I will send you the sizes tomorrow, I am not in the office today. @@TS:1791018720000 @@OT:SSB3aWxsIHNlbmQgeW91IHRoZSBzaXplcyB0b21vcnJvdywgSSBhbSBub3QgaW4gdGhlIG9mZmljZSB0b2RheS4="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "material_promised",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:11:00Z",
+    "sentAt": "2026-10-03T09:13:00Z"
+  },
+  "fakeModel": {
+    "mode": "null",
+    "compliantReply": "Sounds good, no rush at all. Send them over whenever they are ready and I will take it from there."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "promisedFields": [
+      "dimension"
+    ],
+    "guidanceKey": "material_promised"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(share|send|provide|confirm|need|tell me|let me know|what(?:'s| is| are))\\b[^.!?]{0,40}\\b(sizes?|dimensions?|measurements?|l\\s?x\\s?w\\s?x\\s?h)\\b",
+      "why": "the field was promised; re-asking it is the nagging failure"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "accepts-the-promise",
+      "check": "mustMatch",
+      "value": "(?i)(no rush|whenever|sounds good|no problem|sure|take your time|ready)",
+      "why": "acknowledge without pressure"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "a promise is answered in one short line (harness bound; the production fallback uses two)"
+    },
+    {
+      "id": "only-askable",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "the decision allows no question at all here"
+    },
+    {
+      "id": "no-question",
+      "check": "asksAQuestion",
+      "value": false,
+      "why": "stop asking the promised field"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "I will send you the sizes tomorrow, I am not in the office today.",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

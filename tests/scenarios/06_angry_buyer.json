@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "06_angry_buyer",
+  "title": "Angry buyer, two weeks with no answer",
+  "category": "angry buyer",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The prior [ME] apology is the fact that an apology was already sent once; the cause of the delay is NOT in the lines.",
+  "conversationLines": [
+    "[ME] I am sorry for the delay, I am looking into it. @@TS:1791018000000",
+    "[BUYER] This is ridiculous, I have been waiting two weeks and nobody answers me. @@TS:1791019800000 @@OT:VGhpcyBpcyByaWRpY3Vsb3VzLCBJIGhhdmUgYmVlbiB3YWl0aW5nIHR3byB3ZWVrcyBhbmQgbm9ib2R5IGFuc3dlcnMgbWUu"
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "complaint",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:15:00Z",
+    "sentAt": "2026-10-03T09:31:00Z"
+  },
+  "fakeModel": {
+    "mode": "violation_then_null",
+    "violationReply": "I hear you. Sorry for the inconvenience, our system had an issue and the supplier did not reply. I will check with my manager and get back to you by tomorrow morning.",
+    "compliantReply": "I am sorry about this, and I understand why you are frustrated. I am checking the actual status right now, and I will come back to you as soon as I have something concrete."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "complaint_review",
+    "allowTimeCommitment": false,
+    "allowAdvance": false,
+    "guidanceKey": "complaint"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\bmanager|supervisor|boss\\b",
+      "why": "banned phrase: never defer to a superior"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)sorry for the inconvenience\\s*[.!]?\\s*$",
+      "why": "an apology with nothing after it is explicitly forbidden"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(the|our)\\s+(system|platform|supplier|factory)\\s+(had|has|did|is)\\b",
+      "why": "do not blame the system, the supplier or the buyer"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)^\\s*(i am sorry|sorry)[^.!?]*[.!]?\\s*$",
+      "why": "a bare apology is not an answer"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(refund|reimburse|compensate|compensation|out of pocket)\\b",
+      "why": "liability/fee commitment is a hard bound"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "acknowledges",
+      "check": "mustMatch",
+      "value": "(?i)(sorry|apolog)",
+      "why": "a complaint must be acknowledged"
+    },
+    {
+      "id": "says-what-happens-next",
+      "check": "mustMatch",
+      "value": "(?i)(check|confirm|status|looking into|come back)",
+      "why": "must state the concrete action"
+    },
+    {
+      "id": "not-the-same-apology",
+      "check": "notSameAsPriorMe",
+      "value": true,
+      "why": "must not repeat the previous apology verbatim"
+    },
+    {
+      "id": "no-deadline",
+      "check": "noTimeCommitment",
+      "value": true,
+      "why": "the notify channel is unverified, so no deadline may be promised"
+    },
+    {
+      "id": "asks-nothing",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "no cargo questionnaire while the buyer is upset"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "This is ridiculous, I have been waiting two weeks and nobody answers me.",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true,
+  "expectModelCalls": 1,
+  "expectSource": "FALLBACK"
+}

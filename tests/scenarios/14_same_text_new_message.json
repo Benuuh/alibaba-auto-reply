@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "14_same_text_new_message",
+  "title": "Identical buyer text sent again with a new timestamp",
+  "category": "same text as a new message",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The two buyer lines are byte-identical except for @@TS, so message identity must come from the timestamp, not from the text (msg_norm.ps1:112-116).",
+  "conversationLines": [
+    "[ME] Thanks for your patience - I am checking the status. @@TS:1791018000000",
+    "[BUYER] any update? @@TS:1791018600000 @@OT:YW55IHVwZGF0ZT8=",
+    "[ME] I am confirming it with the warehouse now. @@TS:1791018660000",
+    "[BUYER] any update? @@TS:1791019800000 @@OT:YW55IHVwZGF0ZT8="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "delivery_status",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:20:00Z",
+    "sentAt": "2026-10-03T09:31:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "I am on it - I am confirming the actual status now and will come back to you as soon as I have it."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "fulfillment_status",
+    "allowTimeCommitment": false,
+    "guidanceKey": "delivery_status"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)confirming it with the warehouse now",
+      "why": "must not resend the previous holding line"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)checking the status\\s*[.!]?\\s*$",
+      "why": "must not resend the earlier holding line"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(arrived|on the water|in transit|cleared customs)\\b",
+      "why": "no shipment status is established"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "treats-it-as-new",
+      "check": "mustMatch",
+      "value": "(?i)(confirm|check|status|on it)",
+      "why": "the repeated text arrives as a NEW message and must get a real answer"
+    },
+    {
+      "id": "new-information",
+      "check": "notSameAsPriorMe",
+      "value": true,
+      "why": "must not repeat what we already sent"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "delivery_status is at most two sentences"
+    },
+    {
+      "id": "no-deadline",
+      "check": "noTimeCommitment",
+      "value": true,
+      "why": "no verified notification channel, so no deadline"
+    }
+  ],
+  "expectBuyerCount": 2,
+  "expectLatestBuyerText": "any update?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true,
+  "expectDistinctIdsForSameText": true
+}

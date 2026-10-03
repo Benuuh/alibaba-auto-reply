@@ -1,379 +1,120 @@
-# Alibaba-Auto-Reply
+﻿# Alibaba Auto Reply
 
-**阿里巴巴国际站卖家消息自动回复工具（物流/货运场景）**
+当前版本：**0.0.1**，对应 Git 标签 `v0.0.1`。版本号记录于 [VERSION](VERSION)。
 
-24/7 自动监控阿里国际站 OneTalk 卖家消息中心：买家询盘进来 → 自动识别意图 → LLM 或规则引擎生成回复 → 发送 → 去重；货物信息齐了自动推送到你的企业微信提醒报价。专为**跨境物流/货运代理**业务设计（中美专线、海空运、DDP 门到门、FBA 头程等）。
+阿里巴巴国际站 OneTalk 卖家消息自动接待工具，面向跨境物流与货运代理业务。它读取待回复会话，整理买家提供的货物信息，生成简短英文回复；资料齐全时提醒人工报价。
 
-> **告警出口（2026-09-26 变更）**：推送出口已从"`wecom-connector` 的本地长连接桥"迁到 **dsh-im 主动投递 HTTP 接口**（`POST /api/dsh-im/delivery/messages`）。原因是该长连接桥与 dsh-im 插件会抢同一个企微机器人（`exit_on_kicked_offline`）而互相顶下线。**旧桥已连同 `control-agent` 一并物理移除**（本轮"精简与收口"，净减约 4,000 行；靠 git 历史可完整回退）⇒ **告警只剩 dsh-im 单通道**，`DSH Desktop` 未运行时告警哑火属**已知风险**；见下文「企微通道」一节与 `docs\KNOWN_EXCEPTIONS.md` **E-24**。
+项目以 Windows PowerShell 为主，通过 Chrome CDP 操作页面，可选用 Accio Desktop 网关增强历史消息读取。通知通过本机 DSH 的 dsh-im 接口发送到企业微信。
 
-> English: An automated reply system for Alibaba.com OneTalk seller messages, built for freight-forwarding businesses. It monitors buyer inquiries 24/7, replies via a DeepSeek LLM with a rule-engine fallback (19 scenario branches), and pushes quote-ready reminders to WeCom. As of 2026-09-26 the push outlet is the **dsh-im proactive-delivery HTTP endpoint** rather than the legacy local WebSocket bridge (the bridge and the dsh-im plugin competed for the same WeCom bot and kicked each other offline).
+> 文档更新：2026-10-04。当前工作区已修复回复模块加载路径并移除 waimao 模块，监控与健康任务保持停用。新版回复链经过离线验证，尚未完成真实模型与发送验收。运行状态和已确认缺口见 [当前状态](docs/当前状态.md)。
 
----
+## 阅读入口
 
-## ✨ 特性
-
-| 能力 | 说明 |
+| 需要了解什么 | 文档 |
 |---|---|
-| 🔄 **24h 自动监控** | CDP 控制 Chrome 登录 OneTalk，主循环实测 **~9 秒/轮**（页面正常时；`Start-Sleep 12` 为上限，含自愈动作会拉长），断线自动自愈（分级：软刷新 → `chrome_ensure` 重启 Chrome + 自动登录），登录态独立 profile 持久保存 |
-| 🔌 **Accio 读取增强（可选）** | 官方 Accio Desktop 本地网关只读拉取全量历史（无 30 天墙）；影子对比 → 读取开关灰度，任何失败自动回退 CDP；发送保持 CDP（未启用） |
-| 🤖 **双引擎回复** | DeepSeek LLM 生成自然回复（意图识别 + 质量红线 + 发送前禁词/责任承诺双检）；LLM 失败/超时自动回退规则引擎（19 类场景） |
-| 🌍 **多语言买家** | 中/英/西/葡/法买家消息识别，统一美式英文回复 |
-| 📦 **信息收集** | 自动追问缺失货物信息（总重/尺寸/图片/收货地址），同字段最多追问 2 次，买家承诺提供后不再追问 |
-| 📱 **企微告警推送** | 出口为 **dsh-im 主动投递**（`POST 127.0.0.1:<dsh-host-port>/api/dsh-im/delivery/messages`，字段严格为 `botId`+`targetId`+`text`）；推送出口统一收敛在 `scripts\lib\wecom.ps1` 一处，7 个调用点共用；数据齐全（重量+尺寸+地址）实时推送（24h 节流） |
-| 💓 **每日通道心跳** | **每天一条**"系统正常：N 项检查全部通过"推企微（`heartbeat_hour`，缺省 9 点；由 15 分钟健康 tick 触发 ⇒ 当天首个 ≥ 该点的 tick 送达）。**只在全部检查 OK 时发**；有故障时由既有告警路径负责。**它存在的意义是"该来没来"**：通道断掉时，通知你的那条路本身就是断的那条（2026-09-26 加，见 `docs\KNOWN_EXCEPTIONS.md` E-17 残留风险） |
-| 🎛️ **自然语言远程控制** | 企微发任意自然语言指令，经 owner 校验 + 确认闸门后派发执行 agent 执行并回发结果。**2026-09-26 起由 DSH agent 承担**（原 `control-agent` 已退休并**物理移除**，见 `docs\KNOWN_EXCEPTIONS.md` E-20 / **E-24**） |
-| 📊 **质量闭环** | 每日质量报告 → 规则自动提炼（40 条上限 + 阈值自动合并）→ 周报（含国别分布）+ 沉睡买家唤醒；**质量报告/周报生成后自动推企微摘要**（统计+重点项+文件名，可开关） |
-| 🖼️ **附件识别** | 买家图片/文档（PDF/Excel/CSV/Word）自动识别：图片走视觉多模态、文档解析文本或渲染扫描件；明确可见的重量/尺寸/箱数/单号机会性提取入货物档案（带来源标记，不臆造） |
-| 📈 **数据看板** | `dashboard.ps1` 手动生成无 PII 的 HTML 聚合看板（回复量/LLM 成功率/来源分布） |
-| 🧩 **组件可复用** | `doc-reader`、`accio-client`、`email-verify` 各自独立成目录、独立测试（原 `wecom-connector`、`control-agent` 两个企微桥已于 2026-09-26 **物理移除**，见 `docs\KNOWN_EXCEPTIONS.md` E-24） |
-| 🛡️ **安全设计** | 凭据唯一文件（`credentials.md`）、目录隔离、`status.ps1` 敏感审计、`pre-commit/pre-push` 扫描、PII 仅存本机 |
-| 🔍 **买家档案** | 自动抓取买家国家/注册时间，注入 LLM 上下文个性化回复 |
-| 🔕 **人工接管白名单** | 企微发"白名单 添加 <客户名>"即不再自动回复该客户：只读留快照+新消息提醒，报价/唤醒免打扰，移出即恢复 |
+| 部署、配置、启停、排查与验证 | [部署与运维](README_部署说明.md) |
+| 核心模块如何配合、改动应该落在哪里 | [项目地图](docs/项目地图.md) |
+| 当前启用状态、未完成项与验收边界 | [当前状态](docs/当前状态.md) |
+| 执行者的操作约束 | [项目操作说明](SKILL.md) |
+| 历史问题与变更原因 | [已知例外](docs/KNOWN_EXCEPTIONS.md)、[变更记录](docs/CHANGELOG.md) |
+| 文档之间的职责 | [文档维护约定](docs/文档权威约定.md) |
 
-## 🏗️ 架构
+## 能力与边界
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ monitor.ps1 (常驻, ~9s/轮)                                    │
-│  抓待回复列表 → 打开会话 → 提取消息(1000字符) → 去重(hash+TS)   │
-│   → Test-PageHealth(页面判据) → LLM/规则引擎 → 发送校验         │
-│   → 买家档案 / 报价提醒 / 告警                                  │
-└──────┬──────────────────────────────────────────┬───────────┘
-       │ CDP(9222)                                │ HTTP(推送出口)
-┌──────▼───────┐   ┌──────────────┐   ┌───────────▼────────────────┐
-│ Chrome        │   │ DeepSeek     │   │ lib\wecom.ps1               │
-│ (独立 profile)│   │ LLM API      │   │  Send-WecomMessage(唯一出口) │
-│  OneTalk 页面 │   │ (无 key 落盘)│   │   7 个调用点共用             │
-└──────┬───────┘   └──────────────┘   └───────────┬────────────────┘
-       │ CDP 探针(Test-PageHealth)                 │ POST /api/dsh-im/delivery/messages
-       │                                          ▼
-       │                            ┌──────────────────────────────┐
-       │                            │ DSH Host (本机 127.0.0.1)     │
-       │                            │  dsh-im 插件 → 企微长连接     │
-       │                            └──────────────────────────────┘
-       │
-┌──────▼──────────────── watchdog.ps1 (30s) 三重守护 ────────────────┐
-│ ① monitor 进程  ② 日志新鲜度(240s)  ③ CDP 兜底(chrome_ensure)      │
-└───────────────────────────────────────────────────────────────────┘
-（原第 ④ 项「企微保活(wecom_start.ps1) + 交接门」已于 2026-09-26 随两套退休
-  告警桥**物理移除**（本轮"精简与收口"）；更早的第 ⑤ 项 control-agent 保活
-  亦已移除。企微远程控制能力现由 DSH agent 承担 ⇒ **告警只剩 dsh-im 单通道**，
-  DSH Desktop 未运行时哑火属已知风险 —— 见 docs\KNOWN_EXCEPTIONS.md E-20 / E-24）
-```
-
-**页面判据（2026-09-26）**：`Test-PageHealth` 的判定抽成纯函数 `Get-PageHealthVerdict`，新增**可见性维度**——
-`.status-tip` 的"网络连接已经断开"文案在**重连成功后仍残留在 DOM**，但此时容器 `.connection-status-container`
-被父级压成 `offsetHeight=0`（自带 `overflow:hidden`）。旧判据只看文案 ⇒ 业务可用却恒判 `PageDown=True`
-（实测导致每 10 分钟无谓重启一次 Chrome）。现改为"文案在**且**容器可见"才判 down，探针缺该字段时退回旧行为。
-
-## 🚀 快速开始
-
-**前置条件**：Windows 10+、Chrome、PowerShell 5.1、Node.js 18+（`tools\doc-reader` / `tools\email-verify` 需要）。
-
-**完整部署手册见 [`README_部署说明.md`](README_%E9%83%A8%E7%BD%B2%E8%AF%B4%E6%98%8E.md)**（凭据、Chrome 登录、告警出口、计划任务、回滚）。最简链路：
-
-```powershell
-# 1. 复制配置模板并编辑（路径）；创建 credentials.md
-Copy-Item scripts\config.json.example scripts\config.json
-
-# 2. Chrome 自愈：启动 Chrome + 导航 OneTalk + 自动登录
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\chrome_ensure.ps1
-
-# 3. 启动监控 + 4. 启动守护：⛔ 一律走计划任务
-#    （禁止 Start-Process —— 代理会话启的常驻进程会被回收 E-12；-RedirectStandard* 在本机必抛 E-18）
-Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'   # 拉起 watchdog，它再带起 monitor
-
-# 5. 健康检查
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
-```
-
-**credentials.md**（所有敏感信息只存这里，字段名不可改）：账号(account) / 密码(password) / API Key(api_key) / 企微 Bot ID(wx_bot_id) / 企微 Secret(wx_bot_secret)。
-
-## ⚙️ 配置
-
-| 文件 | 作用 |
+| 能力 | 当前实现 |
 |---|---|
-| `scripts\config.json`（由 `.example` 复制） | 集中路径配置（换机只改它）+ `cdp_port` + `report_push_enabled`（报告推送开关，缺省 true）+ `heartbeat_hour`（每日心跳时点，缺省 9）+ Accio 开关 `accio_shadow` / `accio_read_enabled` / `accio_send_enabled`（缺省全 false）+ **告警出口 `dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`** + **公海模块 `gonghai_*` 键（缺省关）**；经 `scripts\config.ps1` 统一读取。**键名/默认值/怎么填见 `scripts\config.json.example`**（模板是仓库里唯一的 schema 记录 ⇒ 增删键必须先改 `.example`，由 `tests\docs_consistency.tests.ps1` 强制）；公海模块的硬下限（间隔 ≥90s、单次 ≤10 条）由代码强制；**每日总量已取消**（`gonghai_daily_cap` = 0 = 不限，0/负数 = 不限、正数 = 上限，判据唯一实现在 `Test-GonghaiDailyCapReached`），见 `scripts\gonghai\gonghai_lib.ps1` |
-| `scripts\reply_rules.json` | 语料库：品牌/价格准则/收集字段/模板/规则（编辑后立即生效） |
-| `scripts\reply_agent_prompt.md` | LLM 提示词：意图识别 + 质量红线（编辑后立即生效） |
-| `llm_config.json` | LLM 非敏感配置（model=`deepseek-v4-flash` / temperature / max_tokens / timeout / endpoint / `thinking:disabled`，**不存 key**） |
-| `data\alert-channel.handover.json` | **告警通道交接标记**（历史机制：存在 ⇒ 旧企微长连接保活让路）。**2026-09-26 收口后旧桥已物理移除，该标记与交接门一并作废**（见 `docs\KNOWN_EXCEPTIONS.md` E-24） |
+| 待回复会话处理 | 连续扫描待回复列表，检查页面、会话身份、去重状态与人工接管名单 |
+| 回复决策 | 按当前诉求、已知资料和对话记录选择场景，控制允许追问的字段 |
+| 回复生成 | LLM 生成，必要时最多重写一次；失败时使用同场景固定话术 |
+| 内容检查 | 发送前检查禁词、报价信息、联系方式交换、责任承诺等模式；检查范围见代码 |
+| 多语言输入 | 接收买家原文；提示词要求统一使用美式英文 |
+| 图片与文档 | 图片走多模态，文档转文本或渲染图；只提取明确可见的信息 |
+| 资料收集与报价提醒 | 汇总重量、尺寸和地址，齐全时通知人工；不自动出报价 |
+| 人工接管 | 名单买家跳过自动回复；对已有人工作答的会话让路 |
+| 历史消息增强 | Accio 读取失败或与页面内容不匹配时回退 CDP |
+| 质量改进 | 分析报告生成建议，经人工接受后单独应用，带基准哈希、备份和回滚 |
+| 守护与恢复 | watchdog 检查监控进程、日志和 CDP；health_check 另做健康检测并可能拉起守护 |
+| 扩展业务 | OKKI 商机相关脚本、公海认领与破冰链路独立存在 |
 
-> ⚠️ 原表内的 `tools\wecom-connector\config.json` 与 `tools\control-agent\config.json` 两行已删除：
-> 两个组件及其目录已于 2026-09-26 **物理移除**，不再是本项目配置面的一部分（见 **E-24**）。
+人工待办交接尚未接通。新消息的冷却豁免在完整监控链中仍被后续限流覆盖。规则文件的部分字段没有生产消费方，不能假定编辑或应用建议后就会影响模型。具体证据见 [当前状态](docs/当前状态.md)。
 
-## 🧠 工作原理
+## 消息处理链
 
-**自动回复闭环**（实测 ~9 秒一轮）：切"待回复"标签 → 抓列表 → 逐会话（一次 CDP eval 完成打开+会话名校验+消息提取）→ 页面判据 `Test-PageHealth` → 去重（消息 hash+时间戳 vs `state.json`，已回复进递增冷却）→ 生成回复（LLM 优先，失败回退规则引擎）→ 发送（原生 setter + 清空校验）→ 数据齐全检测 → 经 `lib\wecom.ps1` 推送报价提醒。
+~~~mermaid
+flowchart TD
+    A[OneTalk 待回复列表] --> B[monitor：页面、人工接管与会话检查]
+    B --> C[reply_engine：待回复确认、去重与时间门禁]
+    C --> D[msg_norm：消息排序、身份和资料整理]
+    D --> E[reply_policy：场景和允许追问的字段]
+    E --> F[reply_gen：模型生成与一次可选重写]
+    F --> G[发送前内容检查]
+    G --> H[send：会话核对与发送]
+    H --> I[仅成功后更新去重状态]
+    I --> J[资料齐全则提醒人工报价]
+~~~
 
-**分级自愈**：页面判据为 down 时先软刷新（`reload_idle_min` 空闲才动），连续多轮才升级到
-`chrome_ensure.ps1 -ForceRestart`（按 profile 精确匹配重启 Chrome → navigate 回 OneTalk → 自动登录 → 等数据面恢复）。
-升级阈值递增（3 → 6 → 12 轮）、每次重启后有 **10 分钟静默期**、并设**硬上限 4 次**；
-达上限后只告警、停止自动重启（`PAGE-HEAL-ALERT-ONLY`）。
-> 这些节流参数由真实事故倒推而来：早期"验证窗口 25s + 升级周期 90s"会导致**每 90 秒掐断一次正在握手的 IM 长连接**，17 次重启全部无效。
+模型负责措辞；代码先决定场景和允许追问的资料。模型不可用时，固定话术继续使用该场景决策。附件处理还可能额外调用模型提取信息，HTTP 层也可能重试，因此“生成一次、重写一次”不等于整个会话只发生两次请求。
 
-**规则引擎 19 类场景**：指责不读/拒绝/感谢/简短确认/问 AI/问候/稍后回来/联系方式/流程/计费/时效/电池合规/砍价/比价/无供应商/信息提供/地址/查件/默认追问——实现见 `scripts\reply_engine.ps1`，分支清单见 `SKILL.md` 或测试 `tests\reply_engine.tests.ps1`（119 断言）。
+## 目录结构
 
-**质量闭环**：05:00 质量报告（`analyze_replies.ps1`）→ 05:30 LLM 自动提炼（`auto_optimize.ps1`，精确去重 + never 保留最新 40 条 + 阈值自动调用 `consolidate_prompt.ps1` 合并归档）→ 次日报告对比；周报（每日 08:00 + `StartWhenAvailable` 补跑，含国别分布 + nudge 唤醒；每周幂等守卫保证一周只真跑一次，其余触发走 `WEEKLY-SKIP`）。
-
-## 📱 企微通道与远程控制
-
-自 2026-09-07 起企微能力曾由两个独立可复用组件提供（旧六命令轮询体系已退役归档）。
-**2026-09-26 收口：两个组件均已物理移除**（净减约 4,000 行 ≈ 全仓 24%；`git rm`，靠 git 历史可完整回退）：
-
-- ~~**wecom-connector**~~：Node 常驻，官方 WebSocket 长连接，HTTP 桥 `127.0.0.1:19886`。**已移除** ⇒ `19886` 不再监听。**禁止再以任何形式启动该桥**（与 dsh-im 抢同一企微机器人会互踢）。复活路径见 `docs\KNOWN_EXCEPTIONS.md` **E-24**。
-- ~~**control-agent**~~：企微自然语言远程控制桥（曾把企微指令 → owner 校验 → 节流 → 确认闸门 → 外部执行 agent → ≤200 字回发）。**失效三层**：① 唯一入口旧企微桥 `19886` 已退役；② 未迁移到 dsh-im 新通道（全目录搜 `dshim` 命中 0）；③ `owner_userid` 被填成占位符 `owner1` ⇒ **所有指令被判"非本人"静默丢弃**（当时实测 `history.jsonl` 6 条：09-07 两条成功，09-14 起四条全 `ignored-non-owner`）。**已移除**，能力现由 **DSH agent** 承担；复活**必须先接 dsh-im 新通道并清掉 `owner_userid` 占位符**。详见 E-20 / **E-24**。
-- ✅ **仍然在用的唯一告警出口**：`scripts\lib\wecom.ps1`（名字是历史命名，实为 **dsh-im 投递适配层**）—— 见下节。
-
-## 🔀 告警推送出口（2026-09-26；交接门已随旧桥移除作废）
-
-**事故背景（实测）**：`wecom-connector` 的官方长连接与 **dsh-im 插件**接入的是**同一个企微机器人**，而旧桥配置 `exit_on_kicked_offline: true` ⇒ **谁后连谁把对方顶下线**。实测互踢时间线：旧桥 `AUTH-OK` → 87 秒后被 `KICKED-OFFLINE`；watchdog 每 30s 再把它拉起来，如此往复。更严重的是旧启动器在一次拉起中**悬死 17 分钟**，把 watchdog 的守护整体堵停。
-
-**解法（当时两层 → 现只剩第二层）**：
-
-1. ~~**交接门**~~（`scripts\wecom_start.ps1` + `scripts\watchdog.ps1` 各一道）：标记 `data\alert-channel.handover.json` 存在且 `DSH Desktop` 在 ⇒ 主动让路；逃生门 `WECOM_FORCE_RUN=1`。
-   **[2026-09-26 收口] 该门与两个启动器已一并物理移除** —— 旧桥不复存在，无需再"让路"；`data\alert-channel.handover.json` 与 `WECOM_FORCE_RUN` **均已失效**，不要再依赖它们（见 `docs\KNOWN_EXCEPTIONS.md` **E-24**）。
-2. **推送出口迁移（仍然生效，唯一出口）**：`scripts\lib\wecom.ps1::Send-WecomMessage` 的内部实现改为调用 dsh-im 主动投递 HTTP 接口。
-   **函数名与返回码契约保持不变**（`SENT_OK` / `SERVICE_DOWN` / `NO_RECEIVER` / `SEND_ERROR`），
-   因此 `health_check.ps1` / `monitor.ps1` / `watchdog.ps1` / `lib\quote.ps1` / `lib\report_push.ps1`
-   这 **7 个调用点一行都不用改**。配置项：`dshim_delivery_url` / `dshim_bot_id` / `dshim_target_id`。
-   > ⚠️ **回归风险 R1**：删掉企微兜底后告警只剩这一条路。`DSH Desktop` 关闭/重启/崩溃期间若出事 ⇒ **告警哑火**（即 E-14 形态）。这是**用户已裁决接受的后果**（D3），不是缺陷。
-
-**接口契约（实测，写代码前请复核）**：
-
-```bash
-curl -X POST http://127.0.0.1:<dsh-host-port>/api/dsh-im/delivery/messages \
-  -H 'Content-Type: application/json' \
-  --data '{"botId":"<botId>","targetId":"<targetId>","text":"消息内容"}'
-# 成功: {"sent":true}
-```
-
-| 现象 | 含义 |
-|---|---|
-| `405` + `allow: POST` | 接口活着，只收 POST（可用作探活） |
-| `404 unknown-bot` | `botId` 不对（须与 dsh-im 设置页"调用标识"一致） |
-| `404 unknown-target` | `targetId` 未配置（在 dsh-im 设置里"新建目标"并保存） |
-| `400 bad-request` | 字段**必须恰好**是 `botId`+`targetId`+`text`（可选 `format`）——**多一个键也会 400** |
-
-> ⚠️ **编码铁律**：PowerShell 5.1 的字符串 body 会按 GBK 编码 ⇒ 中文乱码。
-> 必须显式转 UTF-8 字节再发送：`[System.Text.Encoding]::UTF8.GetBytes($body)`。
-> ⚠️ 该 HTTP 接口**不包含鉴权**（官方文档明示），只应在本机使用，**不要暴露到公网**。
-
-## 📵 人工接管白名单（不自动回复客户）
-
-**名单买家不触发任何自动回复**（LLM/规则/图片模板/QUICK 全跳过）；只读留痕（快照 + 档案）并照常 `[NEW-INQUIRY]` 提醒人工接管。
-报价提醒与沉睡唤醒对名单买家跳过；豁免期不写去重状态，移出后自动恢复。
-
-**名单文件**：`data\manual_override.json`（JSON 字符串数组，**本机 PII，gitignore 不入库**）。
-
-**三种操作方式（等价，都是确定性字符串操作，不经 LLM）**：
-
-```powershell
-# ① CLI（推荐：人和 agent 都用它）
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 列表'
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 添加 John Smith'
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\whitelist.ps1 -Command '白名单 删除 John Smith'
-# 也支持 whitelist add|remove|list / 参数式 -Action add -Name 'John Smith'
-
-# ② 库函数（脚本内调用）
-. scripts\config.ps1; . scripts\lib\no_reply.ps1
-Add-NoReplyBuyer 'John Smith'        # → ADDED:john smith | ALREADY | BAD_NAME
-Remove-NoReplyBuyer 'John Smith'     # → REMOVED:john smith | NOT_FOUND | BAD_NAME
-Get-NoReplySummary                   # → 当前人工接管白名单(2): john smith、maria gomez
-
-# ③ 企微发指令（经 DSH agent 执行上面的 CLI；见下）
-#    白名单 添加 John Smith / 白名单 删除 John Smith / 白名单 列表
-```
-
-**匹配语义**：会话显示名经同一归一化后**精确相等**（trim → 小写 → `_`→空格 → 压空白）。
-所以 `John Smith` / `JOHN_SMITH` / `john  smith` 视为同一人；`John Smiths`、`Smith John` **不会**误伤。
-
-> **历史说明**：写侧原先只在 `tools\control-agent\agent_bridge.js::handleWhitelistCmd`（也是确定性处理），
-> 靠轮询本地桥 `127.0.0.1:19886` 收指令；该桥 2026-09-26 停用后失效，`agent_bridge.js` 及其目录随后被**物理移除**（见 `docs\KNOWN_EXCEPTIONS.md` E-24）。
-> 现已在 `scripts\lib\no_reply.ps1` 内置写侧并配 `scripts\whitelist.ps1` CLI，**读侧（monitor/nudge/quote）一行未改**，
-> 且该库现在是名单读写侧的**唯一实现**（不再有"双侧同步"对象）。
-> 写出的文件仍与原 `agent_bridge.js` 的 `JSON.stringify(list,null,2)+'\n'` **逐字节一致**（LF + 2 空格缩进 + 无 BOM），
-> 有回归测试 `tests\no_reply_write.tests.ps1` 守着这个契约（断言数以实时输出为准）。
-
-**企微指令要真正生效，需要一个执行端**——当前由 DSH agent 承担（`control-agent` 已于 2026-09-26 退休并移除）。
-给 agent 的指令模板见部署手册「人工接管白名单」一节。
-
-## 🔌 Accio 网关（可选，读取增强）
-
-官方 **Accio Desktop**（阿里国际站桌面端）在 `localhost:4097` 暴露本地 IM 网关，可只读拉取全量历史（无 30 天墙）。系统把它作为**可选的读取增强数据源**，CDP 永远是主路径与降级通道：
-
-- **影子模式**（`accio_shadow=true`）：处理会话时并行对比网关历史与 CDP 提取（`ACCIO-SHADOW` 日志：条数/最新文本/时间戳/覆盖率），不改任何行为
-- **读取开关**（`accio_read_enabled=true`）：LLM/规则上下文优先用网关全量历史（日志 `ACCIO-READ src=gateway`）；内容重叠校验失败或网关不可用自动回退 CDP（`ACCIO-READ src=cdp`）；去重/最新消息基准仍取 CDP，保证零行为突变
-- **发送开关**（`accio_send_enabled`，默认关）：网关发送通道已实现（双边 receiverAliID + 回读验证约定），需用户指定测试会话验证后才启用；当前保持 CDP 发送
-- **组件**：`tools\accio-client`（Node 零依赖 CLI，自研协议实现 + fake gateway 测试）；适配层 `scripts\lib\accio.ps1`；登录自启：启动文件夹快捷方式 `Accio Desktop.lnk`
-- **凭据纪律**：只读 `%USERPROFILE%\.accio\accounts\*\...\gateway-cli.json`（每次调用重读），鉴权值不落日志/仓库
-
-## 🛡️ 安全
-
-- **敏感信息铁律**：账号/密码/API key/机器人凭据只存在于 `credentials.md`；`status.ps1` 自动审计，`.githooks`（pre-commit/pre-push）自动扫描拦截。
-- **目录隔离**：`logs\`（运行日志）/ `data\`（快照与档案，含 PII 仅本机）/ `reports\`（聚合报告）/ `backups\`（代码快照，不含凭据）/ `specs\`（设计与执行记录，含绝对路径 ⇒ 已 gitignore）。
-- **凭据通道**：企微凭据经环境变量注入组件进程，config/代码/日志均不落盘。
-- **仓库安全**：凭据、登录态、买家数据、运行状态全部 gitignore；配置以 `.example` 模板公开。
-- **发布前扫描器**（`.githooks\sanitize_check.ps1`）：文件名/目录黑名单 + 内容阻断模式（key/密码/webhook/本机绝对路径/本机用户名）+ PII 警告；**退出码 1 = 阻断提交/推送**。
-  扫描器自身文件被豁免（它必须包含这些模式的定义行）；`*.json.example` 亦豁免（占位模板）。
-- **推送后的历史核查**：泄漏是永久的 ⇒ 发布后应扫**全部历史**而非只看本次 diff：
-  ```powershell
-  git log --all --pretty=format: --name-only --diff-filter=ACMRT | Sort-Object -Unique   # 历史文件名
-  git rev-list --all | ForEach-Object { git show "$_`:path" }                            # 历史内容抽检
-  ```
-
-## 🔧 常见问题（真实踩过的坑）
-
-| 症状 | 真实原因 | 处置 |
-|---|---|---|
-| 告警推送一直 `SERVICE_DOWN` | 出口仍指向已停用的 `127.0.0.1:19886` | 确认 `config.json` 的三个 `dshim_*` 键；`Test-WecomService` 应返回 True |
-| 推送 `404 unknown-target` | dsh-im 里没建投递目标，或目标被改名/删除 | 在 dsh-im 设置页"新建目标"并保存，把新的 `targetId` 写回配置 |
-| 推送 `400 bad-request` | 请求体多/少字段（接口用严格等值校验） | 只发 `botId`+`targetId`+`text`（可选 `format`） |
-| 推送内容中文乱码 | PS 5.1 字符串 body 按 GBK 编码 | 显式 `[System.Text.Encoding]::UTF8.GetBytes($body)` 再发送 |
-| 企微机器人在两个程序间反复掉线 | 两个进程抢同一机器人 + `exit_on_kicked_offline` | 只保留一个出口；本项目用 `data\alert-channel.handover.json` 交接标记 |
-| 改了 `lib\cdp.ps1` 但行为没变 | `monitor.ps1` 只在启动时 dot-source 一次 | **必须重启 monitor** 才生效；`watchdog.pid`/`monitor.pid` 都要 `Get-Process -Id` 复核（pid 文件可能是陈旧的） |
-| 改完 `.ps1` 后中文全失效/判据恒真 | 编辑工具**剥掉了 UTF-8 BOM** ⇒ PS 5.1 按 ANSI 解码 | 复验前三字节是否 `239,187,191`，丢了就用 `UTF8Encoding($true)` 写回 |
-| 看进程数发现"两个 watchdog" | 命令自身的命令行里含 `watchdog\.ps1`，被 `Where-Object` 自匹配 | 排除自身 PID，或匹配 `-File .*watchdog\.ps1` 而非裸文件名 |
-| 守护进程"自己消失"且无日志 | 从代理/脚本会话直接建进程会被回收；或控制台被关闭（`0xC000013A`） | **常驻守护只走计划任务**：`Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'` |
-
-## 📁 目录结构
-
-**部署根 `<部署根>\` —— 只放代码与配置（2026-09-26 起）**：
-
-```
+~~~text
 alibaba-auto-reply/
-├── credentials.md            ← 敏感信息唯一文件（不入库）
-├── llm_config.json           ← LLM 非敏感配置
-├── README.md                 ← 本文件
-├── README_部署说明.md        ← 部署与运维手册
-├── SKILL.md                  ← agent 技能定义（opencode 镜像同步对象）
-├── docs\                     ← 7 个文件：**KNOWN_EXCEPTIONS.md（已知例外登记册 E-01..E-19，
-│                               排查前必读）**、CHANGELOG.md、BrowserSkill使用约定.md，
-│                               外贸主动获客系统_设计文档.md、_详细设计.md、
-│                               _调研与实施方案.md、外贸主动获客_P1投放活动设计.md
-├── .githooks\                ← pre-commit / pre-push 敏感扫描（sanitize_check.ps1）
-├── .opencode\                ← opencode 工具自身的插件依赖（@opencode-ai/plugin，
-│                               3678 文件 / 52.5 MB）。**不属本项目数据、不入库、刻意留在部署根**
-├── scripts\                  ← 主代码 + 状态 + 规则
-│   ├── monitor.ps1           ← 监控主程序（全自动闭环，单实例）
-│   ├── reply_engine.ps1      ← 规则回复引擎（纯逻辑，可单测）
-│   ├── health_check.ps1      ← 健康心跳（计划任务 15 分钟；含 watchdog 自动拉起）
-│   ├── reply_rules.json      ← 语料库/模板（可热编辑）
-│   ├── reply_agent_prompt.md ← LLM 提示词（可热编辑）
-│   ├── config.ps1            ← 配置加载器（Get-SkillPath/Get-CdpPort）
-│   ├── config.json.example   ← 路径配置模板（仓库里唯一的 schema 记录）
-│   ├── chrome_ensure.ps1     ← Chrome 自愈 + 自动登录（按 profile 精确匹配）
-│   ├── cdp.ps1 / lib\cdp.ps1 ← 见下方「两份 cdp.ps1 的关系」
-│   ├── watchdog.ps1          ← 三重守护（进程/日志/CDP）
-│   ├── status.ps1            ← 一键健康检查（含敏感审计）
-│   ├── backup.ps1 / sync.ps1 / consolidate_prompt.ps1 ← 快照/镜像/红线归档
-│   ├── summarize.ps1 / analyze_replies.ps1 / auto_optimize.ps1 ← 报告/质量/规则提炼
-│   ├── weekly_report.ps1 / nudge.ps1 / quote_remind.ps1 ← 周报/唤醒/报价提醒
-│   ├── log_rotate.ps1 / retention.ps1 ← 日志轮转 / 快照保留（90 天归档）
-│   ├── dashboard.ps1         ← 数据看板（手动工具）
-│   ├── state.json(+bak)      ← 已回复去重状态
-│   ├── monitor.pid / watchdog.pid ← 常驻进程 pid（启停一律按它精确停，禁止 -Action stop）
-│   ├── okki\                 ← 小满 CRM(OKKI) 链路：CDP(9223)/登录/商机建档
-│   ├── waimao\               ← 网易外贸(王野)CDP 桥(9224) + 只读侦察
-│   ├── gonghai\              ← 阿里公海客户开发：只读侦察 + 认领 + 破冰试发 + 批量（独立 Chrome 9225，不再复用 9222）
-│   └── lib\                  ← 公共库（creds/log/cdp/send/llm/lock/goods/quote/wecom/no_reply/vision/doc/report_push/accio/alert_local/deadman）
-├── tools\                    ← 独立可复用组件（各自依赖与测试）
-│   ├── doc-reader\           ← 买家文档解析（PDF/xlsx/csv/docx → 文本或渲染图，node --test）
-│   ├── accio-client\         ← Accio 网关只读客户端（Node 零依赖，14 例 + shadow_compare.ps1）
-│   └── email-verify\         ← 邮箱可投递性验证（MX/SMTP 探测，Node 零依赖）
-│   （原 wecom-connector\ 与 control-agent\ 两个企微桥已于 2026-09-26 **物理移除** —— E-24；
-│     其启动器 scripts\wecom_start.ps1 与 scripts\agent_start.ps1 同时删除）
-└── tests\                    ← 主仓库回归测试（fixtures 是虚构数据；**文件数与断言数见
-                                  `run_tests.ps1` 实时输出，此处刻意不写死** —— 见 `docs\文档权威约定.md` §3 规则三）
-```
+├─ README.md / README_部署说明.md / SKILL.md
+├─ llm_config.json                 模型非敏感配置
+├─ scripts/
+│  ├─ config.ps1 / config.json.example
+│  ├─ monitor.ps1                 会话处理主入口
+│  ├─ watchdog.ps1 / health_check.ps1 / status.ps1
+│  ├─ chrome_ensure.ps1 / cdp.ps1  Chrome 恢复和 CDP CLI
+│  ├─ reply_engine.ps1            判据、哈希、禁词等基础函数
+│  ├─ reply_agent_prompt.md / reply_scenarios.md / reply_rules.json
+│  ├─ lib/
+│  │  ├─ msg_norm.ps1 / reply_policy.ps1 / reply_gen.ps1
+│  │  ├─ llm.ps1 / cdp.ps1 / send.ps1 / lock.ps1
+│  │  ├─ msg_source.ps1 / no_reply.ps1 / accio.ps1
+│  │  ├─ goods.ps1 / quote.ps1 / vision.ps1 / doc.ps1
+│  │  ├─ wecom.ps1 / report_push.ps1 / heartbeat.ps1
+│  │  └─ suggestions.ps1 / 日志与告警辅助库
+│  ├─ analyze_replies.ps1 / auto_optimize.ps1
+│  ├─ review_suggestions.ps1 / apply_suggestion.ps1
+│  ├─ summarize.ps1 / weekly_report.ps1 / nudge.ps1
+│  ├─ whitelist.ps1 / dashboard.ps1 / backup.ps1 / sync.ps1
+│  ├─ okki/                       小满 CRM 扩展
+│  └─ gonghai/                    阿里公海扩展
+├─ tools/
+│  ├─ doc-reader/                 文档解析
+│  ├─ accio-client/               Accio 网关客户端
+│  ├─ email-verify/               邮箱验证工具
+│  └─ acceptance/                 离线回复回放
+├─ tests/                         测试、夹具和场景
+├─ docs/                          当前说明、历史设计和验收记录
+└─ .githooks/                     提交与推送前敏感扫描
+~~~
 
-**运行时数据根 `<部署根>-runtime\` —— 不进版本控制（2026-09-26 由部署根迁出）**：
+`scripts/config.json` 和 `credentials.md` 为本机文件，不入库。日志、买家资料、报告、备份和浏览器登录态按配置定位，本机已将这些目录外迁到运行数据根。部分去重状态与 PID 文件仍放在 `scripts_dir`，详见部署手册。
 
-```
-<部署根>-runtime\
-├── chrome-profile\           ← Chrome 登录态（1036 MB；配置键 chrome_profile）
-├── chrome-profile-okki\      ← OKKI(小满 CRM) 登录态（240 MB；配置键 okki_profile）
-├── specs\                    ← 过程记录：全部 spec / REPORT（178 文件 21 MB）
-│   │                          **不是可丢弃的运行时数据**，只移动不删除
-│   │                          （已知例外登记册已移入 `docs\KNOWN_EXCEPTIONS.md` 并入库）
-│   └── 归档\                 ← 历史归档
-├── backups\                  ← 代码快照 zip（13 MB；配置键 backups_dir；保留最近 20 份）
-├── logs\                     ← 运行日志（配置键 logs_dir）
-├── data\                     ← 买家快照/档案（PII，仅本机；配置键 data_dir）
-│   └── gonghai\              ← 公海模块状态：sent_index.json（幂等，只存 key_hash/代号，**无客户名**）
-│                                / gonghai_rate.json（限速）/ disabled（停用标记）
-└── reports\                  ← 质量/总结/周报（配置键 reports_dir）
-```
+## 回复策略与质量改进
 
-> **路径只有一个来源**：`scripts\config.json` 的路径键（`deploy_root`/`scripts_dir`/`logs_dir`/`data_dir`/`reports_dir`/`chrome_profile`/`okki_profile`/`backups_dir`）。
-> 迁运行时数据**只需要改这一个文件**，代码不动。
-> **反查判据**：若部署根**重新长出** `logs\` / `reports\` 等目录 ⇒ 说明某个路径键没改对（或某处多了硬编码路径），
-> 不是"正常现象"。详见 `docs\KNOWN_EXCEPTIONS.md` **E-17**。
+`msg_norm.ps1` 统一消息格式与顺序；`reply_policy.ps1` 决定场景和问什么；`reply_gen.ps1` 组装上下文、注入匹配场景的示例，并生成或回退。代码库在 monitor 启动时加载，修改后需要重启；提示词、场景文件和 JSON 的读取有缓存更新机制。
 
-**两份 `cdp.ps1` 的关系（刻意拆分，不是待清理的重复文件）**：
+质量改进链为：
 
-| 文件 | 职责 |
-|---|---|
-| `scripts\cdp.ps1` | CLI 入口：可独立命令行调用的包装 |
-| `scripts\lib\cdp.ps1` | 库：被 `monitor.ps1` 等 dot-source，含 `Get-Page` / `Test-PageHealth` 判据 |
+~~~text
+质量报告 → 优化建议 → 人工接受或拒绝 → 显式应用 → 离线校验
+~~~
 
-> 两者的 `Get-Page` **必须逐字一致**，由 `tests\page_select.tests.ps1` 断言锁住 ⇒ 改一份就必须同步改另一份。
-> 另注：`monitor.ps1` 只在启动时 dot-source 一次 ⇒ 改 `lib\cdp.ps1` 后**必须重启 monitor** 才生效。
+`auto_optimize.ps1` 和 `analyze_replies.ps1 -ApplyNever` 不直接修改生效规则。`review_suggestions.ps1` 与 `apply_suggestion.ps1` 分离。建议应用成功表示文件修改并通过指定验证，不等于生产消费链和真实模型效果已经验收。
 
-## 🧪 开发与运维
+## 通知与其他业务
 
-```powershell
-# 主仓库回归测试（文件数与断言数以本次输出为准；含文档一致性校验 docs_consistency）
-# 分布：accio 29 / alert_dedup 10 / daemon_launch 10 / env_block 12 / gonghai 71 / goods_engine 27 / lock 11 /
-#       log_maintenance 22 / no_reply 29 / no_reply_write 36 / page_heal_throttle 15 / page_health 15 /
-#       page_health_verdict 10 / page_select 15 / reply_engine 119 / report_push 33 / vision 43
-powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
+`lib/wecom.ps1` 保留历史函数名，实际调用 dsh-im 的本机 HTTP 投递接口。仓库已移除旧企微长连接桥和远程控制桥，远程指令执行依赖外部 DSH 配置。
 
-# 单跑某个测试文件（更快，便于定位）
-powershell -ExecutionPolicy Bypass -NoProfile -File tests\page_health_verdict.tests.ps1
+周报会默认调用 `nudge.ps1`，但该脚本已移除买家自动发送路径，目前只列出跟进候选并记日志。公海链路仍具有认领和发送能力，使用独立 Chrome；不要将它与沉睡买家候选统计混淆。
 
-# tools 组件测试（原 wecom-connector / control-agent 两个组件已于 2026-09-26 移除，其测试随之删除 —— E-24）
-node --test tools\doc-reader\tests\read.test.js                                                 # 7 例
-node --test tools\accio-client\tests\gateway.test.js tools\accio-client\tests\api.test.js      # 14 例
+`waimao/` 及专用配置已移除，相关设计文档标注为历史资料。
 
-# 代码快照 / 镜像同步 / 健康检查
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\backup.ps1 -Snapshot
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\sync.ps1 -Status   # 或 -Push
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
+## 验证
 
-# 日志轮转 / 快照保留（DryRun 只报告不动文件；monitor 启动时也会自动执行一次）
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\log_rotate.ps1 -DryRun
-powershell -ExecutionPolicy Bypass -NoProfile -File scripts\retention.ps1 -DryRun
+先运行部署手册列出的离线检查。`tests/run_tests.ps1` 会执行所有测试，但不提供运行数据隔离；其中部分测试改写本机配置或访问浏览器，不能把全套测试当作无副作用的默认命令。
 
-# 发布前脱敏自检（与 pre-commit / pre-push 同款扫描器）
-powershell -ExecutionPolicy Bypass -NoProfile -File .githooks\sanitize_check.ps1 -Mode staged
-```
-
-> ⚠️ **本机环境注意（Windows + Restricted 执行策略）**：`.ps1` 一律用
-> `powershell -ExecutionPolicy Bypass -NoProfile -File <路径>` 调用；`npm` 需用 `npm.cmd`（`npm.ps1` 会被策略拦下）。
-
-**手动工具（无自动调用，需人工触发——不是死代码）**：
-
-| 脚本 | 何时用 |
-|---|---|
-| `scripts\backup.ps1 -Snapshot` | **发布/大改前**做代码快照（回滚点） |
-| `scripts\dashboard.ps1` | 需要看无 PII 的 HTML 聚合看板时 |
-| `scripts\quote_remind.ps1` | 需要手动触发一次报价提醒时（走 `lib\wecom.ps1` 同一告警出口） |
-| `scripts\whitelist.ps1` | 管理人工接管白名单（增/删/查，见上文白名单一节） |
-| `scripts\status.ps1` / `log_rotate.ps1 -DryRun` / `retention.ps1 -DryRun` | 体检 / 轮转预演 / 保留预演 |
-
-> 说明：这些脚本**没有任何代码或计划任务引用它们**，只能人工运行；用静态引用分析找"死代码"时会把它们误判成垃圾，故在此显式登记。
-
-**守护加固（2026-09-18 P0）**：Watchdog/Health 任务 `StopOnIdleEnd=false`；Health 发现 watchdog 死亡时自动拉起（`HEALTH-HEAL pid=<new>`，30 分钟节流）；去重判定改为 ts 归一化（`Test-AlreadyReplied`）+ 发送后 3 分钟冷却；死信心跳 `deadman_ping_url`（healthchecks.io，仅 ping 无 PII，默认空=不发）。
-
-**计划任务（自动运维，见部署手册注册）**：Summary（每 4h 总结）、Quality（每日 05:00 质量报告）、Optimize（每日 05:30 规则提炼）、Weekly（**每日 08:00 + `StartWhenAvailable` 补跑**的周报 + nudge，`data\weekly_state.json` 保证按周幂等）、Watchdog（登录自启 + **每分钟重复触发**，常驻守护）、Health（每 15 分钟健康心跳 + 自动拉起 watchdog）。
-
-> [2026-09-26] 守护启动通道已回到计划任务（`Interval=PT1M` 每分钟重复触发 + 失败重试），
-> 静默无守护的窗口由"最长约 30 分钟"压到 **≤1 分钟**；任务是否仍被触发另由健康心跳的
-> `scheduled_tasks_fresh` 检查项看护（见 `README_部署说明.md`）。
-> 另：重启 DSH Desktop 可能连带终止 watchdog（控制台关闭事件，`0xC000013A`），
-> 之后用 `Start-ScheduledTask -TaskName 'AlibabaAutoReplyWatchdog'` 补拉即可（让 watchdog 自己去拉起 monitor）。
-
-## 📄 License
-
-MIT
+离线通过可证明对应逻辑和回放结果；真实模型质量、完整回复延迟、通知到达和页面发送效果需单独验收。不要依据旧文档中的“每轮约若干秒”推定当前端到端响应时间。

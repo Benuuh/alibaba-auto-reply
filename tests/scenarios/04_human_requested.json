@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "04_human_requested",
+  "title": "Buyer asks for a real person",
+  "category": "buyer asks for a human",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The buyer's request is the only fact; whether a human is already handling it is NOT in the lines, so claiming it would be invented.",
+  "conversationLines": [
+    "[BUYER] hello @@TS:1791018000000 @@OT:aGVsbG8=",
+    "[ME] Hi, happy to help - what are you shipping and where does it need to go? @@TS:1791018060000",
+    "[BUYER] can I talk to a real person please? @@TS:1791018360000 @@OT:Y2FuIEkgdGFsayB0byBhIHJlYWwgcGVyc29uIHBsZWFzZT8="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "human_requested",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:03:00Z",
+    "sentAt": "2026-10-03T09:06:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Understood - I will get a person on this. I am passing it to the team now so they can take it from here."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "human_requested",
+    "allowTimeCommitment": false,
+    "allowAdvance": false,
+    "guidanceKey": "human_requested"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(a human|someone|a person|the team)\\s+(is|are)\\s+(already\\s+)?(handling|on it|taking care)",
+      "why": "spec 4.4: the handoff result cannot be claimed before it happened"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(has|have)\\s+been\\s+passed\\b",
+      "why": "same: never report a handoff result that is not established"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(weight|dimension|carton|rate|quote|price|shipping cost)\\b",
+      "why": "after a human request the reply must assist only, never pitch or ask cargo questions"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(bot|robot|automation|automated|ai)\\b",
+      "why": "do not explain the automation to the buyer"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "commits-to-handoff",
+      "check": "mustMatch",
+      "value": "(?i)(person|human|team|colleague)",
+      "why": "must commit to a real handoff"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "human_requested is at most two sentences"
+    },
+    {
+      "id": "no-question",
+      "check": "asksAQuestion",
+      "value": false,
+      "why": "no new question while stopping the pitch"
+    }
+  ],
+  "expectBuyerCount": 2,
+  "expectLatestBuyerText": "can I talk to a real person please?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

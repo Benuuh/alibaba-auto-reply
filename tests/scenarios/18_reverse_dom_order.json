@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "18_reverse_dom_order",
+  "title": "Extracted lines arrive newest-first",
+  "category": "reverse DOM order",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The @@TS values DECREASE along the array, which is the page's own evidence that the window arrived newest-first (msg_norm.ps1:149-197). The message that must be answered is the FIRST line. The oldest line is deliberately non-ASCII to prove @@OT round-trips through base64/UTF-8.",
+  "conversationLines": [
+    "[BUYER] where is my container? @@TS:1791021120000 @@OT:d2hlcmUgaXMgbXkgY29udGFpbmVyPw==",
+    "[ME] I am confirming the status with the warehouse. @@TS:1791021000000",
+    "[BUYER] any news on the shipment? @@TS:1791020880000 @@OT:YW55IG5ld3Mgb24gdGhlIHNoaXBtZW50Pw==",
+    "[ME] Thanks for the details, I have those noted. @@TS:1791020820000",
+    "[BUYER] hola, quiero enviar 12 cajas a Dallas @@TS:1791020760000 @@OT:aG9sYSwgcXVpZXJvIGVudmlhciAxMiBjYWphcyBhIERhbGxhcw=="
+  ],
+  "domOrder": "newest-first",
+  "expectedAction": "delivery_status",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:51:00Z",
+    "sentAt": "2026-10-03T09:53:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "I do not want to give you a guess on this. I am confirming the actual container status right now and will come back to you as soon as I have it."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "fulfillment_status",
+    "allowTimeCommitment": false,
+    "guidanceKey": "delivery_status"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)confirming the status with the warehouse",
+      "why": "must not resend the previous holding line"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(arrived|on the water|in transit|cleared customs)\\b",
+      "why": "no shipment status is established anywhere"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\b\\d{4}-\\d{2}-\\d{2}\\b",
+      "why": "no real date exists to quote"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "answers-the-newest-line",
+      "check": "mustMatch",
+      "value": "(?i)(confirm|check|status|container)",
+      "why": "must answer the newest message even though it arrived first in the array"
+    },
+    {
+      "id": "new-information",
+      "check": "notSameAsPriorMe",
+      "value": true,
+      "why": "must not repeat what we already sent"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "delivery_status is at most two sentences"
+    },
+    {
+      "id": "asks-nothing",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "no new questionnaire"
+    }
+  ],
+  "expectBuyerCount": 3,
+  "expectLatestBuyerText": "where is my container?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

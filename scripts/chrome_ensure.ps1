@@ -80,8 +80,8 @@ function Get-MonitorChromeProcesses {
     #
     # 现在的判据(**唯一**必要条件,与 gonghai_ensure.ps1 同款思路):
     #    命令行必须含**本实例的 profile 目录**。
-    #    · 本机四个实例的 profile 前缀互不相同(chrome-profile / -okki / -waimao / -gonghai),
-    #      但 `chrome-profile` 是另外三个的**前缀** ⇒ 必须用**带边界**的匹配,否则
+    #    · 项目三个实例的 profile 目录不同(chrome-profile / -okki / -gonghai),
+    #      但 `chrome-profile` 是另外两个的**前缀** ⇒ 必须用**带边界**的匹配,否则
     #      `chrome-profile` 会误命中 `chrome-profile-gonghai`(这就是"精确匹配"的要害)。
     #    · 允许 `--remote-debugging-port=` 存在,但**不作为**入选条件(用户本人的普通 Chrome
     #      没有该标志,也不会带本 profile 目录,天然不会入选)。

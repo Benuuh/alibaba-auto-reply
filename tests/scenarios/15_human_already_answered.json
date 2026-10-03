@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "15_human_already_answered",
+  "title": "The owner already answered directly in the chat",
+  "category": "human already answered",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The middle [ME] line has NO @@TS marker, which is the production rule for an owner-typed message (lib/msg_source.ps1:1-14), so the supplier/pickup fact is evidence class 'owner replied directly in this chat' (the buyer line deliberately avoids every fact keyword so the owner's line is the only supplier evidence; a buyer merely SAYING the word 'supplier' masks the owner evidence - see tools/acceptance/README.md, known findings). There is deliberately NO first-seen time for this scenario, so the timing report must print UNKNOWN instead of 0.",
+  "conversationLines": [
+    "[BUYER] hi, is the pickup included in your service? @@TS:1791018000000 @@OT:aGksIGlzIHRoZSBwaWNrdXAgaW5jbHVkZWQgaW4geW91ciBzZXJ2aWNlPw==",
+    "[ME] Yes, I can arrange the pickup from your supplier - no problem.",
+    "[BUYER] ok great, thank you @@TS:1791018480000 @@OT:b2sgZ3JlYXQsIHRoYW5rIHlvdQ=="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "short_ack",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "sentAt": "2026-10-03T09:09:00Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "Got it, thanks. I will keep an eye on this and let you know if anything needs you."
+  },
+  "expectedDecision": {
+    "needHumanTodo": false,
+    "allowTimeCommitment": false,
+    "askFields": [],
+    "guidanceKey": "short_ack"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "\\?",
+      "why": "no new task after a plain acknowledgement"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(who is your supplier|which supplier|supplier'?s contact)\\b",
+      "why": "the owner already handled the pickup; re-asking is a regression"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(we (cannot|can.t|do not) (arrange|offer|pick up)|not possible)\\b",
+      "why": "must not contradict the commitment the owner already made"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "acknowledges",
+      "check": "mustMatch",
+      "value": "(?i)(thanks|got it|noted|glad|sure)",
+      "why": "acknowledge the buyer"
+    },
+    {
+      "id": "one-short-line",
+      "check": "maxChars",
+      "value": 140,
+      "why": "one short line"
+    },
+    {
+      "id": "no-field-ask",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "no question at all here"
+    }
+  ],
+  "expectBuyerCount": 2,
+  "expectLatestBuyerText": "ok great, thank you",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true,
+  "expectHumanSourceCount": 1,
+  "expectOwnerEvidenceInContext": true,
+  "expectFactsEvidence": [
+    { "field": "supplier", "state": "provided", "evidence": "owner replied directly in this chat" }
+  ]
+}

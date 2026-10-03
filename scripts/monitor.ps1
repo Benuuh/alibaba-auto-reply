@@ -11,6 +11,12 @@ $ErrorActionPreference = "Stop"
 # 回复引擎(规则/语言检测/信息核对)来自 reply_engine.ps1,与回归测试共用同一份代码。
 . (Join-Path $PSScriptRoot "config.ps1")
 . (Join-Path $PSScriptRoot "reply_engine.ps1")
+# [SPEC 5 2026-10-03] The reply chain now lives in three focused libraries instead of inside this
+# file. Load order matters: msg_norm needs reply_engine's normalization primitives, reply_policy
+# needs reply_engine's banned-word / liability authorities, and reply_gen needs reply_policy.
+. (Join-Path $PSScriptRoot "lib\msg_norm.ps1")
+. (Join-Path $PSScriptRoot "lib\reply_policy.ps1")
+. (Join-Path $PSScriptRoot "lib\reply_gen.ps1")
 . (Join-Path $PSScriptRoot "lib\creds.ps1")
 . (Join-Path $PSScriptRoot "lib\log.ps1")
 . (Join-Path $PSScriptRoot "lib\cdp.ps1")
@@ -78,6 +84,16 @@ if ($script:replyPostSendCooldownMin -lt $script:replyMinGapMin) {
 }
 # 连续确认轮数门槛(§0.1: 2 轮 ≈ 9 秒, 唯一的"冷启动延迟", 不可再降; Test-ShouldReply 内还有一道下限)
 $script:requiredSeenRounds = 2
+# [SPEC 4.1 2026-10-03] Wall-clock floor for a CONFIRMED NEW message, in seconds (config key
+# reply_new_msg_floor_sec, default 20). This is the only time gate that applies to a new message:
+# the 5-minute min-gap and post-send cooldown exist to suppress repeat answers to an OLD message
+# and must not unconditionally block a new one (spec 4.1). 20s is an engineering floor so two
+# sends cannot happen in the same instant, not a platform rule (spec 9).
+$script:replyNewMsgFloorSec = 20
+if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_new_msg_floor_sec' -and $script:skillCfg.reply_new_msg_floor_sec) {
+    $script:replyNewMsgFloorSec = [int]$script:skillCfg.reply_new_msg_floor_sec
+}
+if ($script:replyNewMsgFloorSec -lt 0) { $script:replyNewMsgFloorSec = 0 }
 
 # 发送前拦截安全兜底句（spec 禁词拦截 Phase 4 + 2026-09-10 责任承诺拦截）：命中禁词/责任承诺且重写仍越线/引擎路径命中时整体替换；争议与通用场景安全，纯 ASCII，非空保证
 $script:banSafeFallback = "Thanks for your patience - I've noted this and I'm checking with the team. I'll get back to you with a clear update shortly."
@@ -271,8 +287,15 @@ function Open-ConvoAndGetMessages([string]$keyword) {
         fileInfo = { name: mf[1], url: furl };
       }
     }
-    if (clean.length <= 2) {
-      if (hasImg && (cls.indexOf('item-left') >= 0)) out.push({b:true, t:'[IMG]', ot:'[IMG]', ts:'', imgs: imgUrls, file: fileInfo}); // [FIX-DUP 2026-09-25] ot=原文
+    // [SPEC 4.1 2026-10-03] NO text-length filter. The previous version dropped every message
+    // whose cleaned text was <= 2 characters unless it carried an image, so "ok", "si" and "no"
+    // never became message events at all - even though spec 4.1 requires short acknowledgements,
+    // refusals, complaints, images and documents to ALL be able to form a new-message event.
+    // Only a genuinely empty body is skipped here, and an empty body WITH an image still becomes
+    // an attachment event. The buyer flag is taken from the same detection as every other message
+    // (the old code hard-coded b:true for image-only rows, which mislabelled our own images).
+    if (clean.length === 0) {
+      if (hasImg) { out.push({b: isBuyer0, t:'[IMG]', ot:'[IMG]', ts:'', imgs: imgUrls, file: fileInfo}); }
       return;
     }
     var buyerName = (nameEl0 && nameEl0.innerText.trim()) || '';
@@ -374,98 +397,59 @@ function Get-LLMConfig {
 # 回复代理系统提示词（从 reply_agent_prompt.md 读取，带修改时间失效缓存）
 $script:replyPromptCache = $null
 $script:replyPromptCacheTime = $null
-function Get-ReplyPrompt {
-    $promptFile = Join-Path $LogDir "reply_agent_prompt.md"
-    if (Test-Path $promptFile) {
-        $fileTime = (Get-Item $promptFile).LastWriteTimeUtc.Ticks
-        # 文件未修改且已有缓存 → 直接返回；否则重读
-        if ($script:replyPromptCache -and $script:replyPromptCacheTime -eq $fileTime) { return $script:replyPromptCache }
-        try {
-            $script:replyPromptCache = Get-Content $promptFile -Raw -Encoding UTF8
-            $script:replyPromptCacheTime = $fileTime
-            return $script:replyPromptCache
-        } catch {}
-    }
-    if ($script:replyPromptCache) { return $script:replyPromptCache }
-    return "You are a professional logistics sales assistant replying to Alibaba.com buyers. Keep replies short and natural."
-}
+# =============================================================================================
+# Reply generation - single entry point for the reply chain.
+#
+# [SPEC 5 2026-10-03] This used to be where monitor.ps1 assembled the model request itself: it
+# concatenated the whole reply_rules.json corpus onto the prompt on every call, rebuilt the
+# ask-count metadata inline, described the context as "reverse order, first line is newest"
+# (which was backwards - see lib\msg_norm.ps1), and offered two separate rewrite switches
+# (-BanRetry / -CommitRetry) so a draft could cost up to three model calls.
+#
+# All of that now lives in lib\reply_policy.ps1 (what to say) and lib\reply_gen.ps1 (how to say
+# it): one slim prompt, one compact chronological context, ONE model call, at most ONE bounded
+# rewrite driven by the full violation list, and the same scenario fallback the rule path uses.
+# This function is kept as a thin adapter so the attachment pipeline below does not have to change.
+#
+# Returns the reply text, or $null only when even the fallback could not produce one.
+# Side effect: $script:lastReplySource / $script:lastReplyDecision describe what happened, so
+# callers log the truth instead of assuming every non-empty reply came from the model.
+# =============================================================================================
+$script:lastReplySource = 'NONE'
+$script:lastReplyDecision = $null
 
-# 语料库内容（带修改时间失效缓存，用户编辑 reply_rules.json 后自动重读）
-$script:rulesRawCache = $null
-$script:rulesRawCacheTime = $null
-function Get-RulesRaw {
-    $rulesFile = Join-Path $LogDir "reply_rules.json"
-    if (Test-Path $rulesFile) {
-        $fileTime = (Get-Item $rulesFile).LastWriteTimeUtc.Ticks
-        if ($script:rulesRawCache -and $script:rulesRawCacheTime -eq $fileTime) { return $script:rulesRawCache }
-        try {
-            $script:rulesRawCache = Get-Content $rulesFile -Raw -Encoding UTF8
-            $script:rulesRawCacheTime = $fileTime
-            return $script:rulesRawCache
-        } catch {}
-    }
-    if ($script:rulesRawCache) { return $script:rulesRawCache }
-    return ""
-}
+function Get-ReplyPromptPath { return (Join-Path $LogDir "reply_agent_prompt.md") }
+function Get-ReplyScenarioPath { return (Join-Path $LogDir "reply_scenarios.md") }
 
-# LLM 生成回复：DeepSeek (OpenAI 兼容) API。失败返回 $null（由调用方回退规则引擎）
-# -ImageDataUrls: 多模态附件图片(data URL, ≤3); -AttachmentText: 文档文本/说明(与文本消息合并)
 function Generate-Reply-LLM([object]$rules, [string]$convoName, [string]$latest, [string[]]$context, [switch]$BanRetry, [switch]$CommitRetry, [string[]]$ImageDataUrls = $null, [string]$AttachmentText = $null) {
-    $cfg = Get-LLMConfig
-    if (-not $cfg) { return $null }
-    $rulesRaw = Get-RulesRaw
-    $systemPrompt = (Get-ReplyPrompt) + "`n`n=== 语料库 reply_rules.json ===`n" + $rulesRaw
-    if ($CommitRetry) {
-        # 发送前责任承诺拦截重写（仅 LLM 路径 1 次）：系统提示词追加重写要求（默认不带，避免长系统提示）
-        $systemPrompt += "`n`n[重写要求] 上一稿含对买家的责任/费用承诺，已弃用；重写：禁止承认或暗示责任在我司（禁用 on us / we take responsibility for this cost / it's our fault / you shouldn't be out of pocket 等归因句式），禁止承诺支付/报销/退款/赔偿任何金额（禁用 we'll pay / cover / reimburse / refund / compensate / make it right 等承诺句式）。正确写法：真诚致歉共情（I'm really sorry for the trouble this has caused）→ 说明正在核实实际原因与最新进度 → 给具体回访时限（today / tomorrow morning）→ 费用赔偿类诉求答复 I'll have that reviewed carefully and get back to you with a clear answer；不得出现 manager/boss/supervisor/经理/上级 等请示措辞。"
-    } elseif ($BanRetry) {
-        # 发送前拦截重写（仅 LLM 路径 1 次）：系统提示词追加重写要求（默认不带，避免长系统提示）
-        $systemPrompt += "`n`n[重写要求] 上一稿含被禁措辞，已弃用；重写：不得出现任何需上级确认的表述（manager/boss/supervisor/经理/上级/请示），一律改用正面承诺：正在核算并给出明确跟进时限（如 I'll finalize your exact quote and get back to you shortly.）。"
-    }
-    $ctxText = ($context | Select-Object -First 20) -join "`n"
+    $lf = [string][char]10
+    # Rebuild the structured conversation from the lines the caller already has. ConvertTo-MessageList
+    # normalizes order and identity, so this adapter cannot reintroduce the head/tail ambiguity.
+    $conv = ConvertTo-MessageList (@($context) -join $lf) $convoName
+    $facts = Get-ConversationFacts $conv
+    # -NotifyChannelAvailable gates whether a specific deadline may be promised at all. It defaults
+    # to $false: the local todo/notification path is not wired into this build, and spec 4.3 forbids
+    # inventing a response deadline. The decision object still reports NeedHumanTodo / TodoKind so
+    # the wiring can be added later without touching policy.
+    $decision = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:([bool]$script:notifyChannelVerified)
 
-    # A1 追问硬约束:统计 ME 侧问句按字段计数 + 买家承诺字段,结构化注入 LLM 上下文
-    $askCount = @{ weight = 0; dimension = 0; address = 0; image = 0; supplier = 0 }
-    foreach ($_line in $context) {
-        if ($_line -match '^\[ME\]' -and $_line -match '[\?？]') {
-            $lc = $_line.ToLower()
-            if ($lc -match 'weight|kg|peso|公斤|千克|gross') { $askCount.weight++ }
-            if ($lc -match 'dimension|size|尺寸|medida|cm\b|mm\b') { $askCount.dimension++ }
-            if ($lc -match 'address|addr|地址|calle|street|endere|rua') { $askCount.address++ }
-            if ($lc -match 'image|photo|picture|图片|图') { $askCount.image++ }
-            if ($lc -match 'supplier|供应商|fornecedor|proveedor') { $askCount.supplier++ }
-        }
+    # Bounded rewrite: at most ONE extra call, and only while the round budget still allows it.
+    $maxRewrites = 1
+    if ((Get-Command Get-LlmRoundRemainingSec -ErrorAction SilentlyContinue) -and (Get-LlmRoundRemainingSec) -lt 30) {
+        # Not enough budget left to attempt a rewrite: ship the fallback rather than overrun the round.
+        $maxRewrites = 0
     }
-    # 承诺字段:买家说 will send/share/provide + 字段词 → 该字段不再问(逻辑与规则引擎共用 reply_engine.ps1 的 Get-PromisedFields)
-    $promised = @(Get-PromisedFields $context)
-    $metaLine = ""
-    $askParts = @()
-    foreach ($k in @('weight','dimension','address','image','supplier')) { if ($askCount[$k] -gt 0) { $askParts += "$k x$($askCount[$k])" } }
-    if ($askParts.Count -gt 0) {
-        $metaLine = "[追问统计] " + ($askParts -join ", ") + "。已问满 2 次的字段绝不再追问,转收尾等待语气;"
-    }
-    if ($promised.Count -gt 0) {
-        $metaLine += "[承诺字段] " + ($promised -join ", ") + " 买家已承诺提供,绝不再问。"
-    }
-    # P3.4 买家档案:国家注入 LLM 上下文(个性化称呼/时效参考,无则省略)
-    $profileLine = ""
-    $bp = Get-BuyerProfile (Get-StateKey $convoName)
-    if ($bp -and $bp.country) { $profileLine = "买家国家: $($bp.country)" }
 
-    $userMsg = "买家名: $convoName`n$profileLine`n最新买家消息: $latest`n$metaLine`n`n=== 完整对话上下文（倒序，第一条最新） ===`n$ctxText"
-    if ($AttachmentText) { $userMsg += "`n`n[附件内容]`n" + $AttachmentText }
-    if ($ImageDataUrls -and @($ImageDataUrls).Count -gt 0) {
-        $messages = @(
-            @{ role = "system"; content = $systemPrompt },
-            @{ role = "user"; content = @(New-VisionContentParts $ImageDataUrls $userMsg) }
-        )
-    } else {
-        $messages = @(
-            @{ role = "system"; content = $systemPrompt },
-            @{ role = "user"; content = $userMsg }
-        )
-    }
-    return Invoke-LLM $messages ([double]$cfg.temperature) ([int]$cfg.max_tokens) $logFile
+    $gen = Invoke-ReplyGeneration -Conversation $conv -Decision $decision -Rules $rules `
+        -PromptPath (Get-ReplyPromptPath) -ScenarioPath (Get-ReplyScenarioPath) `
+        -LogFile $logFile -ImageDataUrls $ImageDataUrls -AttachmentText $AttachmentText -MaxRewrites $maxRewrites
+
+    $codes = @($gen.Violations | ForEach-Object { $_.Code }) -join ','
+    Write-Log "REPLY-GEN $($convoName) scenario=$($decision.Scenario) src=$($gen.Source) modelCalls=$($gen.ModelCalls) rewrites=$($gen.Rewrites) ctxChars=$($gen.ContextChars) violations=[$codes] fallback=$($gen.FallbackReason) ask=[$($decision.AskFields -join ',')] todo=$($decision.TodoKind) orderConfident=$($decision.OrderConfident)"
+    $script:lastReplySource = $gen.Source
+    $script:lastReplyDecision = $decision
+    if (-not $gen.Text) { return $null }
+    return $gen.Text
 }
 
 
@@ -959,31 +943,40 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     }
     $ctx.openCooldown.Remove($key)
     $msgsRaw = $convo.msgs
-    # B2: 附件标记解析(仅最新买家消息) + 快照剥离标记(格式不变)
+    # ===== [SPEC 4.1 / 5 2026-10-03] Normalize order + identity in ONE place, BEFORE any consumer
+    # looks at the messages. The raw DOM order used to be handed to three consumers that disagreed
+    # about which end was newest: lib\msg_source.ps1 treats the TAIL as newest, the should-reply
+    # hash below used the LAST buyer line, but attachments were read from index 0 and the prompt
+    # claimed index 0 was newest. lib\msg_norm.ps1 settles the direction from the per-message
+    # showTime the page already exposes, normalizes to chronological ASCENDING (oldest first), and
+    # flags an explicit anomaly instead of guessing when the evidence contradicts itself.
+    $msgList = ConvertTo-MessageList $msgsRaw $key
+    $orderLine = "MSG-SCHEMA $($key) v=$($msgList.Schema) msgs=$(@($msgList.Messages).Count) buyers=$($msgList.BuyerCount) order=$($msgList.Order.Reason) confident=$($msgList.Order.Confident) skipped=$(@($msgList.Skipped).Count) anomaly=$($msgList.Anomaly)"
+    Write-Log $orderLine
+    if ($msgList.Anomaly) {
+        # Not fatal: DOM order is still used, but the condition is reported rather than hidden.
+        Write-Log "MSG-ORDER-UNVERIFIED $($key) reason=$($msgList.Order.Reason) stamped=$($msgList.Order.TimestampedCount) - DOM order kept, order treated as approximate"
+    }
+    $orderedRaw = @($msgList.Lines) -join ([string][char]10)
+    if (-not $orderedRaw) { $orderedRaw = $msgsRaw }
+    # B2: attachment markers come from the NEWEST buyer message (the tail), never from index 0.
     $attImages = @(); $attFile = $null
-    $rawBuyerLines = @($msgsRaw -split "`n" | Where-Object { $_ -match '^\[BUYER\]' })
-    if ($rawBuyerLines.Count -gt 0) {
-        $rawLatest = $rawBuyerLines[0]
-        if ($rawLatest -match '@@IMG:([^\s]+)') { $attImages = @(@($Matches[1] -split '\|') | Where-Object { $_ } | Select-Object -First 3) }
-        if ($rawLatest -match '@@FILE:([^\s]+)') {
-            $fp = $Matches[1] -split '\|', 2
-            $attFile = @{ name = [uri]::UnescapeDataString($fp[0]); url = '' }
-            if ($fp.Count -gt 1) { $attFile.url = $fp[1] }
-        }
-        # 增强路径: 最新消息含指代词但无标记 → 回溯最近带标记的买家消息
-        if ($attImages.Count -eq 0 -and -not $attFile -and $rawLatest -match '(?i)(photo|image|pic|picture|foto|imagen|图片|图|文件|附件|document|attachment|pdf|excel|csv|word)') {
-            foreach ($bl in $rawBuyerLines) {
-                if ($bl -match '@@IMG:([^\s]+)') { $attImages = @(@($Matches[1] -split '\|') | Where-Object { $_ } | Select-Object -First 3); break }
-                if ($bl -match '@@FILE:([^\s]+)') {
-                    $fp2 = $Matches[1] -split '\|', 2
-                    $attFile = @{ name = [uri]::UnescapeDataString($fp2[0]); url = '' }
-                    if ($fp2.Count -gt 1) { $attFile.url = $fp2[1] }
-                    break
-                }
+    $newestBuyer = $msgList.LatestBuyer
+    if ($newestBuyer) {
+        if ($newestBuyer.HasImage) { $attImages = @(@($newestBuyer.ImageUrls) | Select-Object -First 3) }
+        if ($newestBuyer.HasFile) { $attFile = @{ name = $newestBuyer.FileName; url = $newestBuyer.FileUrl } }
+        # Enhanced path: the newest message points at an attachment in words but carries no marker,
+        # so walk BACKWARDS from the newest buyer message (never forwards from the oldest).
+        if ($attImages.Count -eq 0 -and -not $attFile -and $newestBuyer.Orig -match '(?i)(photo|image|pic|picture|foto|imagen|图片|图|文件|附件|document|attachment|pdf|excel|csv|word)') {
+            $bArr = @($msgList.BuyerMessages)
+            for ($bi = $bArr.Count - 1; $bi -ge 0; $bi--) {
+                $cand = $bArr[$bi]
+                if ($cand.HasImage) { $attImages = @(@($cand.ImageUrls) | Select-Object -First 3); break }
+                if ($cand.HasFile) { $attFile = @{ name = $cand.FileName; url = $cand.FileUrl }; break }
             }
         }
     }
-    $msgs = Remove-AttachmentMarkers $msgsRaw
+    $msgs = Remove-AttachmentMarkers $orderedRaw
     # P3.4 保存买家档案(国家/注册时间等,PII 仅存本机 data\buyers\)
     if ($convo.profile) { Save-BuyerProfile $skey $convo.profile }
     $msgLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
@@ -1118,7 +1111,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         $gapMin = -1
         if ($ctx.lastSendAt.ContainsKey($skey)) { $gapMin = [int]((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes }
         $inPostSendCooldown = ($gapMin -ge 0 -and $gapMin -lt $script:replyPostSendCooldownMin)
-        # ===== [FIX-DUP-GUARD 2026-09-27] 同一条买家消息不得重复回复(实测 Bohdana 9 分半被连回 3 次) =====
+        # ===== [FIX-DUP-GUARD 2026-09-27] 同一条买家消息不得重复回复(实测 Buyer-A 9 分半被连回 3 次) =====
         #   证据 = 同一轮抓取里的 (买家条数, 最后一条买家原文 hash) 与账本键**逐字相等** ⇒ 最后这条已回过。
         #   用法: 把它当作**判据的入参**(连续确认轮数按 0 计 = 没有待回复的新内容), 由唯一出口
         #   Test-ShouldReply 返回 NOT_IN_PENDING_LIST —— 这里不判"发不发", 不新增第二个出口。
@@ -1132,10 +1125,24 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         if ($cooldownRecheck -and -not $alreadyAnswered) {
             Write-Log "COOLDOWN-LIFT $($key): ledger proves a NEW buyer message - cooldown bypassed (time gates still apply)"
         }
+        # ===== [SPEC 4.1 2026-10-03] A confirmed NEW message must not be blocked by the old-message
+        # cooldown. The old code always passed the raw gap/cooldown values, so a buyer who sent a
+        # genuinely new message inside the 5-minute window was held back until it expired (measured:
+        # a real weight message arrived 17:24:47 and was answered 17:33:30, 8m43s later).
+        # The bypass is granted ONLY on positive evidence that the newest buyer message is not the
+        # one we already answered (Test-ConfirmedNewBuyerMessage: ledger key parseable AND buyer
+        # count increased or the newest buyer text changed). Legacy or unparseable ledger keys grant
+        # nothing. Identity checks, the ledger gate, the 2-round transient defence, the write lock
+        # and the page-health gate all stay in force - only the time gates relax.
+        $confirmedNew = Test-ConfirmedNewBuyerMessage -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer
+        $secSinceLastSend = -1
+        if ($ctx.lastSendAt.ContainsKey($skey)) { $secSinceLastSend = ((Get-Date) - $ctx.lastSendAt[$skey]).TotalSeconds }
+        Write-Log "NEW-MSG-EVIDENCE $($key) confirmedNew=$confirmedNew alreadyAnswered=$alreadyAnswered secSinceLastSend=$([int]$secSinceLastSend) floor=$($script:replyNewMsgFloorSec)s"
         $shouldReply = Test-ShouldReply -LedgerUsable $ledgerUsableNow `
             -PendingSeenRounds $seenRounds -RequiredSeenRounds $script:requiredSeenRounds `
             -MinutesSinceLastSend $gapMin -MinGapMinutes $script:replyMinGapMin `
             -InPostSendCooldown $inPostSendCooldown -PostSendCooldownMinutes $script:replyPostSendCooldownMin `
+            -ConfirmedNewMessage $confirmedNew -NewMessageFloorSeconds $script:replyNewMsgFloorSec -SecondsSinceLastSend $secSinceLastSend `
             -ConvoLines $cdpLines -LedgerKey $ledgerKey -NormLastBuyerHash $hLastBuyer
         Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) seen=${seenRoundsRaw}/$($script:requiredSeenRounds) gapMin=$gapMin minGap=$($script:replyMinGapMin)m cooldown=$inPostSendCooldown ledgerUsable=$ledgerUsableNow buyerMsgs=$buyerCount alreadyAnswered=$alreadyAnswered ledgerKey=$ledgerKey lastBuyerHash=$($hLastBuyer.Substring(0,[Math]::Min(8,$hLastBuyer.Length)))"
         # ===== [SPEC §4.3-G4 最小实现 2026-09-27 / P7] 同一买家最小间隔(抖动兜底; 纵深防御) =====
@@ -1177,7 +1184,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                         return
                     }
                     # 连挂计数: 同一会话连续 N 轮"在待回复列表里、但账本证明没有新内容" ⇒ 告警交人工判断。
-                    #   不静默、也不拿买家的耐心去试 —— 这是 买家G 事故(无限跳过)与 Bohdana 事故(重复打扰)
+                    #   不静默、也不拿买家的耐心去试 —— 这是 买家G 事故(无限跳过)与 Buyer-A 事故(重复打扰)
                     #   之间唯一诚实的落点: 机器人不重复发, 但把"页面待回复标记可能是陈旧的"这件事说出去。
                     $holds = 0
                     if ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds -and $ctx.dupGuardHolds.ContainsKey($skey)) { $holds = [int]$ctx.dupGuardHolds[$skey] }
@@ -1226,7 +1233,8 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
             }
             $rules = Get-Rules
             $reply = $null
-            $src = 'RULE'
+            # Source label is set by the generation adapter; 'NONE' means nothing was produced yet.
+            $src = 'NONE'
             $visionSource = ''
             $visionUrls = @()
             $docExtractText = ''
@@ -1247,7 +1255,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     $visionUrls = $dataUrls
                     Write-Log "VISION-IMG $($key): $($dataUrls.Count)/$($attImages.Count) image(s) downloaded"
                     $reply = Generate-Reply-LLM $rules $key $latestClean $lines -ImageDataUrls $dataUrls
-                    if ($reply) { Write-Log "VISION-REPLY $($key) src=LLM(multimodal)"; $src = 'LLM' }
+                    if ($reply) { $src = $script:lastReplySource; Write-Log "VISION-REPLY $($key) src=$($src)(multimodal)" }
                     else { Write-Log "VISION-REPLY-FAIL $($key): multimodal LLM returned null" }
                 } else {
                     Write-Log "VISION-IMG-FAIL $($key): image download failed"
@@ -1273,13 +1281,13 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                                 $visionUrls = @($docRes.images)
                                 $docPrompt = "买家发送了文件《$($attFile.name)》(扫描件, 已渲染为图片)。请结合文件内容回复; 明确可见的重量/尺寸/箱数/单号可确认, 不确定不臆造。"
                                 $reply = Generate-Reply-LLM $rules $key $latestClean $lines -ImageDataUrls @($docRes.images) -AttachmentText $docPrompt
-                                if ($reply) { Write-Log "VISION-REPLY $($key) src=LLM(doc-scan)"; $src = 'LLM' }
+                                if ($reply) { $src = $script:lastReplySource; Write-Log "VISION-REPLY $($key) src=$($src)(doc-scan)" }
                                 else { Write-Log "VISION-REPLY-FAIL $($key): doc-scan LLM returned null" }
                             } else {
                                 $docExtractText = $docRes.text
                                 $docPrompt = "买家发送了文件《$($attFile.name)》（类型：$($docRes.kind)）：`n" + $docRes.text + "`n请结合文件内容回复；明确可见的重量/尺寸/箱数/单号可确认，不确定不臆造。"
                                 $reply = Generate-Reply-LLM $rules $key $latestClean $lines -AttachmentText $docPrompt
-                                if ($reply) { Write-Log "VISION-REPLY $($key) src=LLM(doc)"; $src = 'LLM' }
+                                if ($reply) { $src = $script:lastReplySource; Write-Log "VISION-REPLY $($key) src=$($src)(doc)" }
                                 else { Write-Log "VISION-REPLY-FAIL $($key): doc LLM returned null" }
                             }
                         } else {
@@ -1293,31 +1301,41 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                 }
                 Write-Log "ROUND-VISION-END $($key) kind=document elapsed=$(Get-LlmRoundElapsedSec)s got=$([bool]$reply)"
             }
-            # 1) 所有非图片消息优先走 LLM（含简短确认，LLM 已提速至 ~1.5s，回复更自然）
+            # 1) Every non-image message goes through the single generation entry point first. That
+            #    entry point already contains its own scenario fallback, so a $null return means even
+            #    the fallback produced nothing - not merely "the model failed".
             if (-not $reply -and $latestClean -ne '[IMG]') {
                 $reply = Generate-Reply-LLM $rules $key $latestClean $lines
-                if ($reply) { Write-Log "Reply source: LLM"; $src = 'LLM' }
+                if ($reply) { $src = $script:lastReplySource; Write-Log "Reply source: $($src)" }
             }
-            # 2) LLM 未配置/失败/超时 → 图片消息 → 多语言引导话术
+            # 2) Image-only message -> the scenario fallback for 'attachment_only'. This replaces an
+            #    inline 4-language hashtable that duplicated policy wording inside monitor.ps1 and
+            #    whose non-English branches were unreachable (Get-ReplyLang is always 'en').
             if (-not $reply -and $latestClean -eq '[IMG]') {
-                $imgReply = @{
-                    en = "Thanks for the images! To give you an accurate quote, could you also share the goods details in text - total weight (kg), packaging dimensions (L*W*H) and the destination address?"
-                    es = "¡Gracias por las imágenes! Para darle una cotización precisa, ¿podría compartir también el peso total (kg), las dimensiones del embalaje (L*A*H) y la dirección de destino?"
-                    pt = "Obrigado pelas imagens! Para dar uma cotação precisa, poderia compartilhar também o peso total (kg), as dimensões da embalagem (C*L*A) e o endereço de destino?"
-                    fr = "Merci pour les images ! Pour un devis précis, pourriez-vous aussi partager le poids total (kg), les dimensions de l'emballage (L*l*H) et l'adresse de destination ?"
+                $imgDecision = $script:lastReplyDecision
+                if (-not $imgDecision) {
+                    $imgConv = ConvertTo-MessageList (@($lines) -join ([string][char]10)) $key
+                    $imgDecision = Get-ReplyDecision -Conversation $imgConv -Facts (Get-ConversationFacts $imgConv) -Rules $rules -ForceScenario 'attachment_only'
                 }
-                $imgLang = Get-ReplyLang
-                $reply = $imgReply[$imgLang]
-                Write-Log "Reply source: IMG_TEMPLATE"
+                $reply = Get-ScenarioFallback -Decision $imgDecision -Rules $rules
+                # Record it so the send-time gate below uses the attachment wording, not a generic one.
+                if (-not $script:lastReplyDecision) { $script:lastReplyDecision = $imgDecision }
+                $src = 'FALLBACK'
+                Write-Log "Reply source: SCENARIO_FALLBACK(attachment_only)"
             }
-            # 3) LLM 失败时：简短确认走规则引擎 QUICK 快回，其余走完整规则引擎
+            # 3) Still empty -> the decision-driven fallback for the CURRENT scenario. There is no
+            #    separate "rule engine" any more: the fallback path and the model path share exactly
+            #    one policy implementation (lib\reply_policy.ps1 decides, lib\reply_gen.ps1 words it).
+            #    The old QUICK/RULE_ENGINE labels are gone with it.
             if (-not $reply) {
-                $latestLower = $latestClean.ToLower()
-                $quick = $latestLower -match '^(ok|okay|okey|yes|yeah|yep|yup|sure|fine|perfect|great|nice|good|thanks|thank you|thx|gracias|obrigad|merci|no|non|não|nao)\b' -and $latestLower.Length -lt 30
-                $reply = Generate-Reply $rules $key $latestClean $lines
-                $srcLabel = 'RULE_ENGINE'
-                if ($quick) { $srcLabel = 'QUICK' }
-                Write-Log "Reply source: $srcLabel (LLM failback)"
+                $fbDecision = $script:lastReplyDecision
+                if (-not $fbDecision) {
+                    $fbConv = ConvertTo-MessageList (@($lines) -join ([string][char]10)) $key
+                    $fbDecision = Get-ReplyDecision -Conversation $fbConv -Facts (Get-ConversationFacts $fbConv) -Rules $rules
+                }
+                $reply = Get-ScenarioFallback -Decision $fbDecision -Rules $rules
+                $src = 'FALLBACK'
+                Write-Log "Reply source: SCENARIO_FALLBACK($($fbDecision.Scenario))"
             }
             # 2b) B5 提取调用(与回复解耦): 附件存在时第二次 LLM 只输出 JSON → sidecar(source+文件名)
             if ($visionSource) {
@@ -1350,58 +1368,35 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     Stop-LlmRound
                     return
                 }
-                # === 发送前禁词拦截（spec 禁词拦截 Phase 4）：LLM/引擎双路径均过检；命中→LLM 重写一次→仍命中或引擎命中→安全兜底句 ===
-                $banList = $null
-                if ($rules -and $rules.banned_phrases) { $banList = @($rules.banned_phrases) }
-                $banHit = Test-BannedText $reply $banList
-                if ($banHit) {
+                # === Send-time policy gate (defence in depth) ===
+                # The generation path already checks compliance and rewrites at most once. This is the
+                # LAST gate before the text leaves the process, and it also covers replies that did
+                # not come from the model.
+                # [SPEC 6 2026-10-03] It used to run two INDEPENDENT rewrite rounds - one for banned
+                # words, one for liability wording - so a single draft could cost up to two extra
+                # model calls, and each round re-sent the whole prompt. Spec 6 requires at most ONE
+                # rewrite sharing the remaining budget, so the rewrite now lives in lib\reply_gen.ps1
+                # (driven by the full violation list) and this gate never calls the model at all.
+                # The guarantee is unchanged: a reply that cannot be made compliant is never sent.
+                $finalCheck = Test-ReplyCompliance -Text $reply -Rules $rules
+                if (-not $finalCheck.Ok) {
+                    $codes = @($finalCheck.Violations | ForEach-Object { $_.Code }) -join ','
+                    $detail = (@($finalCheck.Violations | Where-Object { $_.Severity -eq 'block' } | ForEach-Object { $_.Code + ':' + $_.Detail }) -join ' | ')
                     $sum = $reply.Trim()
-                    if ($sum.Length -gt 60) { $sum = $sum.Substring(0, 60) + "..." }
-                    if ($src -eq 'LLM') {
-                        Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($banHit) action=REWRITE summary=$($sum)"
-                        $retry = Generate-Reply-LLM $rules $key $latestClean $lines -BanRetry
-                        if ($retry -and $retry.Trim().Length -gt 0) {
-                            $retryHit = Test-BannedText $retry $banList
-                            if ($retryHit) {
-                                $sum2 = $retry.Trim()
-                                if ($sum2.Length -gt 60) { $sum2 = $sum2.Substring(0, 60) + "..." }
-                                Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($retryHit) action=FALLBACK summary=$($sum2)"
-                                $reply = $script:banSafeFallback
-                            } else { $reply = $retry }
-                        } else {
-                            Write-Log "BANLIST-BLOCK $($key) src=LLM word=$($banHit) action=FALLBACK summary="
-                            $reply = $script:banSafeFallback
-                        }
-                    } else {
-                        Write-Log "BANLIST-BLOCK $($key) src=RULE word=$($banHit) action=FALLBACK summary=$($sum)"
+                    if ($sum.Length -gt 60) { $sum = $sum.Substring(0, 60) + '...' }
+                    Write-Log "SEND-GATE-BLOCK $($key) src=$($src) codes=[$codes] detail=[$detail] action=SCENARIO_FALLBACK summary=$($sum)"
+                    $reply = Get-ScenarioFallback -Decision $script:lastReplyDecision -Rules $rules
+                    $src = 'FALLBACK'
+                    $postCheck = Test-ReplyCompliance -Text $reply -Rules $rules
+                    if (-not $postCheck.Ok) {
+                        # Even the scenario fallback is not clean. Ship the neutral holding line and
+                        # record it loudly rather than sending a policy violation.
+                        $postCodes = @($postCheck.Violations | ForEach-Object { $_.Code }) -join ','
+                        Write-Log "SEND-GATE-FALLBACK-DIRTY $($key) codes=[$postCodes] action=NEUTRAL_HOLD"
                         $reply = $script:banSafeFallback
                     }
                 }
-                # === 发送前责任承诺双检（2026-09-10 事故整改）：句级检测责任/费用承诺；命中→LLM 重写一次→仍命中→安全兜底句（与 BANLIST 同构，日志前缀 COMMIT-BLOCK） ===
-                $finHit = Test-FinancialCommitment $reply
-                if ($finHit) {
-                    $sum3 = $reply.Trim()
-                    if ($sum3.Length -gt 60) { $sum3 = $sum3.Substring(0, 60) + "..." }
-                    if ($src -eq 'LLM') {
-                        Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=REWRITE summary=$($sum3)"
-                        $retry2 = Generate-Reply-LLM $rules $key $latestClean $lines -CommitRetry
-                        if ($retry2 -and $retry2.Trim().Length -gt 0) {
-                            $retryHit2 = Test-FinancialCommitment $retry2
-                            if ($retryHit2) {
-                                $sum4 = $retry2.Trim()
-                                if ($sum4.Length -gt 60) { $sum4 = $sum4.Substring(0, 60) + "..." }
-                                Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($retryHit2) action=FALLBACK summary=$($sum4)"
-                                $reply = $script:banSafeFallback
-                            } else { $reply = $retry2 }
-                        } else {
-                            Write-Log "COMMIT-BLOCK $($key) src=LLM pat=$($finHit) action=FALLBACK summary="
-                            $reply = $script:banSafeFallback
-                        }
-                    } else {
-                        Write-Log "COMMIT-BLOCK $($key) src=RULE pat=$($finHit) action=FALLBACK summary=$($sum3)"
-                        $reply = $script:banSafeFallback
-                    }
-                }
+
                 $sendRes = Send-OneTalkMessage $key $reply
                 Write-Log "ROUND-SEND $($key) chars=$($reply.Length) elapsed=$(Get-LlmRoundElapsedSec)s"
                 Write-Log "REPLIED to $($key): $sendRes"
@@ -1434,7 +1429,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                 } else {
                     # ===== [SPEC §4.2-G2 2026-09-27] 发对人校验失败 ⇒ **整轮中止**(不只是跳过该会话) =====
                     # 依据 §7-R6: 本次事故里该闸门确实被触发(11:49:35 expected=买家L, current=买家G
-                    #   Krishnasamy), 但旧行为只报错、继续处理后续会话 ⇒ 页面已错位仍继续发。spec §4.4-4
+                    #   Buyer-B), 但旧行为只报错、继续处理后续会话 ⇒ 页面已错位仍继续发。spec §4.4-4
                     #   明令禁止"只跳过该会话、继续处理下一个"。
                     if ($sendRes -match 'ABORT_WRONG_CONVO') {
                         $script:roundHalt = $true

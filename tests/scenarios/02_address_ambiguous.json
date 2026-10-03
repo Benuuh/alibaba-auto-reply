@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "02_address_ambiguous",
+  "title": "Buyer mentions 'the address' without saying whose",
+  "category": "ambiguous address meaning",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. 'address' appears in the buyer line but nothing in the lines says WHICH address, so the only honest answer is a clarifying question.",
+  "conversationLines": [
+    "[ME] Hi, could you share the pickup details when you have a moment? @@TS:1791018000000",
+    "[BUYER] ok @@TS:1791018120000 @@OT:b2s=",
+    "[BUYER] which address should I use for this one? @@TS:1791018300000 @@OT:d2hpY2ggYWRkcmVzcyBzaG91bGQgSSB1c2UgZm9yIHRoaXMgb25lPw=="
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "address_clarify",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:03:00Z",
+    "sentAt": "2026-10-03T09:07:00Z"
+  },
+  "fakeModel": {
+    "mode": "null",
+    "compliantReply": "Sure - just so I get this right, is that the pickup address for the cargo or the address we should deliver to?"
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "address_clarify",
+    "allowTimeCommitment": false,
+    "guidanceKey": "address_clarify"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)address (is|has been)\\s+(now\\s+)?(on file|confirmed|saved|noted|registered)",
+      "why": "nothing established whose address it is"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(i have|we have)\\s+(your|the)\\s+(delivery|recipient|shipping)\\s+address\\b",
+      "why": "no delivery address was ever given"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "asks-which-one",
+      "check": "asksAQuestion",
+      "value": true,
+      "why": "the whole point is one clarifying question"
+    },
+    {
+      "id": "names-both-options",
+      "check": "mustMatch",
+      "value": "(?i)(pickup|pick up|deliver)",
+      "why": "must distinguish pickup from delivery"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "address_clarify is at most two sentences"
+    },
+    {
+      "id": "only-address-topic",
+      "check": "onlyAskableFields",
+      "value": [
+        "address"
+      ],
+      "why": "may only talk about the address here, not start a cargo questionnaire"
+    }
+  ],
+  "expectBuyerCount": 2,
+  "expectLatestBuyerText": "which address should I use for this one?",
+  "expectSkippedZero": true,
+  "expectOrderConfirmed": false,
+  "expectOrderConfident": true
+}

@@ -1,4 +1,4 @@
-# watchdog.ps1 - 常驻守护(三重): monitor 进程 / 日志新鲜度 / CDP 兜底。
+﻿# watchdog.ps1 - 常驻守护(三重): monitor 进程 / 日志新鲜度 / CDP 兜底。
 #   （原为五重：含 control-agent 保活，该组件 2026-09-26 已退休；原第四重「企微保活」已随两套
 #    退休告警桥物理移除 —— 见 docs\KNOWN_EXCEPTIONS.md E-20 / E-24）
 param(

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "17_quote_ready_query",
+  "title": "Buyer asks whether the quote is ready",
+  "category": "quote-ready query",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. No rate and no completion state exist in the lines, so 'still working on it' is the only truthful answer.",
+  "conversationLines": [
+    "[ME] I am working on the rate for you. @@TS:1791018000000",
+    "[BUYER] is my quote ready? @@TS:1791018360000 @@OT:aXMgbXkgcXVvdGUgcmVhZHk/"
+  ],
+  "domOrder": "oldest-first",
+  "expectedAction": "quote_ready_query",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-03T09:05:00Z",
+    "sentAt": "2026-10-03T09:07:00Z"
+  },
+  "fakeModel": {
+    "mode": "violation_then_compliant",
+    "violationReply": "Your rate is ready - it is $1,850 USD, all in.",
+    "compliantReply": "I am still working on your rate and I do not want to send you a rough number. I will come back to you as soon as it is ready."
+  },
+  "expectedDecision": {
+    "needHumanTodo": true,
+    "todoKind": "quote_status",
+    "allowTimeCommitment": false,
+    "guidanceKey": "quote_ready_query"
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b\\d+(\\.\\d+)?\\s*(usd|dollars?|bucks)\\b",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(usd|eur|cny|rmb)\\s*\\d",
+      "why": "hard bound: never state a price"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\\b(around|approximately|starting from)\\s*\\d",
+      "why": "no range may be invented"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "still-working",
+      "check": "mustMatch",
+      "value": "(?i)(working|soon|ready|number)",
+      "why": "say it is still in progress"
+    },
+    {
+      "id": "short",
+      "check": "maxSentences",
+      "value": 2,
+      "why": "quote_ready_query is at most two sentences"
+    },
+    {
+      "id": "no-deadline",
+      "check": "noTimeCommitment",
+      "value": true,
+      "why": "no verified notification channel, so no deadline"
+    },
+    {
+      "id": "only-askable",
+      "check": "onlyAskableFields",
+      "value": "$decision",
+      "why": "ask only for fields the decision allows"
+    }
+  ],
+  "expectBuyerCount": 1,
+  "expectLatestBuyerText": "is my quote ready?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true,
+  "expectModelCalls": 2,
+  "expectSource": "LLM_REWRITE"
+}
