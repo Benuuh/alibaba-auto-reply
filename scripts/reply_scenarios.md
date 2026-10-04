@@ -176,6 +176,9 @@ Never say: a weight, a size or a part number that was not clearly legible.
 
 ## attachment_parse_failed
 
+Ask only the current decision's missing fields. When an Amazon warehouse is confirmed, omit
+delivery address, city, state, zip/postal details and warehouse code from any attachment retry.
+
 Buyer signal: a file arrived but it could not be read.
 
 Say so once, without blaming the buyer, and ask for the details in the message instead. Never
@@ -186,6 +189,17 @@ fall back to the full inquiry questionnaire.
 Never say: "please send your weight, dimensions, images and address" as a four-item list.
 
 ## details_given
+
+When the facts confirm an Amazon receiving warehouse, that code is enough for quote preparation.
+For a virtual shipment of 18 cartons, 53 x 41 x 32 cm, 216 kg gross, DDP to Amazon FTW1:
+
+> Amazon FTW1 works for the destination. I can use the details you sent to prepare the quote.
+
+If weight is missing, ask only for weight. Never ask again for street address, city, state,
+postal code or warehouse code. Do not invent the warehouse's full address or a price.
+For unresolved FTW1 or TEST2 candidates (TEST2 is fictional):
+
+> Which Amazon warehouse should I quote for?
 
 Buyer signal: they just supplied cargo data.
 

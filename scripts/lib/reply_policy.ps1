@@ -137,7 +137,8 @@ function Test-ReplyCompliance {
     [CmdletBinding()]
     param(
         [string]$Text,
-        $Rules = $null
+        $Rules = $null,
+        $Decision = $null
     )
     $violations = New-Object System.Collections.ArrayList
     if ([string]::IsNullOrWhiteSpace($Text)) {
@@ -146,6 +147,17 @@ function Test-ReplyCompliance {
     }
 
     # 1) Banned words - delegated to the existing single authority, never re-implemented.
+    $dest = $null
+    if ($Decision -and $Decision.Facts) { $dest = $Decision.Facts.Destination }
+    if ($dest -and $dest.QuoteUsable -and $dest.Kind -eq 'amazon_warehouse') {
+        # Deterministic request vocabulary; deliberately does not reject a simple acknowledgment.
+        $request = '(?i)(?:send|share|provide|give|need|require|confirm|tell|what|which|could|can you|please)[^.!?]{0,100}(?:address|street|city|state|zip|postal|warehouse|destination|code)|(?:address|street|city|state|zip|postal|warehouse|destination|code)[^.!?]{0,45}(?:required|needed|missing|please|\?)'
+        $code = [regex]::Escape([string]$dest.WarehouseCode)
+        $codeRequest = '(?i)\b(?:confirm|verify|provide|send|share)\s+(?:the\s+)?(?:amazon\s+)?' + $code + '\b|\b(?:is|should|can|which|what)\b[^.!?]{0,60}\b' + $code + '\b[^.!?]*\?'
+        if ($Text -match $request -or $Text -match $codeRequest) {
+            [void]$violations.Add(@{ Code = 'DESTINATION_REASK'; Severity = 'block'; Detail = 'Buyer already provided a usable Amazon warehouse; do not re-request destination, address, postal details or warehouse code.' })
+        }
+    }
     $banned = $null
     if ($Rules -and $Rules.banned_phrases) { $banned = @($Rules.banned_phrases) }
     $banHit = Test-BannedText $Text $banned
@@ -247,7 +259,7 @@ function Get-AskCounts([object[]]$Messages) {
         $lc = $m.Text.ToLowerInvariant()
         if ($lc -match 'weight|kg|peso|公斤|千克|gross') { $counts.weight++ }
         if ($lc -match 'dimension|size|尺寸|medida|\bcm\b|\bmm\b') { $counts.dimension++ }
-        if ($lc -match 'address|addr|地址|calle|street|endere|rua') { $counts.address++ }
+        if ($lc -match 'address|addr|地址|calle|street|endere|rua|(?:which|what).{0,30}(?:amazon|fba).{0,15}warehouse|warehouse.{0,15}code') { $counts.address++ }
         if ($lc -match 'image|photo|picture|图片|图') { $counts.image++ }
         if ($lc -match 'supplier|供应商|fornecedor|proveedor') { $counts.supplier++ }
     }
@@ -272,7 +284,7 @@ function Get-AskableFields {
         switch ($f) {
             'weight'    { $provided = [bool]$Facts.HasWeight }
             'dimension' { $provided = [bool]$Facts.HasDimensions }
-            'address'   { $provided = [bool]$Facts.HasAddress }
+            'address'   { $provided = [bool]$Facts.HasQuoteDestination }
             'image'     { $provided = [bool]$Facts.HasImages }
             # Only an actual contact value counts as provided (see Get-ConversationFacts).
             'supplier'  { $provided = [bool]$Facts.HasSupplierContact }
@@ -451,25 +463,15 @@ function Get-ReplyScenario {
 # Map a scenario to the reviewed guidance file key (reply_scenarios.md). Returning the same string
 # for two scenarios is deliberate: guidance is shared rather than duplicated per scenario.
 function Get-ScenarioGuidanceKey([string]$Scenario) {
-    switch ($Scenario) {
-        'human_requested'     { return 'human_requested' }
-        'complaint'           { return 'complaint' }
-        'delivery_status'     { return 'delivery_status' }
-        'quote_ready_query'   { return 'quote_ready_query' }
-        'supplier_unreachable'{ return 'supplier_unreachable' }
-        'dimension_missing'   { return 'dimension_missing' }
-        'address_clarify'     { return 'address_clarify' }
-        'material_promised'   { return 'material_promised' }
-        'billing_explain'     { return 'billing_explain' }
-        'process_explain'     { return 'process_explain' }
-        'packing_prep'        { return 'packing_prep' }
-        'refusal'             { return 'refusal' }
-        'short_ack'           { return 'short_ack' }
-        'attachment_only'     { return 'attachment_only' }
-        'details_given'       { return 'details_given' }
-        'new_inquiry'         { return 'new_inquiry' }
-        default               { return 'general' }
+    foreach ($key in @(
+        'human_requested', 'complaint', 'delivery_status', 'quote_ready_query',
+        'supplier_unreachable', 'dimension_missing', 'address_clarify', 'material_promised',
+        'billing_explain', 'process_explain', 'packing_prep', 'refusal', 'short_ack',
+        'attachment_only', 'details_given', 'new_inquiry'
+    )) {
+        if ($Scenario -eq $key) { return $key }
     }
+    return 'general'
 }
 
 # Build the small decision object. Everything downstream (generation, fallbacks, the replay
@@ -485,8 +487,19 @@ function Get-ReplyDecision {
     )
 
     $latest = $Conversation.LatestBuyer
-    $latestText = ''
-    if ($latest) { $latestText = $latest.Orig }
+    if ($Conversation.Anomaly -or -not $latest -or $latest.IsSystemCard) {
+        $reason = 'no-actionable-buyer-message'
+        if ($Conversation.ReplyBlockReason) { $reason = $Conversation.ReplyBlockReason }
+        return [pscustomobject]@{
+            CanReply = $false; BlockReason = $reason; Scenario = 'unverified_input'
+            Reasons = @($reason); GuidanceKey = ''; AskFields = @(); AskableFields = @()
+            AskCounts = @{}; PromisedFields = @(); MaxSentences = 0
+            NeedHumanTodo = $false; TodoKind = ''; AllowTimeCommitment = $false
+            AllowAdvance = $false; LatestBuyerText = ''; Facts = $Facts
+            OrderConfident = [bool]$Conversation.Order.Confident; OrderReason = [string]$Conversation.Order.Reason
+        }
+    }
+    $latestText = $latest.Orig
     $askCounts = Get-AskCounts $Conversation.Messages
     $promised = @(Get-PromisedFields @($Conversation.Lines))
 
@@ -502,23 +515,10 @@ function Get-ReplyDecision {
     # may take a few. Deliberately NOT a hard character cap (spec 4.3: do not mechanically
     # truncate to a fixed number of sentences).
     $maxSentences = 2
-    switch ($scenario) {
-        'short_ack'       { $maxSentences = 1 }
-        'refusal'         { $maxSentences = 1 }
-        'material_promised' { $maxSentences = 1 }
-        'human_requested' { $maxSentences = 2 }
-        'delivery_status' { $maxSentences = 2 }
-        'quote_ready_query' { $maxSentences = 2 }
-        'complaint'       { $maxSentences = 3 }
-        'billing_explain' { $maxSentences = 3 }
-        'process_explain' { $maxSentences = 3 }
-        'supplier_unreachable' { $maxSentences = 2 }
-        'dimension_missing' { $maxSentences = 2 }
-        'address_clarify' { $maxSentences = 2 }
-        'packing_prep'    { $maxSentences = 3 }
-        'details_given'   { $maxSentences = 2 }
-        'new_inquiry'     { $maxSentences = 2 }
-        default           { $maxSentences = 2 }
+    if ($scenario -in @('short_ack', 'refusal', 'material_promised')) {
+        $maxSentences = 1
+    } elseif ($scenario -in @('complaint', 'billing_explain', 'process_explain', 'packing_prep')) {
+        $maxSentences = 3
     }
 
     # Which fields may this reply ask for? Only fields genuinely missing, not already provided and
@@ -533,7 +533,6 @@ function Get-ReplyDecision {
         # Reference images help but are not required to price accurately, so a short list here is
         # limited to the fields that genuinely gate an accurate rate (spec 4.3).
         'details_given' { $askFields = @($askable | Where-Object { $_ -ne 'image' } | Select-Object -First 2) }
-        'address_clarify' { $askFields = @() }   # the question here is "whose address", not a field
         # The approved approach is to offer to confirm the cargo details with the supplier directly.
         # Asking for the supplier's contact is therefore the legitimate ask here - but only when the
         # buyer actually has a supplier, and only while the field limit allows it.
@@ -545,42 +544,35 @@ function Get-ReplyDecision {
                 if ($sup.Count -gt 0) { $askFields = @('supplier') }
             }
         }
-        'attachment_only' { $askFields = @($askable | Select-Object -First 2) }
-        'quote_ready_query' { $askFields = @($askable | Select-Object -First 2) }
-        'human_requested' { $askFields = @() }
-        'complaint'     { $askFields = @() }
-        'refusal'       { $askFields = @() }
-        # A bare "ok"/"thanks" must NOT be turned into a new task (spec 4.2: no forced new task and
-        # no long reassurance). Close the exchange naturally; ask only if something is genuinely
-        # necessary, which for a content-free acknowledgement it is not.
-        'short_ack'     { $askFields = @() }
-        'material_promised' { $askFields = @() }
-        'billing_explain' { $askFields = @() }
-        'process_explain' { $askFields = @() }
-        'packing_prep'  { if ($askable.Count -gt 0) { $askFields = @($askable[0]) } }
-        'delivery_status' { $askFields = @() }
+        { $_ -in @('attachment_only', 'quote_ready_query') } { $askFields = @($askable | Select-Object -First 2) }
+        # These scenarios do not collect cargo fields. Address clarification asks whose address;
+        # acknowledgements and promises close the exchange without creating another task.
+        { $_ -in @('address_clarify', 'human_requested', 'complaint', 'refusal', 'short_ack',
+                   'material_promised', 'billing_explain', 'process_explain', 'delivery_status') } { }
         default         { if ($askable.Count -gt 0) { $askFields = @($askable[0]) } }
     }
     # Never ask a field the buyer already promised (belt and braces on top of Get-AskableFields).
     $askFields = @($askFields | Where-Object { $promised -notcontains $_ })
+    if ($Facts.Destination -and ($Facts.Destination.Kind -eq 'ambiguous' -or $Facts.Destination.AmazonContext) -and
+        -not $Facts.HasQuoteDestination -and $askable -contains 'address' -and
+        $scenario -in @('new_inquiry','details_given','attachment_only','attachment_parse_failed','quote_ready_query','general')) { $askFields = @('address') }
 
     # Does this request need a real human fact? Anything about fulfillment, money, supplier
     # handoff, an explicit human request, a complaint or an unreadable attachment does.
-    $todoKind = ''
-    $needTodo = $false
-    switch ($scenario) {
-        'delivery_status'      { $needTodo = $true; $todoKind = 'fulfillment_status' }
-        'quote_ready_query'    { $needTodo = $true; $todoKind = 'quote_status' }
-        'supplier_unreachable' { $needTodo = $true; $todoKind = 'supplier_handoff' }
+    $todoKind = switch ($scenario) {
+        'delivery_status'      { 'fulfillment_status' }
+        'quote_ready_query'    { 'quote_status' }
+        'supplier_unreachable' { 'supplier_handoff' }
         # Once the supplier contact is known, confirming the cargo details with them is a real
         # owner action, so it needs a real todo. Before that we are only asking for the contact.
-        'dimension_missing'    { if ($Facts.HasSupplierContact -or $Facts.HasSupplier) { $needTodo = $true; $todoKind = 'supplier_handoff' } }
-        'human_requested'      { $needTodo = $true; $todoKind = 'human_requested' }
-        'complaint'            { $needTodo = $true; $todoKind = 'complaint_review' }
-        'address_clarify'      { $needTodo = $true; $todoKind = 'address_clarify' }
-        'attachment_parse_failed' { $needTodo = $true; $todoKind = 'attachment_unreadable' }
-        default                { $needTodo = $false; $todoKind = '' }
+        'dimension_missing'    { if ($Facts.HasSupplierContact -or $Facts.HasSupplier) { 'supplier_handoff' } else { '' } }
+        'human_requested'      { 'human_requested' }
+        'complaint'            { 'complaint_review' }
+        'address_clarify'      { 'address_clarify' }
+        'attachment_parse_failed' { 'attachment_unreadable' }
+        default                { '' }
     }
+    $needTodo = [bool]$todoKind
 
     # A specific deadline may only be offered when a real local todo exists AND the notification
     # channel can actually deliver it. Otherwise generation uses wording without a deadline.
@@ -590,6 +582,8 @@ function Get-ReplyDecision {
     $allowAdvance = -not ($scenario -in @('human_requested', 'complaint', 'refusal'))
 
     return [pscustomobject]@{
+        CanReply            = $true
+        BlockReason         = ''
         Scenario            = $scenario
         Reasons             = @($scenarioInfo.Reasons)
         GuidanceKey         = (Get-ScenarioGuidanceKey $scenario)

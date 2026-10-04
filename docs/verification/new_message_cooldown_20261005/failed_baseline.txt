@@ -1,0 +1,35 @@
+FAIL A1 new text at 60s reaches generation/send with five minute configs
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+Latest buyer msg: new request
+NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True alreadyAnswered=False secSinceLastSend=60 floor=20s
+SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=1 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=2 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=30FDB793
+RATE-SKIP buyer=virtual buyer gap=1m (min-gap 5m, config key reply_min_gap_min)
+ALREADY-REPLIED-WAIT Virtual Buyer reason=RATE_MIN_GAP no send; next check at 12:04:00 (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min)
+FAIL A2 floor deadline anchored to successful send
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+Latest buyer msg: new request
+NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True alreadyAnswered=False secSinceLastSend=20 floor=20s
+SHOULD-REPLY Virtual Buyer: Reply=False Reason=NEW_MESSAGE_FLOOR seen=2/2 gapMin=0 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=2 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=30FDB793
+ALREADY-REPLIED-WAIT Virtual Buyer reason=NEW_MESSAGE_FLOOR no send; next check at 12:05:00 (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min)
+FAIL A2 exactly 20.000s sends without five minute wait
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+Latest buyer msg: new request
+NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True alreadyAnswered=False secSinceLastSend=20 floor=20s
+SHOULD-REPLY Virtual Buyer: Reply=False Reason=NEW_MESSAGE_FLOOR seen=2/2 gapMin=0 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=2 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=30FDB793
+ALREADY-REPLIED-WAIT Virtual Buyer reason=NEW_MESSAGE_FLOOR no send; next check at 12:05:00 (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min)
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+TEMP-SKIP Virtual Buyer: dedup cooldown 0m/5m pkey=[unchanged -> unchanged] buyers=2
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+TEMP-SKIP Virtual Buyer: dedup cooldown 0m/5m pkey=[unchanged -> unchanged] buyers=2
+FAIL A3 same text count increased unchanged preview periodically read and sent
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+TEMP-SKIP Virtual Buyer: dedup cooldown 1m/5m pkey=[unchanged -> unchanged] buyers=1
+FAIL A3 success scans do not resend same text message
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+TEMP-SKIP Virtual Buyer: dedup cooldown 1m/5m pkey=[unchanged -> unchanged] buyers=1
+PROCESS convo from pending-list: Virtual Buyer | unchanged
+TEMP-SKIP Virtual Buyer: dedup cooldown 1m/5m pkey=[unchanged -> unchanged] buyers=1
+RESULT pass=2 fail=5

@@ -33,7 +33,6 @@ function Get-FactEvidenceTable {
     $fields = @(
         @{ Key = 'weight';    Label = 'total weight (kg)'; Pattern = '\d+\s*(kg|kgs|kilo|kilos)\b|\d+\s*(公斤|千克)|weight\s*[:=]?\s*\d|peso\s*[:=]?\s*\d' },
         @{ Key = 'dimension'; Label = 'packaging dimensions (L*W*H)'; Pattern = '\d+\s*[x\u00d7*]\s*\d+|\d+(\.\d+)?\s*(cm|mm)\s*[x\u00d7*]|dimension|尺寸|medidas' },
-        @{ Key = 'address';   Label = 'recipient address'; Pattern = 'address|addr|calle|rua|street|avenue|road|endere|direcci|邮编|cep|postal|zip|city|ciudad|cidade|country|pa[ií]s|deliver to|consignee|destinatario' },
         @{ Key = 'quantity';  Label = 'cartons / pieces'; Pattern = '\d+\s*(pcs|pieces|cartons|ctns|boxes|units)\b|\d+\s*(件|箱)' },
         @{ Key = 'supplier';  Label = 'supplier contact'; Pattern = 'supplier|vendor|factory|proveedor|fornecedor|供应商' },
         @{ Key = 'mode';      Label = 'shipping mode'; Pattern = 'by sea|by air|ocean|air freight|\bfcl\b|\blcl\b|shipping method|transport' }
@@ -45,7 +44,7 @@ function Get-FactEvidenceTable {
         $evidence = ''
         $buyerHit = $false; $humanHit = $false; $botHit = $false
         foreach ($m in @($Conversation.Messages)) {
-            if (-not $m) { continue }
+            if (-not $m -or $m.IsSystemCard) { continue }
             if ($m.Orig -notmatch ('(?i)' + $f.Pattern)) { continue }
             if ($m.Role -eq 'buyer') { $buyerHit = $true }
             elseif ($m.Source -eq 'human') { $humanHit = $true }
@@ -56,6 +55,13 @@ function Get-FactEvidenceTable {
         elseif ($botHit) { $state = 'unconfirmed'; $evidence = 'we mentioned it; not confirmed by the buyer' }
         [void]$rows.Add(@{ Field = $f.Key; Label = $f.Label; State = $state; Evidence = $evidence })
     }
+    $dest = Get-QuoteDestination $Conversation
+    $destState = if ($dest.QuoteUsable) { $dest.DisplayName + ' (' + $dest.Source + ' provided)' } else { $dest.Kind }
+    [void]$rows.Add(@{ Field = 'address'; Label = 'quote destination'; State = $destState; Evidence = $dest.Reason + '; ' + ((@($dest.Evidence | ForEach-Object { $_.Text })) -join ' | ') })
+    $postalState = 'unknown'
+    if ($dest.HasPostalAddress) { $postalState = 'provided' }
+    elseif ($dest.QuoteUsable -and $dest.Kind -eq 'amazon_warehouse') { $postalState = 'unknown; not required for warehouse quote preparation' }
+    [void]$rows.Add(@{ Field = 'postal_address'; Label = 'street address'; State = $postalState; Evidence = $dest.Source })
     return @($rows.ToArray())
 }
 
@@ -76,9 +82,13 @@ function New-ReplyContextBlock {
     )
     $LF = [string][char]10
     $sb = New-Object System.Text.StringBuilder
-    [void]$sb.AppendLine('=== CONVERSATION (oldest first, newest last) ===')
+    if ($Decision.OrderConfident) {
+        [void]$sb.AppendLine('=== CONVERSATION (oldest first, newest last) ===')
+    } else {
+        [void]$sb.AppendLine('=== CONVERSATION (order unverified; do not reply) ===')
+    }
 
-    $msgs = @($Conversation.Messages)
+    $msgs = @($Conversation.Messages | Where-Object { -not $_.IsSystemCard })
     $tailCount = [Math]::Min($KeepTail, $msgs.Count)
     $tail = @()
     if ($tailCount -gt 0) { $tail = @($msgs[($msgs.Count - $tailCount)..($msgs.Count - 1)]) }
@@ -100,7 +110,7 @@ function New-ReplyContextBlock {
         if ($m.Role -eq 'buyer') { $tag = '[BUYER] ' }
         elseif ($m.Source -eq 'human') { $tag = '[ME-OWNER] ' }
         $ts = ''
-        if ($IncludeTimestamp -and $m.TsRaw) { $ts = ' (' + $m.TsRaw + ')' }
+        if ($IncludeTimestamp -and $m.MessageTsRaw) { $ts = ' (' + $m.MessageTsRaw + ')' }
         [void]$sb.AppendLine($tag + $m.Text + $ts)
     }
     $elided = $msgs.Count - $tailCount - $head.Count
@@ -110,7 +120,7 @@ function New-ReplyContextBlock {
         if ($m.Role -eq 'buyer') { $tag = '[BUYER] ' }
         elseif ($m.Source -eq 'human') { $tag = '[ME-OWNER] ' }
         $ts = ''
-        if ($IncludeTimestamp -and $m.TsRaw) { $ts = ' (' + $m.TsRaw + ')' }
+        if ($IncludeTimestamp -and $m.MessageTsRaw) { $ts = ' (' + $m.MessageTsRaw + ')' }
         [void]$sb.AppendLine($tag + $m.Text + $ts)
     }
 
@@ -129,6 +139,11 @@ function New-ReplyContextBlock {
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine('=== OPEN ITEMS ===')
     [void]$sb.AppendLine('- scenario: ' + $Decision.Scenario)
+    if ($Decision.Facts.Destination.QuoteUsable -and $Decision.Facts.Destination.Kind -eq 'amazon_warehouse') {
+        [void]$sb.AppendLine('- Use the confirmed Amazon warehouse for quote preparation. Do not ask again for address, city, state, zip/postal details, destination or warehouse code. Do not invent its full address or a price.')
+    } elseif ($Decision.Facts.Destination.AmazonContext) {
+        [void]$sb.AppendLine('- address means the exact Amazon receiving warehouse code; ask for that code or a single warehouse choice, not a street address.')
+    }
     if ($Decision.AskFields.Count -gt 0) {
         [void]$sb.AppendLine('- you may ask about: ' + ($Decision.AskFields -join ', '))
     } else {
@@ -153,7 +168,7 @@ function New-ReplyContextBlock {
         [void]$sb.AppendLine('- do NOT promise a specific deadline for this reply')
     }
     if (-not $Decision.OrderConfident) {
-        [void]$sb.AppendLine('- WARNING: message order could not be verified (' + $Decision.OrderReason + '); treat the conversation order as approximate')
+        [void]$sb.AppendLine('- WARNING: message order could not be verified (' + $Decision.OrderReason + '); do not generate or send a reply')
     }
 
     return $sb.ToString()
@@ -218,11 +233,14 @@ function Get-ReplySystemPrompt {
 # ---------------------------------------------------------------------------------------------
 # Human-readable label for an askable field key. Single definition so every fallback that lists
 # fields reads like a person wrote it instead of leaking internal keys.
-function Get-AskFieldLabel([string]$Field) {
+function Get-AskFieldLabel([string]$Field, $Decision = $null) {
     switch ($Field) {
         'weight'    { return 'the total weight' }
         'dimension' { return 'the carton sizes (L x W x H)' }
-        'address'   { return 'the delivery address' }
+        'address'   {
+            if ($Decision -and $Decision.Facts.Destination.AmazonContext) { return 'the exact Amazon receiving warehouse code' }
+            return 'the delivery address'
+        }
         'image'     { return 'a couple of reference photos' }
         'supplier'  { return 'your supplier''s contact' }
         default     { return [string]$Field }
@@ -230,8 +248,8 @@ function Get-AskFieldLabel([string]$Field) {
 }
 
 # Join field keys into a natural English list: "a, b and c".
-function Join-AskFieldLabels([string[]]$Fields) {
-    $labels = @(@($Fields) | ForEach-Object { Get-AskFieldLabel $_ })
+function Join-AskFieldLabels([string[]]$Fields, $Decision = $null) {
+    $labels = @(@($Fields) | ForEach-Object { Get-AskFieldLabel $_ $Decision })
     if ($labels.Count -eq 0) { return '' }
     if ($labels.Count -eq 1) { return $labels[0] }
     if ($labels.Count -eq 2) { return ($labels[0] + ' and ' + $labels[1]) }
@@ -242,11 +260,17 @@ function Get-ScenarioFallback {
     [CmdletBinding()]
     param($Decision, $Rules = $null)
 
+    if ($Decision -and $Decision.PSObject.Properties.Name -contains 'CanReply' -and -not $Decision.CanReply) { return '' }
+
     $scenario = 'general'
     if ($Decision -and $Decision.Scenario) { $scenario = [string]$Decision.Scenario }
     $withDeadline = [bool]($Decision -and $Decision.AllowTimeCommitment)
-    $noDeadline = 'I will come back to you as soon as I have something concrete.'
-    $deadline = 'I will come back to you with a clear answer by tomorrow morning.'
+    $dest = $null
+    if ($Decision -and $Decision.Facts) { $dest = $Decision.Facts.Destination }
+    if ($dest -and $dest.Kind -eq 'ambiguous' -and $Decision.AskFields -contains 'address') {
+        if ($dest.AmazonContext -and -not $dest.HasPostalAddress) { return 'Which Amazon warehouse should I quote for?' }
+        return 'Which delivery destination should I quote for?'
+    }
 
     switch ($scenario) {
         'human_requested' {
@@ -290,7 +314,9 @@ function Get-ScenarioFallback {
             }
             # Buyer has no supplier at all: keep the approved "we do not strictly need the supplier
             # contact" sentence, minus the dimensions clause the buyer has just said they cannot give.
-            return "No problem at all - we do not strictly need the supplier's contact. Just tell me what you are shipping, roughly how much it weighs, and the destination address, and I will take it from there."
+            $destinationAsk = ''
+            if ($Decision.AskableFields -contains 'address') { $destinationAsk = ', and ' + (Get-AskFieldLabel 'address' $Decision) }
+            return "No problem at all - we do not strictly need the supplier's contact. Just tell me what you are shipping, roughly how much it weighs$destinationAsk, and I will take it from there."
         }
         'address_clarify' {
             return "Happy to help with the address. Just so I get this right - is this the pickup address for the cargo, or the address it should be delivered to?"
@@ -319,17 +345,21 @@ function Get-ScenarioFallback {
             return "Thanks for the images. I am looking at them now - if the carton sizes or the total weight are handy, send them over and I can price this accurately."
         }
         'attachment_parse_failed' {
+            if ($Decision -and $Decision.Facts.Destination) {
+                if ($Decision.AskFields.Count -gt 0) { return 'I could not open the attachment. Could you share ' + (Join-AskFieldLabels $Decision.AskFields $Decision) + '?' }
+                return 'I could not open the attachment. Please paste any missing cargo details in the message.'
+            }
             return "Thanks for sending that. I could not open it properly on my side, so could you tell me the key details in the message instead - weight, carton sizes and the delivery address?"
         }
         'details_given' {
             if ($Decision -and $Decision.AskFields.Count -gt 0) {
-                return "Thanks, I have noted those details. To finish the rate I just need " + (Join-AskFieldLabels $Decision.AskFields) + "."
+                return "Thanks, I have noted those details. To finish the rate I just need " + (Join-AskFieldLabels $Decision.AskFields $Decision) + "."
             }
             return "Thanks, I have all of that noted. I am working on the rate now and will come back to you with the exact figure."
         }
         'new_inquiry' {
             if ($Decision -and $Decision.AskFields.Count -gt 0) {
-                return "Happy to help with this. To price it accurately, could you share " + (Join-AskFieldLabels $Decision.AskFields) + "?"
+                return "Happy to help with this. To price it accurately, could you share " + (Join-AskFieldLabels $Decision.AskFields $Decision) + "?"
             }
             return "Happy to help with this. Could you tell me a bit more about the cargo and where it needs to go?"
         }
@@ -368,6 +398,14 @@ function Invoke-ReplyGeneration {
         Text = ''; Source = 'NONE'; ModelCalls = 0; Rewrites = 0
         Violations = @(); FallbackReason = ''; ContextChars = 0; AttachmentNote = ''
     }
+    $MaxRewrites = [Math]::Min(1, [Math]::Max(0, $MaxRewrites))
+
+    if ($Conversation.Anomaly -or -not $Conversation.LatestBuyer -or $Conversation.LatestBuyer.IsSystemCard -or
+        -not $Decision.CanReply -or $Decision.LatestBuyerText -ne $Conversation.LatestBuyer.Orig) {
+        $result.Source = 'BLOCKED'
+        $result.FallbackReason = 'unverified-reply-input'
+        return [pscustomobject]$result
+    }
 
     $systemPrompt = Get-ReplySystemPrompt $PromptPath
     $guidance = ''
@@ -389,6 +427,7 @@ function Invoke-ReplyGeneration {
         $result.Text = Get-ScenarioFallback -Decision $Decision -Rules $Rules
         $result.Source = 'FALLBACK'
         $result.FallbackReason = 'llm-unavailable'
+        if (-not (Test-ReplyCompliance -Text $result.Text -Rules $Rules -Decision $Decision).Ok) { $result.Text = ''; $result.Source = 'BLOCKED' }
         return [pscustomobject]$result
     }
 
@@ -414,7 +453,7 @@ function Invoke-ReplyGeneration {
     $rewrites = 0
     $violations = @()
     if ($text) {
-        $check = Test-ReplyCompliance -Text $text -Rules $Rules
+        $check = Test-ReplyCompliance -Text $text -Rules $Rules -Decision $Decision
         $violations = @($check.Violations)
         while ((-not $check.Ok) -and $rewrites -lt $MaxRewrites) {
             $rewrites++
@@ -430,7 +469,7 @@ function Invoke-ReplyGeneration {
             $retry = Invoke-LLM $retryMessages $Temperature $MaxTokens $LogFile
             if ($retry) { $result.ModelCalls++ } else { break }
             $text = $retry
-            $check = Test-ReplyCompliance -Text $text -Rules $Rules
+            $check = Test-ReplyCompliance -Text $text -Rules $Rules -Decision $Decision
             $violations = @($check.Violations)
         }
         if ($check.Ok) {
@@ -450,10 +489,12 @@ function Invoke-ReplyGeneration {
             $result.FallbackReason = 'llm-failed'
         }
         # The fallback itself must satisfy the same policy, otherwise we would ship a violation.
-        $fbCheck = Test-ReplyCompliance -Text $result.Text -Rules $Rules
+        $fbCheck = Test-ReplyCompliance -Text $result.Text -Rules $Rules -Decision $Decision
         if (-not $fbCheck.Ok) {
             $codes = @($fbCheck.Violations | ForEach-Object { $_.Code }) -join ','
             $result.FallbackReason += '|fallback-noncompliant:' + $codes
+            $result.Text = ''
+            $result.Source = 'BLOCKED'
         }
     }
 

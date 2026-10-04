@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "12_file_parse_failure",
@@ -8,8 +8,8 @@
   "notes": "The production chain has fallback wording and a todo kind for the scenario key 'attachment_parse_failed' (reply_gen.ps1:321, reply_policy.ps1:577) but Get-ReplyScenario has no rule that can ever return that key, and the DOC-READ-FAIL branch in monitor.ps1 falls through to the plain text flow with no AttachmentText. So the honest expectedAction for extracted lines plus an unreadable file is 'details_given'. The harness reports the gap separately and probes the forced fallback.",
   "policyGap": "attachment_parse_failed is unreachable from Get-ReplyScenario (reply_policy.ps1:294-445 has no rule producing it); the file-parse-failure signal never reaches the decision layer.",
   "conversationLines": [
-    "[ME] Thanks, let me open it. @@TS:1791018000000",
-    "[BUYER] here is the packing list @@FILE:packing-list.pdf|https://example.invalid/f/packing-list.pdf @@TS:1791018240000 @@OT:aGVyZSBpcyB0aGUgcGFja2luZyBsaXN0"
+    "[ME] Thanks, let me open it. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] here is the packing list @@FILE:packing-list.pdf|https://example.invalid/f/packing-list.pdf @@TS:1791018240000 @@MT:1791018240000 @@OT:aGVyZSBpcyB0aGUgcGFja2luZyBsaXN0"
   ],
   "domOrder": "oldest-first",
   "expectedAction": "details_given",

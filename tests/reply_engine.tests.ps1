@@ -96,12 +96,14 @@ Assert-Eq "newmsg-still-needs-ledger" (Test-ShouldReply -LedgerUsable $false -Pe
 Assert-Eq "newmsg-still-needs-two-rounds" (Test-ShouldReply -LedgerUsable $true -PendingSeenRounds 1 -ConfirmedNewMessage $true -SecondsSinceLastSend 999).Reason 'NOT_IN_PENDING_LIST'
 
 # --- 9) positive evidence for a genuinely new buyer message ---------------------------------
-Assert-Eq "evidence-count-increased" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 4 -NormLastBuyerHash 'ZZZ') $true
-Assert-Eq "evidence-hash-changed" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ZZZ') $true
-Assert-Eq "evidence-same-message" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ABC') $false
-Assert-Eq "evidence-legacy-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC' -BuyerCount 9 -NormLastBuyerHash 'ZZZ') $false
-Assert-Eq "evidence-overflow-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|1788799769241' -BuyerCount 9 -NormLastBuyerHash 'ZZZ') $false
-Assert-Eq "evidence-empty" (Test-ConfirmedNewBuyerMessage -LedgerKey '' -BuyerCount 3 -NormLastBuyerHash 'X') $false
+Assert-Eq "evidence-count-increased" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 4 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $true
+Assert-Eq "evidence-hash-changed" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $true
+Assert-Eq "evidence-count-decreased-no-exemption" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 2 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $false
+Assert-Eq "evidence-must-be-trusted" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 4 -NormLastBuyerHash 'ZZZ') $false
+Assert-Eq "evidence-same-message" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ABC' -MessageEvidenceTrusted $true) $false
+Assert-Eq "evidence-legacy-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC' -BuyerCount 9 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $false
+Assert-Eq "evidence-overflow-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|1788799769241' -BuyerCount 9 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $false
+Assert-Eq "evidence-empty" (Test-ConfirmedNewBuyerMessage -LedgerKey '' -BuyerCount 3 -NormLastBuyerHash 'X' -MessageEvidenceTrusted $true) $false
 
 # --- 10) already-answered guard -------------------------------------------------------------
 Assert-Eq "answered-exact" (Test-BuyerMsgAlreadyAnswered -LedgerKey 'H|3' -BuyerCount 3 -NormLastBuyerHash 'H') $true

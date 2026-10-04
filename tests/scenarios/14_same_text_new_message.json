@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "14_same_text_new_message",
@@ -6,10 +6,10 @@
   "category": "same text as a new message",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The two buyer lines are byte-identical except for @@TS, so message identity must come from the timestamp, not from the text (msg_norm.ps1:112-116).",
   "conversationLines": [
-    "[ME] Thanks for your patience - I am checking the status. @@TS:1791018000000",
-    "[BUYER] any update? @@TS:1791018600000 @@OT:YW55IHVwZGF0ZT8=",
-    "[ME] I am confirming it with the warehouse now. @@TS:1791018660000",
-    "[BUYER] any update? @@TS:1791019800000 @@OT:YW55IHVwZGF0ZT8="
+    "[ME] Thanks for your patience - I am checking the status. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] any update? @@TS:1791018600000 @@MT:1791018600000 @@OT:YW55IHVwZGF0ZT8=",
+    "[ME] I am confirming it with the warehouse now. @@TS:1791018660000 @@MT:1791018660000",
+    "[BUYER] any update? @@TS:1791019800000 @@MT:1791019800000 @@OT:YW55IHVwZGF0ZT8="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "delivery_status",

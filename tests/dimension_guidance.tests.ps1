@@ -50,7 +50,7 @@ foreach ($f in @($g.fallbacks)) { Assert-True ("injected-section-carries-fallbac
 
 # --- 4) the fallback path actually returns the approved sentence ----------------------------
 $LF = [string][char]10
-$line = '[BUYER] I cannot get the dimensions from the factory, they do not reply @@TS:1759400000000'
+$line = '[BUYER] I cannot get the dimensions from the factory, they do not reply @@TS:1759400000000 @@MT:1759400000000'
 $conv = ConvertTo-MessageList $line 'Buyer A'
 $facts = Get-ConversationFacts $conv
 $dec = Get-ReplyDecision -Conversation $conv -Facts $facts
@@ -61,9 +61,9 @@ Assert-Eq "fallback-equals-approved-primary" $fb ([string]$g.primary)
 
 # --- 5) once the field limit is used up, the third ask must be replaced by a step-back -------
 $askTwice = @(
-    '[ME] Could you share your supplier''s contact? @@TS:1759400100000',
-    '[ME] Any luck with the supplier contact? @@TS:1759400200000',
-    '[BUYER] still no sizes from me @@TS:1759400300000'
+    '[ME] Could you share your supplier''s contact? @@TS:1759400100000 @@MT:1759400100000',
+    '[ME] Any luck with the supplier contact? @@TS:1759400200000 @@MT:1759400200000',
+    '[BUYER] still no sizes from me @@TS:1759400300000 @@MT:1759400300000'
 ) -join $LF
 $conv2 = ConvertTo-MessageList $askTwice 'Buyer A'
 $dec2 = Get-ReplyDecision -Conversation $conv2 -Facts (Get-ConversationFacts $conv2)

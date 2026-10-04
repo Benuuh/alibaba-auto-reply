@@ -305,7 +305,7 @@ function ConvertTo-ReplyLines([object[]]$Messages, [long]$SelfAliId = 0) {
         if ($SelfAliId -gt 0 -and $m.senderAliId) { $isUs = ([long]$m.senderAliId -eq $SelfAliId) }
         $who = if ($isUs) { '[ME]' } else { '[BUYER]' }
         $ts = ''
-        if ($m.timestamp) { $ts = ' @@TS:' + [long]$m.timestamp }
+        if ($m.timestamp) { $ts = ' @@TS:' + [long]$m.timestamp + ' @@MT:' + [long]$m.timestamp }
         [void]$lines.Add("$who $text$ts")
     }
     return $lines.ToArray()
@@ -340,7 +340,7 @@ function Test-AccioLineMatch([string]$a, [string]$b) {
 function Test-AccioLinesOverlap([string[]]$CdpLines, [string[]]$GwLines) {
     if (-not $CdpLines -or -not $GwLines) { return $false }
     $cdpLatest = ''
-    foreach ($c in $CdpLines) { if ($c -match '^\[BUYER\]') { $cdpLatest = Get-AccioNormText $c; break } }
+    foreach ($c in $CdpLines) { if ($c -match '^\[BUYER\]') { $cdpLatest = Get-AccioNormText $c } }
     if (-not $cdpLatest) { return $true }  # 无买家行可校验,放行
     foreach ($g in $GwLines) { if (Test-AccioLineMatch $cdpLatest (Get-AccioNormText $g)) { return $true } }
     return $false

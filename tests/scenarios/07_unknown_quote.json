@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "07_unknown_quote",
@@ -7,7 +7,7 @@
   "category": "unknown quote",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. No rate exists in the lines and no rate can be computed from them, so any figure would be invented.",
   "conversationLines": [
-    "[BUYER] Hi, how much would it cost to ship to Miami? @@TS:1791018300000 @@OT:SGksIGhvdyBtdWNoIHdvdWxkIGl0IGNvc3QgdG8gc2hpcCB0byBNaWFtaT8="
+    "[BUYER] Hi, how much would it cost to ship to Miami? @@TS:1791018300000 @@MT:1791018300000 @@OT:SGksIGhvdyBtdWNoIHdvdWxkIGl0IGNvc3QgdG8gc2hpcCB0byBNaWFtaT8="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "new_inquiry",
@@ -84,5 +84,5 @@
   "expectBuyerCount": 1,
   "expectLatestBuyerText": "Hi, how much would it cost to ship to Miami?",
   "expectSkippedZero": true,
-  "expectOrderConfident": false
+  "expectOrderConfident": true
 }

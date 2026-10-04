@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "09_material_promised",
@@ -6,8 +6,8 @@
   "category": "buyer promises details later",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The promise is a buyer statement in the lines; the promised field must be treated as promised, not as missing.",
   "conversationLines": [
-    "[ME] Could you share the carton sizes when you have them? @@TS:1791018000000",
-    "[BUYER] I will send you the sizes tomorrow, I am not in the office today. @@TS:1791018720000 @@OT:SSB3aWxsIHNlbmQgeW91IHRoZSBzaXplcyB0b21vcnJvdywgSSBhbSBub3QgaW4gdGhlIG9mZmljZSB0b2RheS4="
+    "[ME] Could you share the carton sizes when you have them? @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] I will send you the sizes tomorrow, I am not in the office today. @@TS:1791018720000 @@MT:1791018720000 @@OT:SSB3aWxsIHNlbmQgeW91IHRoZSBzaXplcyB0b21vcnJvdywgSSBhbSBub3QgaW4gdGhlIG9mZmljZSB0b2RheS4="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "material_promised",

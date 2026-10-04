@@ -10,9 +10,8 @@
 #          should-reply hash (tail = newest).
 #        - scripts\monitor.ps1 used $rawBuyerLines[0] to attach images/files, and
 #          reply_agent_prompt.md claimed "the first line is the newest" (head = newest).  <-- BUG
-#      A chat panel renders oldest at the top, so tail = newest is correct and the two head-based
-#      consumers were wrong. This file makes the direction EXPLICIT, VERIFIES it against the
-#      per-message showTime that the page already exposes, normalizes everything to chronological
+#      DOM order alone does not establish chronology. This file verifies direction against
+#      per-message timestamps explicitly marked @@MT by the extractor, normalizes to chronological
 #      ASCENDING (oldest first, newest last), and raises an explicit uncertainty flag instead of
 #      guessing when the evidence contradicts itself (spec 4.1: "rolling, window truncation,
 #      reordering, uncertain identity => enter an explicit abnormal state, do not guess from
@@ -36,31 +35,38 @@ if (-not (Get-Command Get-NormalizedMsgText -ErrorAction SilentlyContinue)) {
 }
 
 # Structured message schema version. Bump on any field change to the message object.
-$script:MsgSchemaVersion = 2
+$script:MsgSchemaVersion = 3
 
+if (-not (Get-Command Get-QuoteDestination -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot 'destination.ps1')
+}
 function Get-MsgSchemaVersion { return $script:MsgSchemaVersion }
 
-# Strip @@TS / @@OT transport markers plus attachment markers from a raw line, returning the
+# Strip time, original-text, card and attachment transport markers from a raw line, returning the
 # human-readable text. Markers are transport metadata, never message content.
 function Get-MsgPlainText([string]$line) {
     if ([string]::IsNullOrEmpty($line)) { return '' }
     $t = $line -replace '^\[(BUYER|ME)\]\s*', ''
     $t = $t -replace '@@IMG:[^\s]*', ''
     $t = $t -replace '@@FILE:[^\s]*', ''
-    $t = $t -replace '@@TS:[^\s]*', ''
+    $t = $t -replace '@@(?:TS|MT|CARD):[^\s]*', ''
     $t = $t -replace '@@OT:[A-Za-z0-9\+/=]+', ''
+    $t = $t -replace '系统自动发送|自动接待发送', ''
     return $t.Trim()
 }
 
 # Decode the @@OT original-text marker (base64 UTF-8). Falls back to the plain text when the
 # marker is absent or corrupt, so identity never depends on a marker being present.
-function Get-MsgOriginalText([string]$line) {
+function Get-MsgOriginalText([string]$line, [switch]$KeepUiNoise) {
     $plain = Get-MsgPlainText $line
     $m = [regex]::Match([string]$line, '@@OT:([A-Za-z0-9\+/=]+)')
     if (-not $m.Success) { return $plain }
     try {
         $decoded = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($m.Groups[1].Value))
-        if (-not [string]::IsNullOrWhiteSpace($decoded)) { return $decoded.Trim() }
+        if (-not [string]::IsNullOrWhiteSpace($decoded)) {
+            if ($KeepUiNoise) { return $decoded.Trim() }
+            return ($decoded -replace '系统自动发送|自动接待发送', '').Trim()
+        }
     } catch { }
     return $plain
 }
@@ -75,7 +81,8 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
     if ($role -eq 'unknown') { return $null }
 
     $plain = Get-MsgPlainText $line
-    $orig = Get-MsgOriginalText $line
+    $rawOrig = Get-MsgOriginalText $line -KeepUiNoise
+    $orig = ($rawOrig -replace '系统自动发送|自动接待发送', '').Trim()
 
     # @@TS accompanies robot-sent messages (see lib\msg_source.ps1 header). An [ME] line without
     # it was typed by the owner. Same rule as the single authority in lib\msg_source.ps1.
@@ -98,21 +105,31 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
         if ($fp.Count -gt 1) { $fileUrl = $fp[1] }
     }
 
+    # @@TS in legacy snapshots may be conversation-level showTime. Only @@MT is evidence
+    # of the per-message clock; a naked @@TS must never establish direction or identity.
     $tsRaw = ''
     $mt = [regex]::Match([string]$line, '@@TS:([^\s]+)')
     if ($mt.Success) { $tsRaw = $mt.Groups[1].Value }
+    $messageTsRaw = ''
+    $messageTs = [regex]::Match([string]$line, '@@MT:([^\s]+)')
+    if ($messageTs.Success) { $messageTsRaw = $messageTs.Groups[1].Value }
     $tsMs = $null
-    if ($tsRaw) { $tsMs = ConvertTo-EpochMs $tsRaw }
+    if ($messageTsRaw) { $tsMs = ConvertTo-EpochMs $messageTsRaw }
+    $isSystemCard = ($role -eq 'buyer' -and (
+        $line -match '@@CARD:system\b|系统自动发送' -or $rawOrig -match '系统自动发送' -or
+        ($orig -match '(?i)最小订购量|minimum\s+order|min\.?\s+order' -and $orig -match '\$\s*\d')
+    ))
 
     # Identity: prefer an evidence-backed key. A timestamp makes the key unique per real message
     # even when the buyer sends identical text twice - exactly the "same text, new message" case in
     # spec 7.1. Without a timestamp the key falls back to content plus DOM position and is only
     # PROBABLY unique; that is what IdConfident records, and consumers must not treat a
     # non-confident id as proof that two messages are the same message.
-    $normHash = Get-StableHash (Get-NormalizedMsgText $orig)
-    $idConfident = [bool]$tsRaw
+    $normText = Get-NormalizedMsgText $orig
+    $normHash = Get-StableHash $normText
+    $idConfident = ($null -ne $tsMs)
     $stableId = $role + '|' + $normHash
-    if ($tsRaw) { $stableId = $role + '|' + $normHash + '|' + $tsRaw }
+    if ($idConfident) { $stableId = $role + '|' + $normHash + '|' + $messageTsRaw }
     elseif ($DomIndex -ge 0) { $stableId = $role + '|' + $normHash + '|dom' + $DomIndex }
 
     return [pscustomobject]@{
@@ -123,10 +140,12 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
         Source        = $source        # 'buyer' | 'bot' | 'human'
         Text          = $plain
         Orig          = $orig
-        NormText      = (Get-NormalizedMsgText $orig)
+        NormText      = $normText
         NormHash      = $normHash
         TsRaw         = $tsRaw
+        MessageTsRaw  = $messageTsRaw
         TsMs          = $tsMs
+        IsSystemCard  = [bool]$isSystemCard
         HasImage      = ($imgUrls.Count -gt 0)
         ImageUrls     = $imgUrls
         FileName      = $fileName
@@ -140,8 +159,9 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
     }
 }
 
-# Decide the chronological direction of the extracted sequence from the showTime evidence that
-# the page already exposes. Returns @{ Ascending; Confident; Reason; TimestampedCount }.
+# Decide direction using ONLY explicit per-message timestamps. Legacy showTime is not evidence.
+# Every message must be stamped and all consecutive pairs must agree. Equal clocks alone,
+# missing clocks and any inversion leave direction unverified.
 #   Ascending = $true  => index 0 is the OLDEST message (already chronological)
 #   Ascending = $false => index 0 is the NEWEST message (must be reversed)
 #   Confident = $false => the evidence did not settle it; DOM order is kept and the condition is
@@ -149,32 +169,14 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
 function Resolve-MessageDirection([object[]]$Messages) {
     $arr = @($Messages)
     $stamped = @($arr | Where-Object { $_ -and $null -ne $_.TsMs })
-    $res = @{ Ascending = $true; Confident = $false; Reason = 'no-timestamps-default-dom-order'; TimestampedCount = $stamped.Count }
-    if ($stamped.Count -lt 2) { return $res }
-
-    # Compare along the DOM sequence, not the filtered list, so a partially timestamped
-    # conversation cannot silently invert the answer.
-    $first = $null
-    $last = $null
-    foreach ($m in $arr) {
-        if ($null -ne $m.TsMs) {
-            if ($null -eq $first) { $first = $m.TsMs }
-            $last = $m.TsMs
-        }
-    }
-    if ($null -eq $first -or $null -eq $last) { return $res }
-    if ($first -lt $last) {
-        $res.Ascending = $true; $res.Confident = $true; $res.Reason = 'timestamps-increase-with-dom-order'
+    $res = @{ Ascending = $true; Confident = $false; Reason = 'no-trusted-message-timestamps'; TimestampedCount = $stamped.Count }
+    if ($arr.Count -le 1) {
+        $res.Confident = $true; $res.Reason = 'single-message'
+        if ($arr.Count -eq 0) { $res.Reason = 'empty' }
         return $res
     }
-    if ($first -gt $last) {
-        $res.Ascending = $false; $res.Confident = $true; $res.Reason = 'timestamps-decrease-with-dom-order'
-        return $res
-    }
-
-    # Equal endpoints: walk consecutive stamped pairs to see whether the whole stamped run moves one
-    # way. A contradiction (mixed directions) means the window was reordered or truncated, and we
-    # must not claim confidence (spec 4.1).
+    if ($stamped.Count -eq 0) { return $res }
+    if ($stamped.Count -ne $arr.Count) { $res.Reason = 'missing-message-timestamps'; return $res }
     $increases = 0
     $decreases = 0
     $prev = $null
@@ -203,20 +205,13 @@ function Resolve-MessageDirection([object[]]$Messages) {
 #   .Lines  = the ORIGINAL raw lines in ascending order, markers preserved, so existing consumers
 #             (anti-interjection gate, ledger selector, promised-field scan) keep working against
 #             one single direction and no data can be lost by reconstruction.
-#   .LatestBuyer / .LastBuyer = the newest buyer message object. Both names are kept so callers
-#             cannot reintroduce the head/tail ambiguity.
-#   .Anomaly = $true when the order could not be verified - log it, do not hide it.
+#   .LatestBuyer / .LastBuyer = the newest buyer only when direction is verified and it is not
+#             a system card; otherwise null, with ReplyBlockReason. BuyerCount retains cards
+#             for compatibility with the existing HASH|count ledger.
+#   .Anomaly = $true when order is unverified; production must block, never guess a latest message.
 function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
-    $emptyOrder = @{ Ascending = $true; Confident = $true; Reason = 'empty'; TimestampedCount = 0 }
-    if ([string]::IsNullOrWhiteSpace($Raw)) {
-        return [pscustomobject]@{
-            Schema = $script:MsgSchemaVersion; ConvoName = $ConvoName; Messages = @(); Lines = @()
-            Order = $emptyOrder; BuyerMessages = @(); LatestBuyer = $null; LastBuyer = $null
-            BuyerCount = 0; Skipped = @(); Anomaly = $false
-        }
-    }
-
-    $rawLines = @([regex]::Split($Raw, "\r?\n"))
+    $rawLines = @()
+    if (-not [string]::IsNullOrWhiteSpace($Raw)) { $rawLines = @([regex]::Split($Raw, "\r?\n")) }
     $parsed = New-Object System.Collections.ArrayList
     $skipped = New-Object System.Collections.ArrayList
     for ($i = 0; $i -lt $rawLines.Count; $i++) {
@@ -246,7 +241,15 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
 
     $buyers = @($list | Where-Object { $_.Role -eq 'buyer' })
     $latest = $null
-    if ($buyers.Count -gt 0) { $latest = $buyers[$buyers.Count - 1] }
+    $blockReason = ''
+    if (-not $order.Confident) { $blockReason = 'message-order-unverified' }
+    elseif ($buyers.Count -eq 0) { $blockReason = 'no-buyer-message' }
+    elseif ($buyers[$buyers.Count - 1].IsSystemCard) { $blockReason = 'latest-buyer-system-card' }
+    else { $latest = $buyers[$buyers.Count - 1] }
+    # Identical content with the same displayed second is not a confidently unique identity.
+    foreach ($group in @($list | Group-Object StableId | Where-Object { $_.Count -gt 1 })) {
+        foreach ($message in $group.Group) { $message.IdConfident = $false }
+    }
 
     return [pscustomobject]@{
         Schema        = $script:MsgSchemaVersion
@@ -259,6 +262,7 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
         LastBuyer     = $latest
         BuyerCount    = $buyers.Count
         Skipped       = @($skipped.ToArray())
+        ReplyBlockReason = $blockReason
         # Unverified order is a reportable condition, not something to paper over (spec 4.1).
         Anomaly       = (-not $order.Confident)
     }
@@ -271,18 +275,21 @@ function Get-ConversationFacts {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)]$Conversation)
 
-    $msgs = @($Conversation.Messages)
+    $msgs = @($Conversation.Messages | Where-Object { -not $_.IsSystemCard })
     $buyerText = (@($msgs | Where-Object { $_.Role -eq 'buyer' } | ForEach-Object { $_.Orig }) -join [string][char]10)
     $meText = (@($msgs | Where-Object { $_.Source -eq 'bot' } | ForEach-Object { $_.Orig }) -join [string][char]10)
     $humanText = (@($msgs | Where-Object { $_.Source -eq 'human' } | ForEach-Object { $_.Orig }) -join [string][char]10)
     $allText = (@($buyerText, $meText, $humanText) | Where-Object { $_ }) -join [string][char]10
     $bl = $buyerText.ToLowerInvariant()
     $al = $allText.ToLowerInvariant()
+    $destination = Get-QuoteDestination $Conversation
 
     return [pscustomobject]@{
         HasWeight       = [bool]($bl -match '\d+\s*(kg|kgs|kilo|kilos|ton|tons)\b|\d+\s*(公斤|千克|吨)|weight\s*[:=]?\s*\d|peso\s*[:=]?\s*\d')
         HasDimensions   = [bool]($bl -match '\d+\s*[x\u00d7*]\s*\d+|\d+(\.\d+)?\s*(cm|mm)\s*[x\u00d7*]|dimension|尺寸|medidas')
-        HasAddress      = [bool]($bl -match 'address|addr|calle|rua|street|avenue|road|endere|direcci|收货地址|邮编|cep|postal|zip|city|ciudad|cidade|country|pa[ií]s|deliver to|consignee|destinatario')
+        HasAddress      = $destination.HasPostalAddress
+        HasQuoteDestination = $destination.QuoteUsable
+        Destination     = $destination
         HasImages       = [bool](@($msgs | Where-Object { $_.Role -eq 'buyer' -and $_.HasImage }).Count -gt 0)
         HasFile         = [bool](@($msgs | Where-Object { $_.Role -eq 'buyer' -and $_.HasFile }).Count -gt 0)
         # "Mentioned a supplier" and "gave us the supplier's contact" are different facts and must

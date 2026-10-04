@@ -11,8 +11,8 @@
 #      (拦错 = 买家永远等不到回复, 即 Ganesan 事故形态), 故每个 fail-open 出口都逐条钉死;
 #   2) monitor.ps1 的**生产接线**静态断言 —— 锚定冷却 / 下探信号三态 / 连挂告警确实在位,
 #      且"唯一出口 / 唯一发送点 / 轮数不足不写冷却"这几条不变量没被这次修订破坏。
-# 行为级端到端证明在 tools\dedup_acceptance\A4_A5_A6_gate_offline.ps1 的 A7/A8 段
-# (用**真实** Invoke-ConvoItem + 真实算法算出的账本键驱动, 本文件不重复造那套桩)。
+# 当前行为级证明在 tests/new_message_cooldown.tests.ps1 的 A1-A14（真实入口/证据）。
+# 旧 tools/dedup_acceptance 脚本包含实机数据读取，不作为本次默认验收入口。
 #
 # ⚠️ 本文件必须保持 UTF-8 带 BOM(Windows PowerShell 5.1 对无 BOM 的 .ps1 按 ANSI 解码 ⇒ 中文乱码, E-10)。
 # 纯逻辑: 不 dot-source monitor.ps1(那会执行它的主分发)、不碰页面、不启动 monitor、不写任何文件。
@@ -85,6 +85,10 @@ Assert-True "cooldown-writers-present" ($writers.Count -ge 4)
 Assert-Eq "every-cooldown-writer-has-until" (@($writers | Where-Object { $_.code -notmatch 'until' }).Count) 0
 Assert-True "rate-min-gap-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddMinutes\(\$script:replyMinGapMin\)')
 Assert-True "post-send-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddMinutes\(\$script:replyPostSendCooldownMin\)')
+Assert-True "new-floor-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddSeconds\(\$script:replyNewMsgFloorSec\)')
+Assert-True "minute-data-keeps-fraction" ($monRaw -notmatch '\$gapMin = \[int\]')
+Assert-True "no-second-minute-override" ($monRaw -notmatch '\$gapMin2\s*=')
+Assert-True "periodic-read-scheduler-present" ($monRaw -match 'nextVerifyAt' -and $monRaw -match "'periodic'")
 # 冷却期内"预览变化"的三态 + 连挂告警(全部必须留痕, 否则线上无从判断)
 foreach ($marker in @('COOLDOWN-RECHECK', 'COOLDOWN-HOLD', 'COOLDOWN-LIFT', 'DUP-GUARD-HOLD', 'DUP-GUARD-ALERT', 'dupGuardHolds')) {
     Assert-True ("monitor-has[{0}]" -f $marker) ($monRaw -match [regex]::Escape($marker))

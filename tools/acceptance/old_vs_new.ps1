@@ -59,7 +59,7 @@ $cases = @(
 $rows = New-Object System.Collections.ArrayList
 foreach ($c in $cases) {
     $ts = 1791018000000
-    $line = "[BUYER] " + $c.q + " @@TS:" + $ts + " @@OT:" + (& $b64 $c.q)
+    $line = "[BUYER] " + $c.q + " @@TS:" + $ts + " @@MT:" + $ts + " @@OT:" + (& $b64 $c.q)
     $oldReply = ""
     try { $oldReply = [string](Generate-Reply $oldRules "Buyer A" $c.q @($line)) } catch { $oldReply = "ERROR: " + $_.Exception.Message }
     $conv = ConvertTo-MessageList $line "Buyer A"

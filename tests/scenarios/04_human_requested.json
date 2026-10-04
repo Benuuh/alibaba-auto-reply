@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "04_human_requested",
@@ -6,9 +6,9 @@
   "category": "buyer asks for a human",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The buyer's request is the only fact; whether a human is already handling it is NOT in the lines, so claiming it would be invented.",
   "conversationLines": [
-    "[BUYER] hello @@TS:1791018000000 @@OT:aGVsbG8=",
-    "[ME] Hi, happy to help - what are you shipping and where does it need to go? @@TS:1791018060000",
-    "[BUYER] can I talk to a real person please? @@TS:1791018360000 @@OT:Y2FuIEkgdGFsayB0byBhIHJlYWwgcGVyc29uIHBsZWFzZT8="
+    "[BUYER] hello @@TS:1791018000000 @@MT:1791018000000 @@OT:aGVsbG8=",
+    "[ME] Hi, happy to help - what are you shipping and where does it need to go? @@TS:1791018060000 @@MT:1791018060000",
+    "[BUYER] can I talk to a real person please? @@TS:1791018360000 @@MT:1791018360000 @@OT:Y2FuIEkgdGFsayB0byBhIHJlYWwgcGVyc29uIHBsZWFzZT8="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "human_requested",

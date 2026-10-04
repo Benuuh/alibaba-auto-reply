@@ -170,7 +170,7 @@ function Get-NormalizedMsgText([string]$text) {
     $s = $text.Trim()
     if ($s.Length -eq 0) { return '' }
     # 1) 翻译标记与状态词(大小写不敏感;长形态先删)
-    foreach ($tok in @('由阿里翻译提供','由阿里提供','翻译中…','翻译中','Revert','[未读]','反馈','已读','未读','自动接待发送')) {
+    foreach ($tok in @('由阿里翻译提供','由阿里提供','翻译中…','翻译中','Revert','[未读]','反馈','已读','未读','自动接待发送','系统自动发送')) {
         $s = [regex]::Replace($s, [regex]::Escape($tok), ' ', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
     }
     # 2) 译文尾段剥离(见函数头注释)
@@ -238,65 +238,20 @@ function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
 #     2) 它构成"是否回复"的第二套出口。spec §3-R2 的取向是**减少出口**, 不是再加一条判据。
 #   取而代之的唯一出口是下方 Test-ShouldReply。任何"再补一条判据"的做法都违反 spec §4.4-1。
 
-# [SPEC-待回复列表 2026-09-27] 「是否回复」的**唯一出口**(纯函数: 不读文件、不碰页面、无副作用)。
-#   ⚠️ 本函数于 2026-09-27 被**换掉判据**(source of truth: docs\specs\判据改为待回复列表_20260927.md)。
-#      ⛔ 下面这段旧论证**已被明确推翻, 不得据以改回**:
-#        「列表只当**触发器**, 不当判据(§2.2): 会话出现在待回复列表 ≠ 买家在等我回。」
-#        + 「取向: 证明不了就不发(fail-closed), 宁可漏回一条真询盘。」
-#      推翻理由(实证, 见新 spec §1.2): 旧判据只回答「我发过消息了吗」, 业务需要的是「客户的问题被回答了吗」。
-#      买家G 问了 6 次报价, 我方回了 6 次"马上给你报价"、真实价格 0 条, 最后一句
-#      (能不能到工厂提货)无人回答; 而旧判据每 9 秒判一次 LEDGER_COUNT_MATCH ⇒ **无限跳过**。
-#      老板裁决(2026-09-27 13:1x): 「回复的核心是该对话在页面待回复的列表里」——
-#      阿里的待回复列表就是待办板: 在板子上 = 需要处理; 处理完它自己会消失。
-#
-#   新的证据锚点 = **该会话此刻在不在页面的待回复列表里**(+ 冷却/最小间隔兜底), 不再看账本 hash、
-#   不再看买家消息条数。账本仍然继续写入(§2.2: 删了会连带破坏补发队列 / Test-RepliedStateUsable /
-#   快照保留), 但**不再作为"是否回复"的依据** —— 它只是历史记录与补发队列的关联依据。
-#
-#   取向变更(§9「被取代」末行): 旧「证明不了就不发」⇒ 新「**在待回复列表里且不在冷却/间隔内 ⇒ 发**」;
-#   仅账本异常/冷却/最小间隔这三类仍然 fail-closed。
-#
-#   入参(判定只用前 7 个):
-#     -LedgerUsable           账本(去重状态)是否可读。整轮开头 Test-RepliedStateUsable 已挡一道(G1/P6),
-#                             此处**再挡一道**(§2 行 1), 与 §4.1 裁决 = 方案甲(账本读不到 ⇒ 一条都不发)一致。
-#     -PendingSeenRounds      该会话**连续**在待回复列表里出现的轮数, 由 monitor 的 $ctx.pendingSeen 维护。
-#                             0 = 本轮不在列表里(未命中即删键)。§2.1: 只有 ≥2 才允许发。
-#     -RequiredSeenRounds     连续确认轮数门槛, 缺省 2(§0.1: 约 9 秒, 是唯一的"冷启动延迟", 不可再降)。
-#                             实现里强制下限 2 —— 传 0/1 会被抬回 2, 防止"瞬时残留恰好被连读两轮"之外的降级。
-#     -MinutesSinceLastSend   距上次**成功发送**的分钟数; -1 = 从未发过(则本行不命中)。
-#     -MinGapMinutes          最小间隔, 缺省 5(配置键 reply_min_gap_min; §0.1 原值 15)。
-#     -InPostSendCooldown     是否在发送后冷却期内; 由调用方用**同一个** $ctx.lastSendAt 判定, 不另记一套。
-#     -PostSendCooldownMinutes 发送后冷却分钟数, 缺省 5(配置键 reply_post_send_cooldown_min; 原值 3)。
-#                             §0.1: 与最小间隔对齐, **不得小于它**。
-#     -ConvoLines / -LedgerKey / -NormLastBuyerHash
-#                             **仅为日志与既有测试兼容而保留**; §3.1 明令判定逻辑不得再读它们。
-#
-#   返回: [pscustomobject]@{ Reply = <bool>; Reason = <string> }。Reason 逐字取自下表(便于 grep 与回归断言)。
-#
-#   判定表(顺序固定, 先命中先返回; 新 spec §2 —— **就这 5 行**, 原来 8 行三个证据源, 现在 5 行两个):
-#     序 | 条件                                        | Reply | Reason
-#     1  | 账本(去重状态)不可用                         | false | LEDGER_UNUSABLE_FAILCLOSED
-#     2  | 该会话**不在**待回复列表(或连续确认轮数 < 2)  | false | NOT_IN_PENDING_LIST
-#     3  | 该会话在**发送后冷却**期内                    | false | POST_SEND_COOLDOWN
-#     4  | 该会话距上次成功发送 **< 最小间隔**            | false | RATE_MIN_GAP
-#     5  | 以上都不命中                                 | true  | IN_PENDING_LIST
-#   行 2 的两种形态共用同一 Reason: "不在列表"表现为轮数 0(monitor 未命中即删键), "轮数不足"表现为 1。
-#   行 3/4 的数据面是**同一个** $ctx.lastSendAt[statekey](§3.2: 不得各记一套); 行 3 排在行 4 之前,
-#   故当 PostSendCooldownMinutes ≤ MinGapMinutes(缺省两者都是 5)时, 生产日志里先出现的是 POST_SEND_COOLDOWN。
-#
-#   §2.1 为什么行 2 要"连续 2 轮确认"(不是保守, 是必须):
-#     实测两种列表瞬态 —— ①标签切换瞬间 querySelectorAll('.contact-item-container') 会读到上一个视图的
-#     残留节点(13:04:23 读到 23 个且 visibility:hidden; 13:07 同选择器读到 0 个); ②切标签后列表会短暂
-#     塌成 height:0(.all-list-container 实测 hidden/h0)。若只看单轮命中就发, 这些瞬态会造成误发。
-#     代价: 首次命中到可发之间多等 1 轮(约 9 秒); 收益: 只存活 1 轮的瞬态残留永远不会触发发送。
+# 唯一时间策略（2026-10-05 spec 修订旧无条件五分钟条款）。
+# 账本可用与连续两轮待回复确认先行；调用方将已回复同一条消息的轮数置零。
+# 已确认新消息只受上次成功发送起算的秒级下限；其余情况保留分钟冷却和间隔。
+# 生产传入 SecondsSinceLastSend，全部时间比较保留精度；旧分钟/布尔入参兼容。
+# ConvoLines/LedgerKey/NormLastBuyerHash 仅兼容日志，证据由唯一辅助函数计算。
+# 本函数不读文件、不碰页面，人工/顺序/身份/锁/发送保护由生产入口保留。
 function Test-ShouldReply {
     [CmdletBinding()]
     param(
-        # ===== 判定入参(§2 的 5 行表只用这些) =====
+        # ===== 基础门禁与普通消息时间输入 =====
         [bool]$LedgerUsable           = $false,   # 账本可读(整轮已挡, 此处再挡一道)
         [int]$PendingSeenRounds       = 0,        # 该会话连续在待回复列表里出现的轮数
         [int]$RequiredSeenRounds      = 2,        # 连续确认轮数门槛(§2.1)
-        [int]$MinutesSinceLastSend    = -1,       # 距上次成功发送的分钟数; -1 = 从未发过
+        [double]$MinutesSinceLastSend = -1,       # 兼容分钟输入; 保留小数，禁止四舍五入提前放行
         [int]$MinGapMinutes           = 5,        # 最小间隔(配置键 reply_min_gap_min, 缺省 5)
         [bool]$InPostSendCooldown     = $false,   # 是否在发送后冷却期内
         [int]$PostSendCooldownMinutes = 5,        # 发送后冷却(配置键 reply_post_send_cooldown_min, 缺省 5)
@@ -337,19 +292,23 @@ function Test-ShouldReply {
     }
     # 行 3/4 的适用条件: 它们只用于抑制"旧消息"的重复响应。已确认的新消息走行 4b。
     if (-not $ConfirmedNewMessage) {
+        # 2026-10-05: production supplies exact seconds from the one successful-send clock.
+        # Legacy callers may still supply minutes and the cooldown flag.
+        if ($SecondsSinceLastSend -ge 0) {
+            $MinutesSinceLastSend = $SecondsSinceLastSend / 60.0
+            $InPostSendCooldown = ($SecondsSinceLastSend -lt ($PostSendCooldownMinutes * 60.0))
+        }
         # 行 3: 发送后冷却期内 ⇒ 不发。数据面与行 4 共用 $ctx.lastSendAt(调用方传入判定结果)。
         if ($InPostSendCooldown) {
             return [pscustomobject]@{ Reply = $false; Reason = 'POST_SEND_COOLDOWN' }
         }
-        # 行 4: 距上次成功发送 < 最小间隔 ⇒ 不发(§0 硬判据 2: 同一买家在最小间隔内不可能收到第 2 条)。
+        # 普通消息距上次成功发送 < 分钟间隔 ⇒ 不发；已确认新消息由秒级分支处理。
         #   -1(= 从未发过)不命中本行; 间隔"刚好等于"最小间隔时放行(严格小于才拦)。
         if ($MinutesSinceLastSend -ge 0 -and $MinutesSinceLastSend -lt $MinGapMinutes) {
             return [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
         }
     } else {
-        # 行 4b: [SPEC 4.1 2026-10-03] 已确认的新消息 —— 旧的冷却/最小间隔不再拦它, 只保留一个
-        #   很小的墙钟下限, 防止同一瞬间连发两条。这个下限不是平台规则, 是"两条消息不可能在
-        #   同一时刻各自被处理完"的物理下限; 取 -1(未知/从未发过)时不命中。
+        # 新消息默认下限 20 秒，从上次成功发送起算；并非收到新消息再等 20 秒。
         if ($NewMessageFloorSeconds -gt 0 -and $SecondsSinceLastSend -ge 0 -and $SecondsSinceLastSend -lt $NewMessageFloorSeconds) {
             return [pscustomobject]@{ Reply = $false; Reason = 'NEW_MESSAGE_FLOOR' }
         }
@@ -360,8 +319,8 @@ function Test-ShouldReply {
 
 # [SPEC 4.1 2026-10-03] Positive-evidence test for "the newest buyer message is genuinely new".
 #   Returns $true ONLY when the ledger is in the current "<hash>|<count>" format AND the freshly
-#   scraped conversation actually differs from what the ledger records - either the buyer wrote
-#   more messages, or the newest buyer text changed.
+#   scraped conversation is trusted: count increased, or equal count with changed original hash.
+#   A shrinking window, malformed key or untrusted latest identity cannot authorise the bypass.
 #   Everything else returns $false (fail-closed), because this result is what authorises skipping
 #   the old-message cooldown. In particular an unparseable or legacy ledger key never authorises it.
 #   Pure function: no file access, no page access, no side effects.
@@ -370,20 +329,23 @@ function Test-ConfirmedNewBuyerMessage {
     param(
         [string]$LedgerKey,
         [int]$BuyerCount = -1,
-        [string]$NormLastBuyerHash
+        [string]$NormLastBuyerHash,
+        [bool]$MessageEvidenceTrusted = $false
     )
+    if (-not $MessageEvidenceTrusted) { return $false }
     if ($BuyerCount -lt 1) { return $false }
     if ([string]::IsNullOrWhiteSpace($LedgerKey)) { return $false }
     if ([string]::IsNullOrWhiteSpace($NormLastBuyerHash)) { return $false }
     $parts = @([string]$LedgerKey -split '\|')
-    if ($parts.Count -lt 2) { return $false }
+    if ($parts.Count -ne 2) { return $false }
     if ([string]$parts[1] -notmatch '^\d+$') { return $false }
     $savedCount = 0
     if (-not [int]::TryParse([string]$parts[1], [ref]$savedCount)) { return $false }
+    if ($savedCount -lt 1) { return $false }
     $savedHash = [string]$parts[0]
     if ([string]::IsNullOrWhiteSpace($savedHash)) { return $false }
     if ($BuyerCount -gt $savedCount) { return $true }
-    if ($NormLastBuyerHash -ne $savedHash) { return $true }
+    if ($BuyerCount -eq $savedCount -and $NormLastBuyerHash -ne $savedHash) { return $true }
     return $false
 }
 

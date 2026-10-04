@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "15_human_already_answered",
@@ -6,9 +6,9 @@
   "category": "human already answered",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The middle [ME] line has NO @@TS marker, which is the production rule for an owner-typed message (lib/msg_source.ps1:1-14), so the supplier/pickup fact is evidence class 'owner replied directly in this chat' (the buyer line deliberately avoids every fact keyword so the owner's line is the only supplier evidence; a buyer merely SAYING the word 'supplier' masks the owner evidence - see tools/acceptance/README.md, known findings). There is deliberately NO first-seen time for this scenario, so the timing report must print UNKNOWN instead of 0.",
   "conversationLines": [
-    "[BUYER] hi, is the pickup included in your service? @@TS:1791018000000 @@OT:aGksIGlzIHRoZSBwaWNrdXAgaW5jbHVkZWQgaW4geW91ciBzZXJ2aWNlPw==",
-    "[ME] Yes, I can arrange the pickup from your supplier - no problem.",
-    "[BUYER] ok great, thank you @@TS:1791018480000 @@OT:b2sgZ3JlYXQsIHRoYW5rIHlvdQ=="
+    "[BUYER] hi, is the pickup included in your service? @@TS:1791018000000 @@MT:1791018000000 @@OT:aGksIGlzIHRoZSBwaWNrdXAgaW5jbHVkZWQgaW4geW91ciBzZXJ2aWNlPw==",
+    "[ME] Yes, I can arrange the pickup from your supplier - no problem. @@MT:1791018240000",
+    "[BUYER] ok great, thank you @@TS:1791018480000 @@MT:1791018480000 @@OT:b2sgZ3JlYXQsIHRoYW5rIHlvdQ=="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "short_ack",

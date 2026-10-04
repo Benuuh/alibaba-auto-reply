@@ -104,7 +104,7 @@ foreach ($buyer in ($byBuyer.Keys | Sort-Object)) {
 [void]$sb.AppendLine("---")
 [void]$sb.AppendLine("## 货物数据齐全度（供报价判断）")
 [void]$sb.AppendLine()
-[void]$sb.AppendLine("| 买家 | 货物名称 | 总重量 | 尺寸L\*W\*H | 收货地址 | 图片(参考) | 供应商(参考) | 状态 |")
+[void]$sb.AppendLine("| 买家 | 货物名称 | 总重量 | 尺寸L\*W\*H | 报价目的地 | 图片(参考) | 供应商(参考) | 状态 |")
 [void]$sb.AppendLine("|------|---------|--------|-----------|---------|----------|----------|------|")
 foreach ($buyer in ($byBuyer.Keys | Sort-Object)) {
     $st = Get-GoodsDataStatus $buyer
@@ -118,15 +118,15 @@ foreach ($buyer in ($byBuyer.Keys | Sort-Object)) {
     $missing = @()
     if (-not $st.weight) { $missing += "总重量" }
     if (-not $st.dims) { $missing += "尺寸" }
-    if (-not $st.addr) { $missing += "地址" }
+    if (-not $st.addr) { $missing += "报价目的地" }
     if (-not $g.known) { $missing += "货物名称" }
     $concl = if ($missing.Count -eq 0) { "✅ 齐全，可报价" } else { "缺: " + ($missing -join "、") }
     $escBuyer = $buyer -replace '\|', '\|'
     $escGoods = $g.name -replace '\|', '\|'
-    [void]$sb.AppendLine("| $escBuyer | $escGoods | $($marks[0]) | $($marks[1]) | $($marks[3]) | $($marks[2]) | $($marks[4]) | $concl |")
+    [void]$sb.AppendLine("| $escBuyer | $escGoods | $($marks[0]) | $($marks[1]) | $(Get-GoodsDestinationLabel $st) | $($marks[2]) | $($marks[4]) | $concl |")
 }
 [void]$sb.AppendLine()
-[void]$sb.AppendLine("> 注：齐全度由规则从买家消息自动判断（重量=数字+kg/吨，尺寸=三维数字或 dimensions，地址=地址词或城市/国家，货物名称=产品链接或品名词）。图片与供应商联系列为参考，不计入齐全判定；结论仅供报价参考，请以实际聊天内容为准。")
+[void]$sb.AppendLine("> 注：齐全度由规则从买家消息自动判断（重量=数字+kg/吨，尺寸=三维数字或 dimensions，报价目的地=买家原文中的收货地址或明确 Amazon/FBA 收货仓代码；仓库代码不代表街道地址已提供，货物名称=产品链接或品名词）。图片与供应商联系列为参考，不计入齐全判定；结论仅供报价参考，请以实际聊天内容为准。")
 [void]$sb.AppendLine()
 [void]$sb.AppendLine("---")
 [void]$sb.AppendLine("由 alibaba-auto-reply 监控自动生成")

@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "05_repeated_chasing",
@@ -6,8 +6,8 @@
   "category": "repeated chasing",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The prior [ME] line is the fact that we already sent exactly that holding line; the reply must add something new rather than repeat it.",
   "conversationLines": [
-    "[ME] Thanks for your patience - I am checking with the warehouse and will update you shortly. @@TS:1791018000000",
-    "[BUYER] any update on this? I asked twice already. @@TS:1791019200000 @@OT:YW55IHVwZGF0ZSBvbiB0aGlzPyBJIGFza2VkIHR3aWNlIGFscmVhZHku"
+    "[ME] Thanks for your patience - I am checking with the warehouse and will update you shortly. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] any update on this? I asked twice already. @@TS:1791019200000 @@MT:1791019200000 @@OT:YW55IHVwZGF0ZSBvbiB0aGlzPyBJIGFza2VkIHR3aWNlIGFscmVhZHku"
   ],
   "domOrder": "oldest-first",
   "expectedAction": "delivery_status",

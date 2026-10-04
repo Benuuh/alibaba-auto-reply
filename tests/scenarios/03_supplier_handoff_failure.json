@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "03_supplier_handoff_failure",
@@ -6,8 +6,8 @@
   "category": "supplier handoff failure",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The lines prove the buyer cannot reach the supplier; they do NOT prove that we contacted anyone, so any claim of a call is invented.",
   "conversationLines": [
-    "[ME] Hi, happy to help with your shipment. @@TS:1791018000000",
-    "[BUYER] I can't reach my supplier, he is not answering me since Monday. Can you help? @@TS:1791018240000 @@OT:SSBjYW4ndCByZWFjaCBteSBzdXBwbGllciwgaGUgaXMgbm90IGFuc3dlcmluZyBtZSBzaW5jZSBNb25kYXkuIENhbiB5b3UgaGVscD8="
+    "[ME] Hi, happy to help with your shipment. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] I can't reach my supplier, he is not answering me since Monday. Can you help? @@TS:1791018240000 @@MT:1791018240000 @@OT:SSBjYW4ndCByZWFjaCBteSBzdXBwbGllciwgaGUgaXMgbm90IGFuc3dlcmluZyBtZSBzaW5jZSBNb25kYXkuIENhbiB5b3UgaGVscD8="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "supplier_unreachable",

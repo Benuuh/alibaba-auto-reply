@@ -20,8 +20,8 @@ Write-Output "== reply_chain tests =="
 $LF = [string][char]10
 function B64([string]$s) { return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 # Build a fixture line exactly the way the page does: [ROLE] text @@TS:<ms> @@OT:<base64 original>
-function BuyerLine([string]$t, [long]$ts) { return ('[BUYER] ' + $t + ' @@TS:' + $ts + ' @@OT:' + (B64 $t)) }
-function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@TS:' + $ts) }
+function BuyerLine([string]$t, [long]$ts) { return ('[BUYER] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts + ' @@OT:' + (B64 $t)) }
+function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts) }
 function Decide([string[]]$lines) {
     $c = ConvertTo-MessageList ($lines -join $LF) 'Buyer A'
     $f = Get-ConversationFacts $c
@@ -44,7 +44,7 @@ Assert-Eq "order-reversed-first-is-oldest" (@($rev.Messages)[0].Text) 'hello'
 # --- 3) unknown order must be flagged, not guessed ------------------------------------------
 $nots = ConvertTo-MessageList (@('[BUYER] hello', '[ME] hi') -join $LF) 'B'
 Assert-Eq "order-unverified-flagged" $nots.Anomaly $true
-Assert-Eq "order-unverified-reason" $nots.Order.Reason 'no-timestamps-default-dom-order'
+Assert-Eq "order-unverified-reason" $nots.Order.Reason 'no-trusted-message-timestamps'
 
 # --- 4) SHORT messages must survive (the old extractor dropped len<=2) -----------------------
 $short = ConvertTo-MessageList (@((BuyerLine 'ok' 1759400000000), (BuyerLine 'no' 1759400100000), (BuyerLine 'si' 1759400200000)) -join $LF) 'B'

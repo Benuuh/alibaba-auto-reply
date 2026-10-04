@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "19_two_char_refusal",
@@ -6,8 +6,8 @@
   "category": "two-character message",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. 'no' is 2 characters and was dropped by the HEAD extractor (monitor.ps1:274), so under the old chain no reply was produced at all for this conversation.",
   "conversationLines": [
-    "[ME] Would you like me to send the rate now? @@TS:1791018000000",
-    "[BUYER] no @@TS:1791018240000 @@OT:bm8="
+    "[ME] Would you like me to send the rate now? @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] no @@TS:1791018240000 @@MT:1791018240000 @@OT:bm8="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "refusal",

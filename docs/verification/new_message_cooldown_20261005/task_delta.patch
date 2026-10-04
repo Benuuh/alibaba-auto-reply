@@ -1,0 +1,894 @@
+diff --git a/scripts/monitor.ps1 b/scripts/monitor.ps1
+index 3f664fd..5d07986 100644
+--- a/scripts/monitor.ps1
++++ b/scripts/monitor.ps1
+@@ -877,36 +877,34 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+         Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
+         return
+     }
+-    # 会话短冷却(省页面负担): 基准值 = 配置键 reply_post_send_cooldown_min(§0.1 缺省 5, 原硬编码 3)
+-    # [FIX-DUP 2026-09-25] 方案甲：冷却期内不再"预览变化即提前解除"。列表预览含未读计数/翻译标记等 UI 噪声
+-    #   （实测两轮预览只差未读计数 "1"），且我方回复本身就会改变预览 → 原逻辑必然误判为"买家新动态"而提前解除冷却。
+-    # [FIX-COOLDOWN-LIFT 2026-09-27] 上述结论**不等于**"预览变了就一律不过问": 那样会把买家真正的新消息
+-    #   一起按到冷却到期(实测买家 17:24:47 发来我们要的重量数据, 被按到 17:33:30 才回, 8 分 43 秒)。
+-    #   故现在把"预览变化"降级为**下探信号**: 变化时不再直接发送(方案甲的教训), 也不直接跳过,
+-    #   而是继续打开会话、用账本证据(Test-BuyerMsgAlreadyAnswered)判断"是不是新消息", 再见下方分流。
+-    # [FIX-WAIT-STACK 2026-09-27] 冷却的**到期时刻锚在阻塞条件到期的那一刻**(记录里的 until), 不是"此刻 + N 分钟":
+-    #   旧写法用 [int] 取整判到期 ⇒ 冷却最早 4.5 分钟就放行, 而同一笔发送的最小间隔要满 5 分钟,
+-    #   于是每次都在 RATE_MIN_GAP 处被挡(实测 gap=4.63m)、又被补装一整段 5 分钟冷却 ⇒ 两段叠加。
++    # 2026-10-05 spec: preview changes only trigger a read; unchanged previews are verified
++    # at most every 20 seconds (subject to scan latency). nextVerifyAt is ONLY a read cache,
++    # never send history. Human/input-failure records retain their original hold.
+     $cooldownRecheck = $false
+     if ($ctx.skipCooldown.ContainsKey($key)) {
+         $co = $ctx.skipCooldown[$key]
+         $pkeyNow = Get-NormalizedMsgText $item.preview   # [FIX-DUP 2026-09-25] 归一化预览仅用于日志留痕
+-        $skipMins = [int]((Get-Date) - $co.time).TotalMinutes
+-        # 冷却随重复命中次数递增(基准 ×2, 15 分钟封顶)。基准不再是硬编码的 3 ——
+-        #   §0.1 要求发送后冷却走配置键(缺省 5), 否则"改了配置却没生效"。
++        $cacheNow = Get-Date
++        $skipMins = ($cacheNow - $co.time).TotalMinutes
++        # Legacy records may have a repeated-hit count; current writers always use count=1.
+         $coolMin = [Math]::Min($script:replyPostSendCooldownMin * [Math]::Pow(2, ([int]$co.count - 1)), 15)
+         # 到期时刻: 优先用记录里的 until(写入时按阻塞条件锚定); 老记录没有该字段时按 time + 冷却值兜底。
+-        $holdUntil = (Get-Date).AddMinutes($coolMin)
++        $holdUntil = ([datetime]$co.time).AddMinutes($coolMin)
+         if ($co.ContainsKey('until') -and $co['until']) { $holdUntil = [datetime]$co['until'] }
+-        if ((Get-Date) -lt $holdUntil) {
+-            # buyers = -1 = 该分支记的冷却"买家条数未知"(人工插话让路 / 抽到空消息), 一律不解除。
+-            # 预览也没变 ⇒ 连"可能有新消息"的迹象都没有 ⇒ 直接跳过, 省一次页面打开。
+-            if ([int]$co.buyers -eq -1 -or $pkeyNow -eq $co.pkey) {
++        if ($cacheNow -lt $holdUntil) {
++            # Old records lack a source: known buyer counts came from dedup/time paths;
++            # buyers=-1 is ambiguous and gets periodic READS, still through every guard.
++            $readCache = (-not $co.ContainsKey('reason') -or $co.reason -in @('SENT_OK','ALREADY_ANSWERED','POST_SEND_COOLDOWN','RATE_MIN_GAP','NEW_MESSAGE_FLOOR'))
++            $verifyAt = ([datetime]$co.time).AddSeconds(20)
++            if ($co.ContainsKey('nextVerifyAt') -and $co.nextVerifyAt) { $verifyAt = [datetime]$co.nextVerifyAt }
++            if (-not $readCache -or ($pkeyNow -eq $co.pkey -and $cacheNow -lt $verifyAt)) {
+                 Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m pkey=[$($co.pkey) -> $pkeyNow] buyers=$($co.buyers)"
+                 return
+             }
+             $cooldownRecheck = $true
+-            Write-Log "COOLDOWN-RECHECK $($key): preview changed during cooldown - verifying by ledger before any send"
++            $co.nextVerifyAt = $cacheNow.AddSeconds(20)
++            $readTrigger = if ($pkeyNow -ne $co.pkey) { 'preview-changed' } else { 'periodic' }
++            Write-Log "COOLDOWN-RECHECK $($key): trigger=$readTrigger source=$($co.reason) nextVerifyAt=$($co.nextVerifyAt.ToString('o')) - reading current messages"
+         } else {
+             $ctx.skipCooldown.Remove($key)
+         }
+@@ -937,6 +935,14 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+         return
+     }
+     $ctx.openCooldown.Remove($key)
++    # The merged opener can return a nonmatching header after its timeout. Refuse that page
++    # before normalization/evidence; final send identity and round-halt safeguards remain.
++    $openedName = ([string]$convo.name).Trim()
++    if (-not $openedName -or ($openedName.IndexOf($key, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and $key.IndexOf($openedName, [StringComparison]::OrdinalIgnoreCase) -lt 0)) {
++        $script:roundHalt = $true
++        Write-Log "ABORT_WRONG_CONVO $($key): opened=$openedName round-halt before message evidence"
++        return
++    }
+     $msgsRaw = $convo.msgs
+     # ===== [SPEC 4.1 / 5 2026-10-03] Normalize order + identity in ONE place, BEFORE any consumer
+     # looks at the messages. The raw DOM order used to be handed to three consumers that disagreed
+@@ -1003,7 +1009,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+             if ($rtNow.items -and $rtNow.items.ContainsKey($key.ToLower())) { Remove-PendingRetry $key }
+         } catch { Write-Log "HUMAN-REPLIED-SKIP $($key): retry-table check failed - $($_.Exception.Message)" }
+         # 短冷却只为省页面负担(不写去重账本): 冷却期内不再重复打开该会话
+-        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
++        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'HUMAN_INTERJECTION'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
+         return
+     }
+     $humanWasPending = [bool]$ctx.humanPending[$key]
+@@ -1026,7 +1032,9 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+             $gwConv = $null
+             if ($gwLines) { $gwConv = ConvertTo-MessageList (@($gwLines) -join ([string][char]10)) $key }
+             if ($gwConv -and -not $gwConv.Anomaly -and $gwConv.LatestBuyer -and
+-                $gwConv.LatestBuyer.Orig -ceq $msgList.LatestBuyer.Orig -and (Test-AccioLinesOverlap $cdpLines $gwLines)) {
++                $gwConv.LatestBuyer.Orig -ceq $msgList.LatestBuyer.Orig -and
++                $gwConv.LatestBuyer.StableId -ceq $msgList.LatestBuyer.StableId -and
++                (Test-AccioLinesOverlap $cdpLines $gwLines)) {
+                 $replyConversation = $gwConv
+                 $lines = @($gwConv.Lines); Write-Log "ACCIO-READ src=gateway $($key) lines=$(@($gwConv.Lines).Count)"
+             } else {
+@@ -1045,53 +1053,32 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+         $latest = ($latestRaw -replace '^\[BUYER\] ','')
+         if ($latest.Trim().Length -eq 0) {
+             Write-Log "SKIP $($key): empty latest message"
+-            # [FIX-DUP 2026-09-25] buyers=-1 表示"未知"（该分支尚未计算买家条数），判定侧按"不解除冷却"处理
+-            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
++            # Explicit input-failure source preserves the original hold; buyers=-1 is no evidence.
++            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'EMPTY_INPUT'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
+             return
+         }
+-        # ===== 判据口径的买家最后一条消息，与已验证的 latest 相同 =====
+-        $lastBuyerRaw = $buyerMsgs[$buyerMsgs.Count - 1]
+-        $lastBuyerClean = $lastBuyerRaw -replace '^\[BUYER\]\s*','' -replace '@@TS:.*?$','' -replace '@@OT:[A-Za-z0-9+/=]+','' -replace '\s+$',''
+-        $lastBuyerOrig = ''
+-        $lbB64 = ''
+-        if ($lastBuyerRaw -match '@@OT:([A-Za-z0-9+/=]+)') { $lbB64 = $Matches[1] }
+-        if ($lbB64) { try { $lastBuyerOrig = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($lbB64)) } catch { $lastBuyerOrig = '' } }
+-        if (-not $lastBuyerOrig) { $lastBuyerOrig = $lastBuyerClean }
+-        # 解析消息时间戳（@@TS），并剥掉供 LLM/规则引擎使用
+-        $ts = ''
+-        if ($latest -match '@@TS:([^\s]+)') { $ts = $Matches[1] }
+-        # [FIX-DUP 2026-09-25] 取出原文（@@OT，B64）用于去重键；缺失则回退剥离了标记的文本
+-        $otB64 = ''
+-        if ($latest -match '@@OT:([A-Za-z0-9+/=]+)') { $otB64 = $Matches[1] }
+-        $latestOrig = ''
+-        if ($otB64) { try { $latestOrig = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($otB64)) } catch { $latestOrig = '' } }
++        # Normalizer owns original text and message identity. Do not reparse a filtered
++        # legacy line here: it can drop MT-only rows or accidentally hash transport markers.
++        $lastBuyerOrig = $newestBuyer.Orig
+         $latestClean = $newestBuyer.Text
+-        if (-not $latestOrig) { $latestOrig = $latestClean }   # [FIX-DUP 2026-09-25] 兜底：原文缺失时用剥离标记后的文本
+         # [FIX-DUP 2026-09-25] LLM/规则输入必须剥离 @@OT（否则提示词里会出现 B64 垃圾）
+         $lines = $lines | ForEach-Object { $_ -replace '@@(?:TS|MT|CARD):[^\s]+','' -replace '@@OT:[A-Za-z0-9+/=]+','' }
+         Write-Log "Latest buyer msg: $latestClean"
+-        # [FIX-DUP 2026-09-25] 去重键 = 归一化原文 hash + 买家消息条数（格式保持不变: HASH|count,
+-        #   spec §4.4-3 明令禁止改格式 —— 旧格式键继续被 Test-ShouldReply 判为"不解析第二段"⇒ fail-closed）。
+-        $normText = Get-NormalizedMsgText $latestOrig
+-        $hText = Get-StableHash $normText
++        # Keep HASH|count persistence; evidence, attachments and the write use this CDP latest.
+         # [SPEC-单出口 2026-09-27] 判据专用 hash: 必须是**该会话最后一条买家消息**的 hash(同口径: 原文优先)。
+         $hLastBuyer = Get-StableHash (Get-NormalizedMsgText $lastBuyerOrig)
+-        $buyerCount = @($buyerMsgs).Count
++        $buyerCount = $msgList.BuyerCount
+         # $newKey 仅用于日志留痕; 真正写账本的是发送成功后下方的 Set-StateHash(同一 hash 与条数)。
+         #   条数口径 = 该会话买家消息条数(与 $lastBuyer 同一次抓取), 保证"账本条数 vs 当前条数"可比。
+         $newKey = Get-DedupKey (Get-NormalizedMsgText $lastBuyerOrig) $buyerCount
+         # ===== [SPEC-待回复列表 2026-09-27 §2] 「是否回复」的唯一出口: Test-ShouldReply =====
+-        # 判据已**换掉**(不是新增第二个出口): 旧证据锚点 = 账本 hash / 买家消息条数;
+-        #   新证据锚点 = **该会话此刻在不在页面的待回复列表里**(连续 2 轮确认)+ 冷却/最小间隔兜底。
+-        # 依据: docs\specs\判据改为待回复列表_20260927.md(唯一事实源)。
+-        #   §1.2 实证: 旧判据只答"我发过消息了吗" —— 买家G 问了 6 次报价, 我方回了 6 次"马上给你报价"、
+-        #   真实价格 0 条, 而旧判据每 9 秒判一次 LEDGER_COUNT_MATCH ⇒ 无限跳过。
+-        #   §1.3 老板裁决: 「回复的核心是该对话在页面待回复的列表里」。
+-        # §2.2: 账本**继续写、继续留痕**(删了会连带破坏补发队列 / Test-RepliedStateUsable / 快照保留),
+-        #   但判定不再读它 —— 本处取出 $ledgerKey 仅为日志。
++        # Pending list + two consecutive observations remain required. The 2026-10-05 spec
++        # adds positive new-message evidence for time exemption; exact old messages still dedup.
+         $ledgerKey = ''
+-        if ($ctx.state -and $ctx.state.replied -and ($ctx.state.replied.PSObject.Properties.Name -contains $skey)) {
+-            $ledgerKey = [string]$ctx.state.replied.$skey
++        if ($ctx.state -and $ctx.state.replied) {
++            # Set-StateHash keeps an IDictionary in memory; disk reload returns PSCustomObject.
++            if ($ctx.state.replied -is [System.Collections.IDictionary]) { $ledgerKey = [string]$ctx.state.replied[$skey] }
++            elseif ($ctx.state.replied.PSObject.Properties.Name -contains $skey) { $ledgerKey = [string]$ctx.state.replied.$skey }
+         }
+         # --- 判定入参的数据面(全部来自本轮快照与既有运行态; 不新增第二套记录, §3.2) ---
+         # §4.1 裁决 = **方案甲**(保守): 账本不可读 ⇒ 一条都不发。整轮开头已挡一道(见 STATE-UNUSABLE),
+@@ -1102,7 +1089,8 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+         if ($ctx.pendingSeen -and $ctx.pendingSeen.ContainsKey($key)) { $seenRounds = [int]$ctx.pendingSeen[$key] }
+         # §2 行 3/4 的**同一个**数据面: 距上次成功发送的分钟数(-1 = 从未发过)。§3.2 明令不得各记一套。
+         $gapMin = -1
+-        if ($ctx.lastSendAt.ContainsKey($skey)) { $gapMin = [int]((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes }
++        $gateNow = Get-Date
++        if ($ctx.lastSendAt.ContainsKey($skey)) { $gapMin = ($gateNow - $ctx.lastSendAt[$skey]).TotalMinutes }
+         $inPostSendCooldown = ($gapMin -ge 0 -and $gapMin -lt $script:replyPostSendCooldownMin)
+         # ===== [FIX-DUP-GUARD 2026-09-27] 同一条买家消息不得重复回复(实测 Buyer-A 9 分半被连回 3 次) =====
+         #   证据 = 同一轮抓取里的 (买家条数, 最后一条买家原文 hash) 与账本键**逐字相等** ⇒ 最后这条已回过。
+@@ -1113,24 +1101,21 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+         $alreadyAnswered = Test-BuyerMsgAlreadyAnswered -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer
+         if ($alreadyAnswered) { $seenRounds = 0 }
+         elseif ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds) { $ctx.dupGuardHolds.Remove($skey) }   # 买家说了新话 ⇒ 连挂结束
+-        # [FIX-COOLDOWN-LIFT 2026-09-27] 冷却期内预览变了、且账本证明**买家确实说了新话** ⇒ 解除"省页面负担"的
+-        #   跳过并进入正常判定。注意本行只解除**页面跳过**: 冷却/最小间隔这两道时间闸门照常生效(不得绕过限流)。
+-        if ($cooldownRecheck -and -not $alreadyAnswered) {
+-            Write-Log "COOLDOWN-LIFT $($key): ledger proves a NEW buyer message - cooldown bypassed (time gates still apply)"
+-        }
+         # ===== [SPEC 4.1 2026-10-03] A confirmed NEW message must not be blocked by the old-message
+         # cooldown. The old code always passed the raw gap/cooldown values, so a buyer who sent a
+         # genuinely new message inside the 5-minute window was held back until it expired (measured:
+         # a real weight message arrived 17:24:47 and was answered 17:33:30, 8m43s later).
+         # The bypass is granted ONLY on positive evidence that the newest buyer message is not the
+         # one we already answered (Test-ConfirmedNewBuyerMessage: ledger key parseable AND buyer
+-        # count increased or the newest buyer text changed). Legacy or unparseable ledger keys grant
++        # count increased, or equal count with changed original hash). Legacy/unparseable keys grant
+         # nothing. Identity checks, the ledger gate, the 2-round transient defence, the write lock
+         # and the page-health gate all stay in force - only the time gates relax.
+-        $confirmedNew = Test-ConfirmedNewBuyerMessage -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer
++        $evidenceTrusted = ($ledgerUsableNow -and $msgList.Order.Confident -and $newestBuyer.IdConfident -and -not $newestBuyer.IsSystemCard)
++        $confirmedNew = Test-ConfirmedNewBuyerMessage -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer -MessageEvidenceTrusted $evidenceTrusted
++        if ($cooldownRecheck -and $confirmedNew) { Write-Log "COOLDOWN-LIFT $($key): positive new-message evidence; seconds floor still applies" }
+         $secSinceLastSend = -1
+-        if ($ctx.lastSendAt.ContainsKey($skey)) { $secSinceLastSend = ((Get-Date) - $ctx.lastSendAt[$skey]).TotalSeconds }
+-        Write-Log "NEW-MSG-EVIDENCE $($key) confirmedNew=$confirmedNew alreadyAnswered=$alreadyAnswered secSinceLastSend=$([int]$secSinceLastSend) floor=$($script:replyNewMsgFloorSec)s"
++        if ($ctx.lastSendAt.ContainsKey($skey)) { $secSinceLastSend = ($gateNow - $ctx.lastSendAt[$skey]).TotalSeconds }
++        Write-Log "NEW-MSG-EVIDENCE $($key) confirmedNew=$confirmedNew trusted=$evidenceTrusted alreadyAnswered=$alreadyAnswered secSinceLastSend=$secSinceLastSend floor=$($script:replyNewMsgFloorSec)s"
+         $shouldReply = Test-ShouldReply -LedgerUsable $ledgerUsableNow `
+             -PendingSeenRounds $seenRounds -RequiredSeenRounds $script:requiredSeenRounds `
+             -MinutesSinceLastSend $gapMin -MinGapMinutes $script:replyMinGapMin `
+@@ -1138,25 +1123,14 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+             -ConfirmedNewMessage $confirmedNew -NewMessageFloorSeconds $script:replyNewMsgFloorSec -SecondsSinceLastSend $secSinceLastSend `
+             -ConvoLines $cdpLines -LedgerKey $ledgerKey -NormLastBuyerHash $hLastBuyer
+         Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) seen=${seenRoundsRaw}/$($script:requiredSeenRounds) gapMin=$gapMin minGap=$($script:replyMinGapMin)m cooldown=$inPostSendCooldown ledgerUsable=$ledgerUsableNow buyerMsgs=$buyerCount alreadyAnswered=$alreadyAnswered ledgerKey=$ledgerKey lastBuyerHash=$($hLastBuyer.Substring(0,[Math]::Min(8,$hLastBuyer.Length)))"
+-        # ===== [SPEC §4.3-G4 最小实现 2026-09-27 / P7] 同一买家最小间隔(抖动兜底; 纵深防御) =====
+-        #   依据 §0 硬判据 2「同一买家在最小间隔内不可能收到第 2 条」。
+-        #   值来自配置键 reply_min_gap_min(§0.1: 缺省 **5**, 原硬编码 15), 且**与判据第 4 行共用同一个
+-        #   $ctx.lastSendAt[$skey]** —— 不得各记一套(§3.2 明文)。判据第 4 行命中时这里不会触发;
+-        #   保留它是为了"即使判据判错也发不出去"。
+-        if ($shouldReply.Reply -and $ctx.lastSendAt.ContainsKey($skey)) {
+-            $gapMin2 = ((Get-Date) - $ctx.lastSendAt[$skey]).TotalMinutes
+-            if ($gapMin2 -lt $script:replyMinGapMin) {
+-                Write-Log ("RATE-SKIP buyer={0} gap={1}m (min-gap {2}m, config key reply_min_gap_min)" -f $skey, [int]$gapMin2, $script:replyMinGapMin)
+-                $shouldReply = [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
+-            }
+-        }
++        # Time policy is owned only by Test-ShouldReply; no unconditional minute override.
+         if (-not $shouldReply.Reply) {
+             # ===== [SPEC-待回复列表 2026-09-27 §3.2] 判"不发"时: 冷却原因**按新 Reason 区分** =====
+             # 旧实现的 ALREADY-REPLIED-WAIT(写 skipCooldown 并按 3/6/12/15 递增)是为旧 Reason 设计的 ——
+             #   那批 Reason 全是"已回过这条"(LEDGER_COUNT_MATCH / LEDGER_HASH_MATCH / UNCERTAIN_FAILCLOSED),
+             #   而本次裁决恰恰推翻了它: 那类会话现在**在列表里就该回**(§1.2)。新判据的 Reason 全是
+-            #   时间性(POST_SEND_COOLDOWN / RATE_MIN_GAP)或异常(LEDGER_UNUSABLE_FAILCLOSED), 故冷却表
+-            #   不再递增, 一律按配置的发送后冷却写一次"省页面负担"的短冷却。
++            #   时间性(POST_SEND_COOLDOWN / RATE_MIN_GAP / NEW_MESSAGE_FLOOR)或异常。
++            #   发送时间等待锚定成功发送时刻；页面缓存另用 nextVerifyAt 做周期性核验。
+             # ⚠️ 唯一的例外, 必须单独处理: NOT_IN_PENDING_LIST(轮数不足) **绝不能**写多分钟冷却 ——
+             #   §2.1/§0.1 明说这条路的代价是"多等 1 轮(约 9 秒)", 且"这是唯一的冷启动延迟"。
+             #   若给它写 5 分钟冷却, 下一轮会在 L879 的 TEMP-SKIP 处就被挡回 ⇒ 第 2 轮永远等不到,
+@@ -1168,13 +1142,12 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+                     #   (**不是**轮数没攒够)。上面 §2.1 那条"绝不能写多分钟冷却"约束针对的是"轮数不足、
+                     #   但买家确有新消息"的情形; 本分支前提恰恰相反: 买家只要再说一句, 条数或 hash 必变
+                     #   ⇒ $alreadyAnswered=false ⇒ 根本不走这里。故此处写短冷却不会破坏 2 轮确认机制。
+-                    $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin)
++                    $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'ALREADY_ANSWERED'; nextVerifyAt = (Get-Date).AddSeconds(20)
+                                                  preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview)
+                                                  buyers = $buyerCount; count = 1 }
+                     if ($cooldownRecheck) {
+-                        # 冷却期内的"预览变化"是我方回复自己造成的假信号: 重新校准预览基准, 继续让路, 不再开页面。
+-                        Write-Log "COOLDOWN-HOLD $($key): preview changed but ledger proves the last buyer msg was already answered (buyers=$buyerCount) - no send"
+-                        return
++                        # Read (preview-triggered or periodic) still proves an old answered message.
++                        Write-Log "COOLDOWN-HOLD $($key): ledger proves the last buyer msg was already answered (buyers=$buyerCount) - no send; periodic verification continues"
+                     }
+                     # 连挂计数: 同一会话连续 N 轮"在待回复列表里、但账本证明没有新内容" ⇒ 告警交人工判断。
+                     #   不静默、也不拿买家的耐心去试 —— 这是 买家G 事故(无限跳过)与 Buyer-A 事故(重复打扰)
+@@ -1203,13 +1176,12 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+                 $sentAt = [datetime]$ctx.lastSendAt[$skey]
+                 if ($coolReason -eq 'RATE_MIN_GAP') { $coolUntil = $sentAt.AddMinutes($script:replyMinGapMin) }
+                 elseif ($coolReason -eq 'POST_SEND_COOLDOWN') { $coolUntil = $sentAt.AddMinutes($script:replyPostSendCooldownMin) }
+-                # 兜底: 锚出来的时刻若已过去(时钟回拨/配置刚改小), 至少让出一轮, 避免同一轮反复打开页面。
+-                if ($coolUntil -le (Get-Date)) { $coolUntil = (Get-Date).AddMinutes(1) }
++                elseif ($coolReason -eq 'NEW_MESSAGE_FLOOR') { $coolUntil = $sentAt.AddSeconds($script:replyNewMsgFloorSec) }
+             }
+-            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = $coolUntil; preview = $item.preview
++            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = $coolUntil; reason = $coolReason; nextVerifyAt = (Get-Date).AddSeconds(20); preview = $item.preview
+                                          pkey = (Get-NormalizedMsgText $item.preview)
+                                          buyers = $buyerCount; count = 1 }
+-            Write-Log "ALREADY-REPLIED-WAIT $($key) reason=$coolReason no send; next check at $($coolUntil.ToString('HH:mm:ss')) (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min)"
++            Write-Log "ALREADY-REPLIED-WAIT $($key) reason=$coolReason no send; next check at $($coolUntil.ToString('o')) (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min/reply_new_msg_floor_sec)"
+             return
+         } else {
+             # A1 new inquiry alert (24h throttle)
+@@ -1397,18 +1369,20 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+                 # 仅发送成功才记录去重；发送失败（ABORT/未发出）不记录，
+                 # 否则会话会永久卡在待回复板块且永不重试
+                 if ($sendRes -match 'SENT_OK') {
++                    # Capture the successful-send clock before ledger/retry I/O can delay it.
++                    $sentAt = Get-Date
++                    $ctx.lastSendAt[$skey] = $sentAt
+                     # [FIX-DUP 2026-09-25] 写新格式去重键（归一化原文 hash + 买家消息条数）
+                     Set-StateHash $ctx $skey $newKey
+                     Remove-PendingRetry $key          # [Phase3] 发送成功即出补发表
+-                    # 发送成功后短冷却:同一会话在 reply_post_send_cooldown_min 分钟内不再重复处理
+-                    #   (§0.1: 配置键控制, 缺省 **5**, 原硬编码 3; 与最小间隔对齐且不得小于它)。
+-                    $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }   # [FIX-DUP 2026-09-25]
++                    # Successful send anchors both the minute gate and the independent read cache.
++                    # New messages can be discovered during that cache; old messages still dedup.
++                    $ctx.skipCooldown[$key] = @{ time = $sentAt; until = $sentAt.AddMinutes($script:replyPostSendCooldownMin); reason = 'SENT_OK'; nextVerifyAt = $sentAt.AddSeconds(20); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }
+                     # [FIX-DUP-GUARD 2026-09-27] 真发出去了 ⇒ 重复回复的连挂计数归零(该计数语义是"连续")。
+                     if ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds) { $ctx.dupGuardHolds.Remove($skey) }
+                     Write-Log "POST-SEND-COOLDOWN $($key) $($script:replyPostSendCooldownMin)min (config key reply_post_send_cooldown_min)"
+                     # [SPEC §4.3-G4 2026-09-27 / SPEC-待回复列表 §2 行3-4] 记录成功发送时刻
+-                    #   —— 这是最小间隔与发送后冷却**共用**的唯一数据面(见上方 RATE-SKIP 与判据入参)。
+-                    $ctx.lastSendAt[$skey] = Get-Date
++                    #   —— 上方已赋值，秒级下限与分钟门禁共用这一个数据面。
+                     # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
+                     try {
+                         $gst = Get-GoodsDataStatus $key $script:dataDir
+diff --git a/scripts/reply_engine.ps1 b/scripts/reply_engine.ps1
+index 3b074c9..26d3041 100644
+--- a/scripts/reply_engine.ps1
++++ b/scripts/reply_engine.ps1
+@@ -238,65 +238,20 @@ function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
+ #     2) 它构成"是否回复"的第二套出口。spec §3-R2 的取向是**减少出口**, 不是再加一条判据。
+ #   取而代之的唯一出口是下方 Test-ShouldReply。任何"再补一条判据"的做法都违反 spec §4.4-1。
+ 
+-# [SPEC-待回复列表 2026-09-27] 「是否回复」的**唯一出口**(纯函数: 不读文件、不碰页面、无副作用)。
+-#   ⚠️ 本函数于 2026-09-27 被**换掉判据**(source of truth: docs\specs\判据改为待回复列表_20260927.md)。
+-#      ⛔ 下面这段旧论证**已被明确推翻, 不得据以改回**:
+-#        「列表只当**触发器**, 不当判据(§2.2): 会话出现在待回复列表 ≠ 买家在等我回。」
+-#        + 「取向: 证明不了就不发(fail-closed), 宁可漏回一条真询盘。」
+-#      推翻理由(实证, 见新 spec §1.2): 旧判据只回答「我发过消息了吗」, 业务需要的是「客户的问题被回答了吗」。
+-#      买家G 问了 6 次报价, 我方回了 6 次"马上给你报价"、真实价格 0 条, 最后一句
+-#      (能不能到工厂提货)无人回答; 而旧判据每 9 秒判一次 LEDGER_COUNT_MATCH ⇒ **无限跳过**。
+-#      老板裁决(2026-09-27 13:1x): 「回复的核心是该对话在页面待回复的列表里」——
+-#      阿里的待回复列表就是待办板: 在板子上 = 需要处理; 处理完它自己会消失。
+-#
+-#   新的证据锚点 = **该会话此刻在不在页面的待回复列表里**(+ 冷却/最小间隔兜底), 不再看账本 hash、
+-#   不再看买家消息条数。账本仍然继续写入(§2.2: 删了会连带破坏补发队列 / Test-RepliedStateUsable /
+-#   快照保留), 但**不再作为"是否回复"的依据** —— 它只是历史记录与补发队列的关联依据。
+-#
+-#   取向变更(§9「被取代」末行): 旧「证明不了就不发」⇒ 新「**在待回复列表里且不在冷却/间隔内 ⇒ 发**」;
+-#   仅账本异常/冷却/最小间隔这三类仍然 fail-closed。
+-#
+-#   入参(判定只用前 7 个):
+-#     -LedgerUsable           账本(去重状态)是否可读。整轮开头 Test-RepliedStateUsable 已挡一道(G1/P6),
+-#                             此处**再挡一道**(§2 行 1), 与 §4.1 裁决 = 方案甲(账本读不到 ⇒ 一条都不发)一致。
+-#     -PendingSeenRounds      该会话**连续**在待回复列表里出现的轮数, 由 monitor 的 $ctx.pendingSeen 维护。
+-#                             0 = 本轮不在列表里(未命中即删键)。§2.1: 只有 ≥2 才允许发。
+-#     -RequiredSeenRounds     连续确认轮数门槛, 缺省 2(§0.1: 约 9 秒, 是唯一的"冷启动延迟", 不可再降)。
+-#                             实现里强制下限 2 —— 传 0/1 会被抬回 2, 防止"瞬时残留恰好被连读两轮"之外的降级。
+-#     -MinutesSinceLastSend   距上次**成功发送**的分钟数; -1 = 从未发过(则本行不命中)。
+-#     -MinGapMinutes          最小间隔, 缺省 5(配置键 reply_min_gap_min; §0.1 原值 15)。
+-#     -InPostSendCooldown     是否在发送后冷却期内; 由调用方用**同一个** $ctx.lastSendAt 判定, 不另记一套。
+-#     -PostSendCooldownMinutes 发送后冷却分钟数, 缺省 5(配置键 reply_post_send_cooldown_min; 原值 3)。
+-#                             §0.1: 与最小间隔对齐, **不得小于它**。
+-#     -ConvoLines / -LedgerKey / -NormLastBuyerHash
+-#                             **仅为日志与既有测试兼容而保留**; §3.1 明令判定逻辑不得再读它们。
+-#
+-#   返回: [pscustomobject]@{ Reply = <bool>; Reason = <string> }。Reason 逐字取自下表(便于 grep 与回归断言)。
+-#
+-#   判定表(顺序固定, 先命中先返回; 新 spec §2 —— **就这 5 行**, 原来 8 行三个证据源, 现在 5 行两个):
+-#     序 | 条件                                        | Reply | Reason
+-#     1  | 账本(去重状态)不可用                         | false | LEDGER_UNUSABLE_FAILCLOSED
+-#     2  | 该会话**不在**待回复列表(或连续确认轮数 < 2)  | false | NOT_IN_PENDING_LIST
+-#     3  | 该会话在**发送后冷却**期内                    | false | POST_SEND_COOLDOWN
+-#     4  | 该会话距上次成功发送 **< 最小间隔**            | false | RATE_MIN_GAP
+-#     5  | 以上都不命中                                 | true  | IN_PENDING_LIST
+-#   行 2 的两种形态共用同一 Reason: "不在列表"表现为轮数 0(monitor 未命中即删键), "轮数不足"表现为 1。
+-#   行 3/4 的数据面是**同一个** $ctx.lastSendAt[statekey](§3.2: 不得各记一套); 行 3 排在行 4 之前,
+-#   故当 PostSendCooldownMinutes ≤ MinGapMinutes(缺省两者都是 5)时, 生产日志里先出现的是 POST_SEND_COOLDOWN。
+-#
+-#   §2.1 为什么行 2 要"连续 2 轮确认"(不是保守, 是必须):
+-#     实测两种列表瞬态 —— ①标签切换瞬间 querySelectorAll('.contact-item-container') 会读到上一个视图的
+-#     残留节点(13:04:23 读到 23 个且 visibility:hidden; 13:07 同选择器读到 0 个); ②切标签后列表会短暂
+-#     塌成 height:0(.all-list-container 实测 hidden/h0)。若只看单轮命中就发, 这些瞬态会造成误发。
+-#     代价: 首次命中到可发之间多等 1 轮(约 9 秒); 收益: 只存活 1 轮的瞬态残留永远不会触发发送。
++# 唯一时间策略（2026-10-05 spec 修订旧无条件五分钟条款）。
++# 账本可用与连续两轮待回复确认先行；调用方将已回复同一条消息的轮数置零。
++# 已确认新消息只受上次成功发送起算的秒级下限；其余情况保留分钟冷却和间隔。
++# 生产传入 SecondsSinceLastSend，全部时间比较保留精度；旧分钟/布尔入参兼容。
++# ConvoLines/LedgerKey/NormLastBuyerHash 仅兼容日志，证据由唯一辅助函数计算。
++# 本函数不读文件、不碰页面，人工/顺序/身份/锁/发送保护由生产入口保留。
+ function Test-ShouldReply {
+     [CmdletBinding()]
+     param(
+-        # ===== 判定入参(§2 的 5 行表只用这些) =====
++        # ===== 基础门禁与普通消息时间输入 =====
+         [bool]$LedgerUsable           = $false,   # 账本可读(整轮已挡, 此处再挡一道)
+         [int]$PendingSeenRounds       = 0,        # 该会话连续在待回复列表里出现的轮数
+         [int]$RequiredSeenRounds      = 2,        # 连续确认轮数门槛(§2.1)
+-        [int]$MinutesSinceLastSend    = -1,       # 距上次成功发送的分钟数; -1 = 从未发过
++        [double]$MinutesSinceLastSend = -1,       # 兼容分钟输入; 保留小数，禁止四舍五入提前放行
+         [int]$MinGapMinutes           = 5,        # 最小间隔(配置键 reply_min_gap_min, 缺省 5)
+         [bool]$InPostSendCooldown     = $false,   # 是否在发送后冷却期内
+         [int]$PostSendCooldownMinutes = 5,        # 发送后冷却(配置键 reply_post_send_cooldown_min, 缺省 5)
+@@ -337,19 +292,23 @@ function Test-ShouldReply {
+     }
+     # 行 3/4 的适用条件: 它们只用于抑制"旧消息"的重复响应。已确认的新消息走行 4b。
+     if (-not $ConfirmedNewMessage) {
++        # 2026-10-05: production supplies exact seconds from the one successful-send clock.
++        # Legacy callers may still supply minutes and the cooldown flag.
++        if ($SecondsSinceLastSend -ge 0) {
++            $MinutesSinceLastSend = $SecondsSinceLastSend / 60.0
++            $InPostSendCooldown = ($SecondsSinceLastSend -lt ($PostSendCooldownMinutes * 60.0))
++        }
+         # 行 3: 发送后冷却期内 ⇒ 不发。数据面与行 4 共用 $ctx.lastSendAt(调用方传入判定结果)。
+         if ($InPostSendCooldown) {
+             return [pscustomobject]@{ Reply = $false; Reason = 'POST_SEND_COOLDOWN' }
+         }
+-        # 行 4: 距上次成功发送 < 最小间隔 ⇒ 不发(§0 硬判据 2: 同一买家在最小间隔内不可能收到第 2 条)。
++        # 普通消息距上次成功发送 < 分钟间隔 ⇒ 不发；已确认新消息由秒级分支处理。
+         #   -1(= 从未发过)不命中本行; 间隔"刚好等于"最小间隔时放行(严格小于才拦)。
+         if ($MinutesSinceLastSend -ge 0 -and $MinutesSinceLastSend -lt $MinGapMinutes) {
+             return [pscustomobject]@{ Reply = $false; Reason = 'RATE_MIN_GAP' }
+         }
+     } else {
+-        # 行 4b: [SPEC 4.1 2026-10-03] 已确认的新消息 —— 旧的冷却/最小间隔不再拦它, 只保留一个
+-        #   很小的墙钟下限, 防止同一瞬间连发两条。这个下限不是平台规则, 是"两条消息不可能在
+-        #   同一时刻各自被处理完"的物理下限; 取 -1(未知/从未发过)时不命中。
++        # 新消息默认下限 20 秒，从上次成功发送起算；并非收到新消息再等 20 秒。
+         if ($NewMessageFloorSeconds -gt 0 -and $SecondsSinceLastSend -ge 0 -and $SecondsSinceLastSend -lt $NewMessageFloorSeconds) {
+             return [pscustomobject]@{ Reply = $false; Reason = 'NEW_MESSAGE_FLOOR' }
+         }
+@@ -360,8 +319,8 @@ function Test-ShouldReply {
+ 
+ # [SPEC 4.1 2026-10-03] Positive-evidence test for "the newest buyer message is genuinely new".
+ #   Returns $true ONLY when the ledger is in the current "<hash>|<count>" format AND the freshly
+-#   scraped conversation actually differs from what the ledger records - either the buyer wrote
+-#   more messages, or the newest buyer text changed.
++#   scraped conversation is trusted: count increased, or equal count with changed original hash.
++#   A shrinking window, malformed key or untrusted latest identity cannot authorise the bypass.
+ #   Everything else returns $false (fail-closed), because this result is what authorises skipping
+ #   the old-message cooldown. In particular an unparseable or legacy ledger key never authorises it.
+ #   Pure function: no file access, no page access, no side effects.
+@@ -370,20 +329,23 @@ function Test-ConfirmedNewBuyerMessage {
+     param(
+         [string]$LedgerKey,
+         [int]$BuyerCount = -1,
+-        [string]$NormLastBuyerHash
++        [string]$NormLastBuyerHash,
++        [bool]$MessageEvidenceTrusted = $false
+     )
++    if (-not $MessageEvidenceTrusted) { return $false }
+     if ($BuyerCount -lt 1) { return $false }
+     if ([string]::IsNullOrWhiteSpace($LedgerKey)) { return $false }
+     if ([string]::IsNullOrWhiteSpace($NormLastBuyerHash)) { return $false }
+     $parts = @([string]$LedgerKey -split '\|')
+-    if ($parts.Count -lt 2) { return $false }
++    if ($parts.Count -ne 2) { return $false }
+     if ([string]$parts[1] -notmatch '^\d+$') { return $false }
+     $savedCount = 0
+     if (-not [int]::TryParse([string]$parts[1], [ref]$savedCount)) { return $false }
++    if ($savedCount -lt 1) { return $false }
+     $savedHash = [string]$parts[0]
+     if ([string]::IsNullOrWhiteSpace($savedHash)) { return $false }
+     if ($BuyerCount -gt $savedCount) { return $true }
+-    if ($NormLastBuyerHash -ne $savedHash) { return $true }
++    if ($BuyerCount -eq $savedCount -and $NormLastBuyerHash -ne $savedHash) { return $true }
+     return $false
+ }
+ 
+diff --git a/tests/reply_engine.tests.ps1 b/tests/reply_engine.tests.ps1
+index 5ea2177..a067d76 100644
+--- a/tests/reply_engine.tests.ps1
++++ b/tests/reply_engine.tests.ps1
+@@ -96,12 +96,14 @@ Assert-Eq "newmsg-still-needs-ledger" (Test-ShouldReply -LedgerUsable $false -Pe
+ Assert-Eq "newmsg-still-needs-two-rounds" (Test-ShouldReply -LedgerUsable $true -PendingSeenRounds 1 -ConfirmedNewMessage $true -SecondsSinceLastSend 999).Reason 'NOT_IN_PENDING_LIST'
+ 
+ # --- 9) positive evidence for a genuinely new buyer message ---------------------------------
+-Assert-Eq "evidence-count-increased" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 4 -NormLastBuyerHash 'ZZZ') $true
+-Assert-Eq "evidence-hash-changed" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ZZZ') $true
+-Assert-Eq "evidence-same-message" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ABC') $false
+-Assert-Eq "evidence-legacy-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC' -BuyerCount 9 -NormLastBuyerHash 'ZZZ') $false
+-Assert-Eq "evidence-overflow-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|1788799769241' -BuyerCount 9 -NormLastBuyerHash 'ZZZ') $false
+-Assert-Eq "evidence-empty" (Test-ConfirmedNewBuyerMessage -LedgerKey '' -BuyerCount 3 -NormLastBuyerHash 'X') $false
++Assert-Eq "evidence-count-increased" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 4 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $true
++Assert-Eq "evidence-hash-changed" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $true
++Assert-Eq "evidence-count-decreased-no-exemption" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 2 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $false
++Assert-Eq "evidence-must-be-trusted" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 4 -NormLastBuyerHash 'ZZZ') $false
++Assert-Eq "evidence-same-message" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|3' -BuyerCount 3 -NormLastBuyerHash 'ABC' -MessageEvidenceTrusted $true) $false
++Assert-Eq "evidence-legacy-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC' -BuyerCount 9 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $false
++Assert-Eq "evidence-overflow-key" (Test-ConfirmedNewBuyerMessage -LedgerKey 'ABC|1788799769241' -BuyerCount 9 -NormLastBuyerHash 'ZZZ' -MessageEvidenceTrusted $true) $false
++Assert-Eq "evidence-empty" (Test-ConfirmedNewBuyerMessage -LedgerKey '' -BuyerCount 3 -NormLastBuyerHash 'X' -MessageEvidenceTrusted $true) $false
+ 
+ # --- 10) already-answered guard -------------------------------------------------------------
+ Assert-Eq "answered-exact" (Test-BuyerMsgAlreadyAnswered -LedgerKey 'H|3' -BuyerCount 3 -NormLastBuyerHash 'H') $true
+diff --git a/tests/reply_gate_dupskip.tests.ps1 b/tests/reply_gate_dupskip.tests.ps1
+index d316903..0cf0a03 100644
+--- a/tests/reply_gate_dupskip.tests.ps1
++++ b/tests/reply_gate_dupskip.tests.ps1
+@@ -11,8 +11,8 @@
+ #      (拦错 = 买家永远等不到回复, 即 Ganesan 事故形态), 故每个 fail-open 出口都逐条钉死;
+ #   2) monitor.ps1 的**生产接线**静态断言 —— 锚定冷却 / 下探信号三态 / 连挂告警确实在位,
+ #      且"唯一出口 / 唯一发送点 / 轮数不足不写冷却"这几条不变量没被这次修订破坏。
+-# 行为级端到端证明在 tools\dedup_acceptance\A4_A5_A6_gate_offline.ps1 的 A7/A8 段
+-# (用**真实** Invoke-ConvoItem + 真实算法算出的账本键驱动, 本文件不重复造那套桩)。
++# 当前行为级证明在 tests/new_message_cooldown.tests.ps1 的 A1-A14（真实入口/证据）。
++# 旧 tools/dedup_acceptance 脚本包含实机数据读取，不作为本次默认验收入口。
+ #
+ # ⚠️ 本文件必须保持 UTF-8 带 BOM(Windows PowerShell 5.1 对无 BOM 的 .ps1 按 ANSI 解码 ⇒ 中文乱码, E-10)。
+ # 纯逻辑: 不 dot-source monitor.ps1(那会执行它的主分发)、不碰页面、不启动 monitor、不写任何文件。
+@@ -85,6 +85,10 @@ Assert-True "cooldown-writers-present" ($writers.Count -ge 4)
+ Assert-Eq "every-cooldown-writer-has-until" (@($writers | Where-Object { $_.code -notmatch 'until' }).Count) 0
+ Assert-True "rate-min-gap-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddMinutes\(\$script:replyMinGapMin\)')
+ Assert-True "post-send-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddMinutes\(\$script:replyPostSendCooldownMin\)')
++Assert-True "new-floor-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddSeconds\(\$script:replyNewMsgFloorSec\)')
++Assert-True "minute-data-keeps-fraction" ($monRaw -notmatch '\$gapMin = \[int\]')
++Assert-True "no-second-minute-override" ($monRaw -notmatch '\$gapMin2\s*=')
++Assert-True "periodic-read-scheduler-present" ($monRaw -match 'nextVerifyAt' -and $monRaw -match "'periodic'")
+ # 冷却期内"预览变化"的三态 + 连挂告警(全部必须留痕, 否则线上无从判断)
+ foreach ($marker in @('COOLDOWN-RECHECK', 'COOLDOWN-HOLD', 'COOLDOWN-LIFT', 'DUP-GUARD-HOLD', 'DUP-GUARD-ALERT', 'dupGuardHolds')) {
+     Assert-True ("monitor-has[{0}]" -f $marker) ($monRaw -match [regex]::Escape($marker))
+diff --git a/SKILL.md b/SKILL.md
+index 9835af3..4835e3f 100644
+--- a/SKILL.md
++++ b/SKILL.md
+@@ -31,7 +31,7 @@ metadata:
+ - monitor 启动后会处理真实会话。研究模块时不要加载整个 monitor 主程序。
+ - health_check 会写状态、推送告警，并可能拉起 watchdog；查询使用 status 与任务/进程读取。
+ - 新版回复链通过离线测试，但真实模型、入口完整行为和端到端发送尚未完成验收，具体见当前状态。
+-- 主监控的确认新消息豁免仍被后续分钟级限流覆盖；不能仅凭 Test-ShouldReply 宣称秒级响应已实现。
++- 工作区已按 2026-10-05 spec 统一新消息时间门禁，并通过隔离入口回归；尚未重新加载到运行进程，不能将离线秒级判据视为平台端到端时效。见当前状态与冷却修复交付说明。
+ - NeedHumanTodo/TodoKind 只有标记，尚无真正待办和通知交接。不要将话术里的“已交接”当作事实。
+ - nudge 已移除买家自动发送，只列出候选；公海链路仍能认领与发送。
+ - waimao 与旧企微/control-agent 桥已移除。远程指令路由属于外部 DSH 配置。
+diff --git a/docs/当前状态.md b/docs/当前状态.md
+index ca99064..aa82c4b 100644
+--- a/docs/当前状态.md
++++ b/docs/当前状态.md
+@@ -4,6 +4,8 @@
+ 
+ > 2026-10-05 补充：工作区已在 main，已发布基线为 fbbbef4 / v0.0.1；本轮另有未提交的 [消息顺序修复](消息顺序修复_20261005.md)。只读查询已发现 monitor/watchdog 在运行，Watchdog 任务为 Running，Health 为 Ready。以下 2026-10-04 的停用状态保留为历史快照，不代表目前仍停用。本轮未重启进程或改任务设置，新代码需重新加载后生效。
+ 
++> 2026-10-05 冷却修正交付：基于上述未提交工作区完成 [新消息冷却与统一时间门禁 spec](specs/新消息冷却豁免与统一时间门禁_20261005.md)，A1–A14 隔离真实入口验证通过。移除后续无条件分钟覆盖，秒级/分钟级到期均锚定上次成功发送；预览不变也按 20 秒读取调度核验。已回复旧消息仍去重，正面新消息证据要求有效键、可信顺序/身份及条数增加或等条数原文变化。现场状态沿用任务给定及前次只读核验，本次未启停服务/任务、未修改生产配置或账本、未发送买家消息或通知，也未提交/推送。代码尚未加载到运行进程；详见 [交付、证据与上线验收](新消息冷却修复交付_20261005.md)。
++
+ ## 1. 工作区与运行状态
+ 
+ - 分支为 `natural-reply-20261003`，基线提交为 `5356302`；本轮重构与后续修改整理为版本 **0.0.1**，对应 Git 标签 `v0.0.1`。
+@@ -40,11 +42,11 @@ Ready 表示任务已启用、等待触发，不表示脚本正在运行或业
+ 
+ ## 3. 代码已确认的缺口
+ 
+-### 新消息冷却豁免被后续门禁覆盖
++### 新消息时间门禁已离线修复，等待上线验收
+ 
+-`reply_engine.ps1::Test-ShouldReply` 支持已确认新消息绕过旧消息冷却，保留秒级下限。monitor 传入该参数后，仍在随后的 `RATE-SKIP` 分支无条件检查分钟级间隔并覆盖结果。
++此前 `Test-ShouldReply` 的新消息放行被 monitor 随后的 `RATE-SKIP` 覆盖。2026-10-05 工作区已修正为唯一时间策略，并补齐冷却期周期读取及可信新消息证据约束；普通消息五分钟配置不变。
+ 
+-影响：默认配置下，新消息仍可能被五分钟间隔阻挡。“新消息只受 20 秒限制”只描述纯函数，不是完整监控链现状。应修正或统一时间门禁，再做入口级行为验证。
++现状：真实生产函数在模拟页面/模型/发送边界下已通过入口行为验证，运行进程尚未重新加载。20 秒是成功发送间隔与读取调度目标，受串行扫描及模型/附件耗时影响，不是平台端到端 SLA。`HASH|count` 无法证明窗口截断后等条数同文的新消息，未扩展或清空账本。
+ 
+ ### 人工待办与通知交接尚未接通
+ 
+diff --git a/docs/CHANGELOG.md b/docs/CHANGELOG.md
+index 29f5466..381021e 100644
+--- a/docs/CHANGELOG.md
++++ b/docs/CHANGELOG.md
+@@ -1,5 +1,13 @@
+ ﻿# CHANGELOG - alibaba-auto-reply
+ 
++## 未发布 - 2026-10-05 新消息冷却与统一时间门禁
++
++- 以已有消息顺序修复及回复模块精简工作区为基线，按 [本次 spec](specs/新消息冷却豁免与统一时间门禁_20261005.md) 修订旧无条件五分钟条款；历史事故和验收报告保留。
++- monitor 时间策略统一到 `Test-ShouldReply`：可信新消息满足默认 20 秒成功发送间隔后通过，普通消息仍受五分钟门禁；精确秒数比较，等待锚定成功发送时刻，不叠加。
++- 发送/去重时间缓存增加来源与 `nextVerifyAt`，预览不变也周期读取，人工插话及输入失败来源保持原阻断；旧记录有限到期兼容，不以 `buyers=-1` 制造新消息证据。
++- 新消息确认收紧为可信最新消息、有效两段键和条数增加/等条数原文改变；下降窗口、溢出/损坏键、身份碰撞不获豁免。原文、附件与写账本共用规范化 CDP 最新消息，兼容内存字典和落盘对象，Accio 增强需匹配最新身份。
++- 先留存 A1/A2/A3 入口失败基线，再完成 A1–A14 离线验证及关联测试。未启停进程/任务、未改生产配置或账本、未发送消息或通知、未提交/推送；代码尚未上线。证据与上线步骤见 [交付说明](新消息冷却修复交付_20261005.md)。
++
+ ## 未发布 - 2026-10-05 消息顺序与系统卡片修复
+ 
+ - 页面抽取改用逐条 item-base-info 时间，保留秒数和图片行时间；showTime 不再参与方向判定。
+diff --git a/docs/项目地图.md b/docs/项目地图.md
+index 15d8464..dbaec9f 100644
+--- a/docs/项目地图.md
++++ b/docs/项目地图.md
+@@ -48,7 +48,7 @@ reply_engine → msg_norm → reply_policy → reply_gen
+ 
+ 消息 schema 为 3：`@@MT` 是明确的逐条时间，旧 `@@TS/showTime` 不再作为方向或身份置信度的证据。最新买家、附件、策略及模型输入复用同一份已验证会话；系统卡片不进入资料事实和模型上下文。Accio 上下文也需验证顺序，并与 CDP 的最新买家文本一致。具体边界见 [消息顺序修复](消息顺序修复_20261005.md)。
+ 
+-当前 monitor 在 `Test-ShouldReply` 后还保留额外限流，导致“确认新消息后绕过旧冷却”的决策无法完全生效。完整发送行为要沿调用链核对，不能只看纯函数。
++工作区 monitor 已按 [2026-10-05 spec](specs/新消息冷却豁免与统一时间门禁_20261005.md) 移除覆盖判据的额外分钟限流，由 `Test-ShouldReply` 统一时间策略。可信新消息保留从上次成功发送起算的默认 20 秒下限；普通消息保留五分钟门禁，已回复同一条消息持续去重。页面缓存独立使用 `nextVerifyAt` 周期性读取，预览不变也可发现同文新消息或附件。隔离入口验证通过，代码尚未重新加载；验证证据与边界见 [交付说明](新消息冷却修复交付_20261005.md)。
+ 
+ ## 4. 提示词、示例与规则文件
+ 
+diff --git a/docs/specs/新消息冷却豁免与统一时间门禁_20261005.md b/docs/specs/新消息冷却豁免与统一时间门禁_20261005.md
+index aac22a9..3c30acc 100644
+--- a/docs/specs/新消息冷却豁免与统一时间门禁_20261005.md
++++ b/docs/specs/新消息冷却豁免与统一时间门禁_20261005.md
+@@ -1,6 +1,6 @@
+ # 新消息冷却豁免与统一时间门禁
+ 
+-日期：2026-10-05（北京时间）。状态：待实现、待验收。
++日期：2026-10-05（北京时间）。状态：工作区源码实现及 A1–A14 隔离离线验证完成；尚未上线、待现场验收。交付与证据见 [修复交付](../新消息冷却修复交付_20261005.md)。
+ 
+ 本 spec 是这次修正的执行依据。它修订旧设计中“同一买家五分钟内不能收到第二条”的无条件限制：五分钟仅限制旧消息或无法确认是新消息的情况，不能覆盖已确认新消息的秒级门禁。历史事故和报告保留，不回写成已通过。
+ 
+diff --git a/tests/new_message_cooldown.tests.ps1 b/tests/new_message_cooldown.tests.ps1
+new file mode 100644
+index 0000000..47731a4
+--- /dev/null
++++ b/tests/new_message_cooldown.tests.ps1
+@@ -0,0 +1,227 @@
++﻿# Offline real-entry regression. Never load monitor top-level or production config.
++# Real: normalization, evidence, time gate, generation adapter/policy, state mutation.
++# Fake: per-message page rows, model response, clock, persistence, attachment I/O, send.
++$ErrorActionPreference = 'Stop'
++$root = Split-Path $PSScriptRoot -Parent
++$scripts = Join-Path $root 'scripts'
++. (Join-Path $scripts 'reply_engine.ps1')
++. (Join-Path $scripts 'lib/msg_norm.ps1')
++. (Join-Path $scripts 'lib/msg_source.ps1')
++. (Join-Path $scripts 'lib/reply_policy.ps1')
++. (Join-Path $scripts 'lib/reply_gen.ps1')
++. (Join-Path $scripts 'lib/vision.ps1')
++$tokens = $null; $errors = $null
++$ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $scripts 'monitor.ps1'), [ref]$tokens, [ref]$errors)
++if ($errors.Count) { throw 'Monitor parse failed' }
++foreach ($name in @('Invoke-ConvoItem','Invoke-ScanRound','Update-PendingSeen','Generate-Reply-LLM','Set-StateHash','Test-RepliedStateUsable')) {
++    $fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
++    Invoke-Expression $fn.Extent.Text
++}
++$script:now = [datetime]'2026-10-05T12:00:00'
++function Get-Date { param([string]$Format) if ($Format) { return $script:now.ToString($Format) }; return $script:now }
++$script:dataDir = Join-Path $env:TEMP 'aar_cooldown_memory_only'
++$logFile = $null
++$script:replyMinGapMin = 5; $script:replyPostSendCooldownMin = 5
++$script:replyNewMsgFloorSec = 20; $script:requiredSeenRounds = 2; $script:replyRoundBudgetSec = 180
++$script:accioFlags = @{ shadow = $false; read = $false }
++$script:pass = 0; $script:fail = 0
++function Check($name, [bool]$ok) { if ($ok) { $script:pass++ } else { $script:fail++; Write-Output "FAIL $name"; $script:logs | Write-Output } }
++function Write-Log($text) { $script:logs += $text }
++function Add-Content { param($Path,$Value,$Encoding) if (-not $Path.StartsWith($script:dataDir)) { throw 'Unexpected write path' } }
++function Get-RepliedStateFileSize { return $script:ledgerBytes }
++function Set-RepliedState($state) { $script:persisted = $state | ConvertTo-Json -Depth 10; $script:writes++ }
++function Repair-RepliedState { throw 'Unexpected repair' }
++function Get-RepliedState { throw 'Unexpected live read' }
++function Test-NoReplyBuyer { return $script:manual }
++function Save-BuyerProfile { }
++function Write-LocalAlert { }
++function Clear-LocalAlert { }
++function Send-WecomMessage { $script:notifications++; return 'OFFLINE' }
++function Send-NewInquiryAlert { $script:notifications++ }
++function Remove-PendingRetry { }
++function Add-PendingRetry { }
++function Read-RetryTable { return @{ items = @{} } }
++function Get-GoodsDataStatus { return $null }
++function Start-LlmRound { return @{ sw = [Diagnostics.Stopwatch]::StartNew() } }
++function Stop-LlmRound { }
++function Get-LlmRoundElapsedSec { return 0 }
++function Get-LlmRoundRemainingSec { return 180 }
++function Test-LlmRoundBudgetExceeded { return $false }
++function Get-ReplyPromptPath { return (Join-Path $scripts 'reply_agent_prompt.md') }
++function Get-ReplyScenarioPath { return (Join-Path $scripts 'reply_scenarios.md') }
++function Get-Rules { return $null }
++function Invoke-LLM { param($Messages,$Temperature,$MaxTokens,$LogFile) $script:modelCalls++; $script:modelInput = $Messages | ConvertTo-Json -Depth 20; return 'Could you confirm the destination city?' }
++function Open-ConvoAndGetMessages($name) { $script:reads++; return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw; profile = '' } }
++function Send-OneTalkMessage($name,$text) { $script:sends++; $script:sentText = $text; return $script:sendResult }
++function Get-ImageDataUrl($url) { $script:imageUrl = $url; return $null }
++function Get-DocumentBase64ViaCdp($url) { $script:fileUrl = $url; return $null }
++function Get-DocumentBase64ViaHttp($url) { $script:fileUrl = $url; return $null }
++function Get-AccioReplyLines { return $script:gatewayLines }
++function Test-AccioLinesOverlap { return $true } # optimistic gateway boundary; identity still real
++function Get-SkillConfig { throw 'Production config must never be read' }
++function Get-SkillPath { throw 'Production paths must never be resolved' }
++function Invoke-CdpEval { throw 'Browser access forbidden' }
++function Start-Sleep { throw 'Blocking sleep forbidden in these entry cases' }
++function Line($text, [long]$ts, $markers = '') { return '[BUYER] ' + $text + ' ' + $markers + ' @@TS:' + $ts + ' @@MT:' + $ts + ' @@OT:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text)) }
++$item = [pscustomobject]@{ name = 'Virtual Buyer'; preview = 'unchanged'; unread = $true }
++function Reset {
++    $script:logs = @(); $script:sends = 0; $script:modelCalls = 0; $script:reads = 0; $script:writes = 0
++    $script:roundHalt = $false; $script:manual = $false; $script:ledgerBytes = 0
++    $script:pageName = 'Virtual Buyer'; $script:sendResult = 'SENT_OK'; $script:imageUrl = ''; $script:fileUrl = ''
++    $script:raw = (Line 'old request' 1791170000000) + "`n" + (Line 'new request' 1791170001000)
++    $ctx = @{ state = [pscustomobject]@{ replied = [pscustomobject]@{ 'virtual buyer' = (Get-DedupKey 'old request' 1) } }; lastSendAt = @{ 'virtual buyer' = $script:now.AddSeconds(-60) }; skipCooldown = @{}; openCooldown = @{}; noReplyPreview = @{}; humanPending = @{}; sendFailCount = @{}; failAlertAt = @{}; pendingSeen = @{}; dupGuardHolds = @{}; lastActivity = $script:now }
++    Update-PendingSeen $ctx @($item); Update-PendingSeen $ctx @($item)
++    return $ctx
++}
++function Cache($ctx, $reason = 'POST_SEND_COOLDOWN', $buyers = 1) { $ctx.skipCooldown[$item.name] = @{ time = $script:now.AddSeconds(-60); until = $ctx.lastSendAt['virtual buyer'].AddMinutes(5); pkey = 'unchanged'; preview = 'unchanged'; buyers = $buyers; count = 1; reason = $reason; nextVerifyAt = $script:now } }
++
++$ctx = Reset; Invoke-ConvoItem $ctx $item
++Check 'A1 new text at 60s reaches generation/send with five minute configs' ($script:sends -eq 1 -and $script:modelCalls -gt 0)
++$ctx = Reset; $script:raw = Line 'edited latest request' 1791170001000; Invoke-ConvoItem $ctx $item
++Check 'A1 equal count changed original hash is positive evidence' ($script:sends -eq 1 -and ($script:logs -match 'confirmedNew=True'))
++$ctx = Reset; $ctx.lastSendAt['virtual buyer'] = $script:now.AddSeconds(-19.999); Invoke-ConvoItem $ctx $item
++Check 'A2 19.999s blocks before generation' ($script:sends -eq 0 -and $script:modelCalls -eq 0 -and ($script:logs -match 'NEW_MESSAGE_FLOOR'))
++Check 'A2 floor deadline anchored to successful send' ($ctx.skipCooldown[$item.name].until -eq $ctx.lastSendAt['virtual buyer'].AddSeconds(20))
++$deadline = $ctx.skipCooldown[$item.name].until
++Invoke-ConvoItem $ctx $item
++Check 'A2 repeated scans do not move deadline' ($ctx.skipCooldown[$item.name].until -eq $deadline)
++$script:now = $script:now.AddMilliseconds(1); Invoke-ConvoItem $ctx $item
++Check 'A2 exactly 20.000s sends without five minute wait' ($script:sends -eq 1)
++$ctx = Reset; $script:raw = (Line 'old request' 1791170000000) + "`n" + (Line 'old request' 1791170001000); Cache $ctx
++Invoke-ConvoItem $ctx $item
++Check 'A3 same text count increased unchanged preview periodically read and sent' ($script:reads -eq 1 -and $script:sends -eq 1)
++$script:now = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
++Check 'A3 success scans do not resend same text message' ($script:sends -eq 1)
++
++foreach ($kind in @('image','file')) {
++    $ctx = Reset; Cache $ctx
++    $markers = if ($kind -eq 'image') { '@@IMG:https://example.invalid/new.png' } else { '@@FILE:new.pdf|https://example.invalid/new.pdf' }
++    $script:raw = (Line 'old request' 1791170000000 '@@IMG:https://example.invalid/old.png') + "`n" + (Line '[IMG]' 1791170001000 $markers)
++    Invoke-ConvoItem $ctx $item
++    Check "A4 $kind unchanged preview read and sent" ($script:reads -eq 1 -and $script:sends -eq 1)
++    $selected = if ($kind -eq 'image') { $script:imageUrl } else { $script:fileUrl }
++    Check "A4 $kind latest attachment selected" ($selected -match '/new\.')
++    Check "A4 $kind ledger matches normalized current row" ($ctx.state.replied['virtual buyer'] -eq (Get-DedupKey '[IMG]' 2))
++}
++foreach ($preview in @('translation changed','unread 99','our reply preview')) {
++    $ctx = Reset; $script:raw = '[BUYER] translated UI text @@TS:1791170000000 @@MT:1791170000000 @@OT:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('old request')); Cache $ctx
++    $noiseItem = [pscustomobject]@{ name = $item.name; preview = $preview; unread = $true }
++    Invoke-ConvoItem $ctx $noiseItem
++    Check "A5 $preview reads but does not generate/send" ($script:reads -eq 1 -and $script:modelCalls -eq 0 -and $script:sends -eq 0)
++}
++$ctx = Reset; $script:raw = Line 'old request' 1791170000000; Cache $ctx
++Invoke-ConvoItem $ctx $item; $script:now = $script:now.AddMinutes(6); Invoke-ConvoItem $ctx $item
++Check 'A6 answered old message blocked inside and beyond cooldown' ($script:sends -eq 0 -and $script:modelCalls -eq 0 -and $script:reads -eq 2)
++$script:now = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
++Check 'A6 verified repeated old-message holds retain third-hold alert' ($script:sends -eq 0 -and $ctx.dupGuardHolds['virtual buyer'] -eq 3 -and ($script:logs -match 'DUP-GUARD-ALERT'))
++
++foreach ($key in @('', 'ABC', '|1', 'ABC|oops', 'ABC|2147483648', 'ABC|1|extra', 'ABC|0', 'ABC|-1')) {
++    $ctx = Reset; $ctx.state.replied.'virtual buyer' = $key; Invoke-ConvoItem $ctx $item
++    Check "A7 bad key [$key] no exemption or exception" ($script:sends -eq 0 -and ($script:logs -match 'confirmedNew=False') -and ($script:logs -match 'Reason=POST_SEND_COOLDOWN'))
++    Check "A7 bad key [$key] not false confirmation log" (-not ($script:logs -match 'COOLDOWN-LIFT'))
++}
++$ctx = Reset; $ctx.state.replied.'virtual buyer' = Get-DedupKey 'old request' 3; Invoke-ConvoItem $ctx $item
++Check 'A7 count decrease changed hash no exemption' ($script:sends -eq 0 -and ($script:logs -match 'confirmedNew=False'))
++$ctx = Reset; $script:raw = (Line 'old request' 1791170000000) + "`n" + (Line 'new request' 1791170001000) + "`n" + (Line 'new request' 1791170001000); Invoke-ConvoItem $ctx $item
++Check 'A7 collision marks latest identity untrusted' ($script:sends -eq 0 -and ($script:logs -match 'trusted=False'))
++$ctx = Reset; $script:raw = '[BUYER] request without message time'; Invoke-ConvoItem $ctx $item
++Check 'A7 missing latest time identity keeps ordinary minute gate' ($script:sends -eq 0 -and ($script:logs -match 'trusted=False') -and ($script:logs -match 'POST_SEND_COOLDOWN'))
++$ctx = Reset; Cache $ctx; $ctx.state.replied.'virtual buyer' = 'legacy'; Invoke-ConvoItem $ctx $item
++Check 'A7 unreadable key recheck is not logged as confirmed lift' ($script:reads -eq 1 -and $script:sends -eq 0 -and -not ($script:logs -match 'COOLDOWN-LIFT'))
++
++foreach ($reason in @('POST_SEND_COOLDOWN','RATE_MIN_GAP')) {
++    $ctx = Reset; $ctx.state.replied.'virtual buyer' = 'legacy'; $ctx.lastSendAt['virtual buyer'] = $script:now.AddSeconds(-299.999)
++    if ($reason -eq 'RATE_MIN_GAP') { $script:replyPostSendCooldownMin = 0 }
++    Invoke-ConvoItem $ctx $item
++    Check "A8 $reason 299.999s blocked" ($script:sends -eq 0 -and ($script:logs -match "Reason=$reason"))
++    Check "A8 $reason deadline anchored" ($ctx.skipCooldown[$item.name].until -eq $ctx.lastSendAt['virtual buyer'].AddMinutes(5))
++    $until = $ctx.skipCooldown[$item.name].until; Invoke-ConvoItem $ctx $item
++    Check "A8 $reason repeated scan preserves deadline" ($ctx.skipCooldown[$item.name].until -eq $until)
++    $script:now = $script:now.AddMilliseconds(1); Invoke-ConvoItem $ctx $item
++    Check "A8 $reason exactly 300.000s can send" ($script:sends -eq 1)
++    $script:replyPostSendCooldownMin = 5
++}
++
++$ctx = Reset; $script:manual = $true; $ctx.noReplyPreview[$item.name] = $item.preview; Invoke-ConvoItem $ctx $item
++Check 'A9 whitelist remains first and blocks even page read' ($script:sends -eq 0 -and $script:reads -eq 0)
++$ctx = Reset; $script:raw = (Line 'request' 1791170000000) + "`n[ME] Human intervened @@MT:1791170001000"; Invoke-ConvoItem $ctx $item
++Check 'A9 real human interjection gate blocks' ($script:sends -eq 0 -and $ctx.skipCooldown[$item.name].reason -eq 'HUMAN_INTERJECTION')
++$script:now = $script:now.AddSeconds(20); $script:raw = (Line 'later request' 1791170002000); Invoke-ConvoItem $ctx $item
++Check 'A9 explicit human hold not cancelled by periodic scheduler' ($script:reads -eq 1 -and $script:sends -eq 0)
++$ctx = Reset; $script:raw = (Line 'one' 1791170000000) + "`n" + (Line 'two' 1791170002000) + "`n" + (Line 'three' 1791170001000); Invoke-ConvoItem $ctx $item
++Check 'A9 untrusted order blocks before generation' ($script:sends -eq 0 -and $script:modelCalls -eq 0)
++$ctx = Reset; $script:raw = Line 'system listing' 1791170000000 '@@CARD:system'; Invoke-ConvoItem $ctx $item
++Check 'A9 latest system card blocked' ($script:sends -eq 0 -and ($script:logs -match 'latest-buyer-system-card'))
++$ctx = Reset; $ctx.state = $null; $script:ledgerBytes = 1024; Invoke-ConvoItem $ctx $item
++Check 'A9 real ledger usability blocks new message' ($script:sends -eq 0 -and ($script:logs -match 'LEDGER_UNUSABLE_FAILCLOSED'))
++$ctx = Reset; $script:pageName = 'Other Person'; Invoke-ConvoItem $ctx $item
++Check 'A9 opened wrong identity halts before evidence/send' ($script:roundHalt -and $script:sends -eq 0 -and $script:modelCalls -eq 0 -and ($script:logs -match 'ABORT_WRONG_CONVO'))
++$ctx = Reset; $script:sendResult = 'ABORT_WRONG_CONVO'; Invoke-ConvoItem $ctx $item; $before = $script:sends; Invoke-ConvoItem $ctx $item
++Check 'A9 final send identity abort halts remaining entries without state write' ($script:roundHalt -and $script:sends -eq $before -and $script:writes -eq 0)
++$ctx = Reset; Invoke-ConvoItem $ctx $item 1
++Check 'A9 startup observation blocks all reads/model/send' ($script:sends -eq 0 -and $script:reads -eq 0 -and $script:modelCalls -eq 0)
++$ctx = Reset; $ctx.pendingSeen[$item.name] = 1; Invoke-ConvoItem $ctx $item
++Check 'A9 insufficient consecutive rounds do not install cooldown' ($script:sends -eq 0 -and -not $ctx.skipCooldown.ContainsKey($item.name))
++
++$ctx = Reset; $ctx.lastSendAt['virtual buyer'] = $script:now.AddSeconds(-19); Invoke-ConvoItem $ctx $item
++$script:raw += "`n" + (Line 'newest input 77 kg' 1791170002000); $script:now = $script:now.AddSeconds(1); Invoke-ConvoItem $ctx $item
++Check 'A10 wait uses fresh latest input at expiry' ($script:sends -eq 1 -and $script:modelInput -match '77 kg' -and $ctx.state.replied['virtual buyer'] -eq (Get-DedupKey (Get-NormalizedMsgText 'newest input 77 kg') 3))
++
++foreach ($seconds in @(19,60)) {
++    $ctx = Reset; $ctx.lastSendAt['virtual buyer'] = $script:now.AddSeconds(-$seconds)
++    if ($seconds -eq 60) { $ctx.state.replied.'virtual buyer' = 'legacy' }
++    Invoke-ConvoItem $ctx $item; $firstAt = $ctx.lastSendAt['virtual buyer']; $firstWait = $ctx.skipCooldown[$item.name].until
++    $other = [pscustomobject]@{ name = 'Second Buyer'; preview = 'unchanged' }; $ctx.pendingSeen[$other.name] = 2; $script:pageName = $other.name
++    Invoke-ConvoItem $ctx $other
++    Check "A11 $seconds second buyer independent no global wait" ($script:sends -eq 1 -and $ctx.lastSendAt['virtual buyer'] -eq $firstAt -and $ctx.skipCooldown[$item.name].until -eq $firstWait)
++}
++
++$ctx = Reset; $script:sendResult = 'SEND_FAILED'; $saved = $ctx.state.replied.'virtual buyer'; $sentAt = $ctx.lastSendAt['virtual buyer']; Invoke-ConvoItem $ctx $item
++Check 'A12 failed send consumes neither ledger nor successful-send clock' ($script:writes -eq 0 -and $ctx.state.replied.'virtual buyer' -eq $saved -and $ctx.lastSendAt['virtual buyer'] -eq $sentAt)
++$script:now = $script:now.AddMinutes(3); $script:sendResult = 'SENT_OK'; Invoke-ConvoItem $ctx $item
++Check 'A12 failed message retried after original open backoff' ($script:sends -eq 2 -and $script:writes -eq 1)
++$script:now = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
++Check 'A12 successful in-memory dictionary ledger dedups' ($script:sends -eq 2 -and $script:writes -eq 1)
++$diskState = $script:persisted | ConvertFrom-Json; $ctx = Reset; $ctx.state = $diskState; $ctx.lastSendAt = @{}; Invoke-ConvoItem $ctx $item 1; Invoke-ConvoItem $ctx $item 2
++Check 'A12 context rebuild retains persisted HASH/count dedup without clearing ledger' ($script:sends -eq 0 -and $script:writes -eq 0)
++
++# Old caches missing scheduling/source fields must never get their deadline reset on reads.
++foreach ($buyers in @(1,-1)) {
++    $ctx = Reset; Cache $ctx 'POST_SEND_COOLDOWN' $buyers; $ctx.skipCooldown[$item.name].Remove('reason'); $ctx.skipCooldown[$item.name].Remove('nextVerifyAt'); $ctx.skipCooldown[$item.name].Remove('until')
++    Invoke-ConvoItem $ctx $item
++    Check "legacy cache buyers=$buyers finite fallback permits guarded read" ($script:reads -eq 1 -and $script:sends -eq 1)
++}
++$ctx = Reset; Cache $ctx; $ctx.skipCooldown[$item.name].nextVerifyAt = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
++Check 'read cache before interval avoids unnecessary generation and read' ($script:reads -eq 0 -and $script:modelCalls -eq 0)
++$script:now = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
++Check 'read cache exact 20s interval discovers new input' ($script:reads -eq 1 -and $script:sends -eq 1)
++$ctx = Reset; Check 'A13 five minute configs retained in entry test' ($script:replyMinGapMin -eq 5 -and $script:replyPostSendCooldownMin -eq 5); Invoke-ConvoItem $ctx $item
++Check 'A13 new input actually sends with five minute configuration' ($script:sends -eq 1)
++$ctx = Reset; $script:accioFlags.read = $true; $script:gatewayLines = @((Line 'gateway-only earlier data' 1791169999000),(Line 'new request' 1791170003000)); Invoke-ConvoItem $ctx $item
++Check 'A13 Accio latest text alone cannot replace CDP latest identity' ($script:sends -eq 1 -and ($script:logs -match 'ACCIO-READ src=cdp') -and $script:modelInput -notmatch 'gateway-only earlier data')
++$script:accioFlags.read = $false
++$ctx = Reset; $ctx.state = [pscustomobject]@{ replied = [pscustomobject]@{} }; $ctx.lastSendAt = @{}; $script:raw = Line 'first request' 1791170000000; Invoke-ConvoItem $ctx $item
++Check 'A14 first buyer without key or successful-send time can reply' ($script:sends -eq 1 -and $script:writes -eq 1)
++
++# Real scan entry, external lock/page-health boundaries mocked. Page-down returns before
++# handlers; lock-busy returns before even a snapshot. Unexpected healing throws.
++function Get-AppLock { return $script:lockAvailable }
++function Release-AppLock { $script:releases++ }
++function Get-Snapshot { return '[{"name":"Virtual Buyer","preview":"unchanged"}]' }
++function Get-RepliedState { return $script:scanState }
++function Test-OneTalkPagePresent { return $script:pagePresent }
++function Test-PageHealth { return [pscustomobject]@{ PageDown = $script:pageDown; Reason = 'offline'; Items = 1 } }
++function Invoke-PageHealFromGate { throw 'Unexpected process recovery' }
++function Invoke-CdpSelfHeal { throw 'Unexpected browser recovery' }
++function Get-PageHealAction { throw 'Unexpected heal scheduling' }
++function Invoke-PageReload { throw 'Unexpected browser reload' }
++$ctx = Reset; $script:lockAvailable = $false; $script:scanState = $ctx.state; $script:releases = 0
++$result = Invoke-ScanRound $ctx
++Check 'A9 real scan write lock busy skips all processing' ($result.Action -eq 'LockBusy' -and $script:reads -eq 0 -and $script:sends -eq 0)
++foreach ($missing in @($true,$false)) {
++    $ctx = Reset; $script:scanState = $ctx.state; $script:lockAvailable = $true; $script:pagePresent = -not $missing; $script:pageDown = -not $missing; $script:pageDownStreak = 0
++    Invoke-ScanRound $ctx | Out-Null
++    Check "A9 real scan page missing=$missing blocks pending handlers" ($script:reads -eq 0 -and $script:sends -eq 0 -and ($script:logs -match 'ABORT-PAGE-DOWN'))
++}
++Write-Output "RESULT pass=$script:pass fail=$script:fail"
++if ($script:fail) { exit 1 }
+diff --git a/docs/新消息冷却修复交付_20261005.md b/docs/新消息冷却修复交付_20261005.md
+new file mode 100644
+index 0000000..fdc4c46
+--- /dev/null
++++ b/docs/新消息冷却修复交付_20261005.md
+@@ -0,0 +1,86 @@
++# 新消息冷却修复交付
++
++日期：2026-10-05（北京时间）。工作区源码与隔离离线验证完成，代码尚未加载到生产进程；未进行现场发送验收。
++
++## 本次差异与已有工作区
++
++本次以任务开始时的未提交工作区为基线，不用 HEAD 覆盖文件。已有改动包括消息顺序/schema 3/系统卡片保护、三个回复模块精简、Accio 整理、消息抽取夹具和场景 01–20、README/项目地图/状态/CHANGELOG 以及回放工具调整；这些是已有成果，不计为本次实现。原有修改与未跟踪文件全部保留。
++
++本次生产改动仅在 `scripts/monitor.ps1` 和 `scripts/reply_engine.ps1`：
++
++- 删除放行后再覆盖结果的无条件分钟检查，统一使用 `Test-ShouldReply`；生产秒数来自同一个 `lastSendAt`，分钟兼容参数保留小数。
++- `NEW_MESSAGE_FLOOR` 到期锚定成功发送 + 秒数；普通分钟等待锚定成功发送 + 对应配置。重复扫描不延后原到期时刻。
++- 页面缓存增加 `reason` 与 `nextVerifyAt`。预览变化提前读取，预览不变每 20 秒调度读取；显式人工插话/空输入来源保持原等待，打开失败仍走原三分钟退避。旧记录缺字段时使用原 `time` 锚定有限到期，未知条数只允许带保护的读取。
++- 唯一新消息证据函数要求可信消息与完整可安全解析的 `HASH|count`：条数增加，或等条数且原文 hash 改变。条数下降、身份碰撞、无有效身份及损坏/溢出键不授予豁免。`COOLDOWN-LIFT` 只使用这个正面证据结果。
++- 本轮规范化 CDP 最新买家对象统一提供原文、条数、附件和账本键。兼容成功写账本后的内存字典与重载对象；打开后补充与原 opener 一致的会话名核验，误会话中止整轮。Accio 增强历史须匹配 CDP 最新稳定身份。
++
++新增 `tests/new_message_cooldown.tests.ps1`；更新 `reply_engine` 的证据前置测试及 `reply_gate_dupskip` 的时间/调度接线断言。同步当前状态、CHANGELOG、项目地图、仓库 SKILL、spec 状态与过期源码注释。新增交付说明和纯虚拟测试证据。
++
++旧无条件五分钟条款由本次 spec 修订；两个分钟配置仍为 5，未修改本机或模板配置。账本格式未改变、未迁移、未清空。
++
++本次相对开始工作区的可审阅差异：[task_delta.patch](verification/new_message_cooldown_20261005/task_delta.patch)。与 HEAD 的完整 Git diff 还包含已有工作，不应全部归于本任务。
++
++完成时比较任务开始/完成的已有 Git diff 区块：30 个未涉及本次的已修改文件区块保持一致；已有区块发生变化的仅为 monitor、reply_engine、CHANGELOG、当前状态和项目地图。新增/额外涉及文件见上述清单。执行期间另出现报价目的地 spec，本次未作修改。
++
++## 副作用审查与失败基线
++
++执行前读取仓库 SKILL 和 [测试副作用审计](test_audit_20261003.md)，逐个复核当前脚本。未运行全套测试运行器或旧实机验收脚本，未 dot-source monitor 主程序。
++
++新增回归只 AST 提取生产函数定义；真实执行规范化、证据函数、唯一时间门禁、连续确认更新、生成适配器/策略/合规检查与 `Set-StateHash` 内存变更。页面数据为虚拟买家行；时钟、模型、发送、持久化、附件 I/O、通知及外部锁为桩。快照写入被截获，真实配置/路径解析、CDP 与阻塞睡眠设置为异常；持久化仅保存在内存字符串，重建上下文通过该字符串反序列化。所有数据均为虚构，未载入真实买家夹具。
++
++关联 `should_reply_v2` / `reply_gate_dupskip` / `reply_engine` 为纯逻辑/AST/只读配置；`reply_chain` / `dimension_guidance` 为纯模块与仓库语料读取；`message_order` 额外运行本地 Node DOM 夹具，只写临时 JS 文件并清理；`docs_consistency` 只读源码/文档及配置键和值。回放工具只加载生产纯模块，模型为桩，报告写入安全校验后的独立临时目录。未访问浏览器、网络、真实模型、服务或计划任务。
++
++在生产源码修改前，A1/A2/A3 首版回归执行结果为 **pass=2 / fail=5，exit=1**。失败原因：A1 判据先放行后被 `RATE-SKIP` 覆盖；A2 秒级等待写成现在 + 五分钟，20.000 秒仍在缓存跳过；A3 相同预览直接跳过页面，无法发现条数增加。保留 [原始失败输出](verification/new_message_cooldown_20261005/failed_baseline.txt)，没有将历史失败改写成通过。
++
++## 验收矩阵与通过证据
++
++| 编号 | 真实入口覆盖 |
++|---|---|
++| A1 | 成功发送 60 秒后新文本进入真实生成与发送边界；等条数 hash 改变也通过 |
++| A2 | 19.999 秒零生成/发送，20.000 秒放行；重复扫描不移动截止时刻 |
++| A3 | 同文不同逐条时间、条数增加、预览不变；周期读后只回复一次 |
++| A4 | 图片和文件分别走当前附件选择，旧附件不替代最新附件；账本匹配当前消息 |
++| A5 | 只变翻译、未读/我方预览；读取后零生成/发送 |
++| A6 | 已回复消息冷却内与到期后均阻断 |
++| A7 | 缺失、旧格式、空 hash、非数字、零/负数、溢出及额外键片段；条数下降、相同时间内容碰撞及无最新时间身份不获豁免，不抛异常 |
++| A8 | POST_SEND_COOLDOWN 和 RATE_MIN_GAP 分别验证 299.999/300.000 秒，截止时刻不叠加 |
++| A9 | 白名单优先、真实人工插话判据、保留人工来源等待、顺序/卡片/账本阻断、打开和最终发送身份整轮中止、启动观察及两轮确认；真实扫描入口验证锁忙、页面不存在和页面不健康 |
++| A10 | 秒级等待后新增更晚输入，到期重新抓取；模型上下文和写账本都使用最新消息 |
++| A11 | 一人处于秒级/分钟级等待时第二个买家可发送；无全局睡眠、第一人的时间不变 |
++| A12 | 失败不写账本/发送时间，原三分钟打开退避后重试；成功后的内存字典和反序列化重建上下文均去重 |
++| A13 | 两个五分钟参数保持；新消息实际通过入口；Accio 同文不同身份不能取代 CDP 最新身份 |
++| A14 | 首次会话没有历史键与发送时间仍可正常回复 |
++
++最终测试数字和每个子进程退出码见 [通过输出](verification/new_message_cooldown_20261005/passed_tests.txt)。回放报告的时间来自模拟夹具，仅用于离线回放，不代表实际发送耗时。
++
++| 验证入口 | 通过 / 失败 |
++|---|---|
++| new_message_cooldown | 75 / 0 |
++| should_reply_v2 | 90 / 0 |
++| reply_gate_dupskip | 41 / 0 |
++| reply_chain | 148 / 0 |
++| message_order | 35 / 0 |
++| dimension_guidance | 44 / 0 |
++| docs_consistency | 17 / 0 |
++| reply_engine | 75 / 0 |
++| tools/acceptance/replay | 20 场景通过、580 断言、0 失败 |
++
++所有子进程退出码为 0；修改的 `.ps1` 均通过 Windows PowerShell 5.1 AST 解析及 UTF-8 BOM 检查。Git whitespace 检查按 `cr-at-eol` 识别 Windows CRLF 后通过，没有更改 Git 配置。回放详情见 [独立报告](verification/new_message_cooldown_20261005/reply_chain_replay.md)。
++
++## 边界与尚未验证项
++
++- `HASH|count` 没有保存可比较的逐条时间。窗口截断后等条数同文的新消息，以及等条数同原文的附件替换，无法仅凭现有格式证明新消息；本次不扩展账本，不能声称覆盖所有窗口变化。
++- 20 秒是缓存读取调度目标及默认成功发送下限，实际执行受扫描周期、串行处理其他买家、模型/附件和页面失败影响；未测平台端到端 SLA。人工、页面/打开失败等原保护可能等待更久。
++- 本次 mock 外部 I/O，未验证真实 DOM 更新时效、真实模型质量、文件下载/解析、发送锁底层跨进程行为、页面点击/回执或通知投递。最终发送身份返回值的处理已离线覆盖，底层发送实现未改动。
++- 进程上下文重建验证保留账本去重；本次不新增发送时间持久化。沿用原 lastSendAt 生命周期，历史键本身不能恢复完整发送间隔。
++- 持久化磁盘故障、墙钟回拨/跃迁及极端长扫描尚未现场验收。人工待办/通知闭环仍是已有独立缺口。
++
++## 后续上线与现场验收（需单独上线授权）
++
++1. 核对最终工作区差异并备份当前代码、配置和主备账本，保留所有既有未提交源码及本机状态。不要清空账本或降低五分钟配置来获取放行。
++2. 单独授权后，按部署手册协调 monitor/watchdog/Health 并重新加载代码；检查实际进程所用代码路径、五分钟配置、20 秒默认值与启动首轮观察。此次交付没有执行这些操作。
++3. 使用明确授权的可控会话测量买家消息时间、首次发现、生成开始、SENT_OK 和状态写入时间。分别验证 60 秒内新文本、20 秒边界、同文条数增加、预览不变的新图片/文件、重复扫描与等待期间追加输入。
++4. 验证普通消息分钟阻断截止时刻、旧消息到期仍去重、失败不推进账本和发送时间、人工/身份/页面保护，以及第二买家不被第一人的等待阻塞。日志应显示实际阻断原因、周期读取、新消息正面证据及最终回执。
++5. 检查账本保留与无意外通知/重复发送，再记录实际延迟和现场结论；如需回退，协调恢复本次改动前快照，保留既有修复与账本，不直接用 HEAD 覆盖整个工作区。
++
++运行状态按任务给定和此前只读核验保持：本次未重启 monitor/watchdog，未启停计划任务，未改生产配置/账本，未真实发送买家消息或通知，未提交或推送。离线通过不等于已上线。

@@ -1,5 +1,5 @@
 ﻿# lib/quote.ps1 - 报价提醒核心逻辑
-# Get-QuoteReadyBuyers: 扫描快照,返回数据齐全(重量+尺寸+地址 3 项)的买家列表(人工接管白名单买家除外)
+# Get-QuoteReadyBuyers: 扫描快照,返回数据齐全(重量+尺寸+报价目的地 3 项)的买家列表(人工接管白名单买家除外)
 # Send-QuoteReminders: 推送提醒 + 去重(24h 节流,内容 hash 变化可再提醒);名单买家跳过
 # 依赖: config.ps1, lib\goods.ps1, lib\wecom.ps1, lib\log.ps1, lib\no_reply.ps1
 . (Join-Path $PSScriptRoot "no_reply.ps1")
@@ -19,7 +19,7 @@ function Get-QuoteReadyBuyers([string]$snapDir = "") {
             $st = Get-GoodsDataStatus $buyer $snapDir
             if ($st -and $st.weight -and $st.dims -and $st.addr) {
                 $g = Get-GoodsName $buyer $snapDir
-                $result += [pscustomobject]@{ buyer = $buyer; goods = $g.name; goodsKnown = $g.known; file = $st.file }
+                $result += [pscustomobject]@{ buyer = $buyer; goods = $g.name; goodsKnown = $g.known; file = $st.file; Destination = $st.Destination }
             }
         }
     }
@@ -48,7 +48,7 @@ function Send-QuoteReminders([string]$OnlyBuyer = "", [string]$stateFile = "", [
             continue
         }
         $skey = $b.buyer.Trim().ToLowerInvariant()
-        # 提取具体详情(货物品名/件数/单件重量/单件尺寸/收货地址/运输方案)用于提醒展示
+        # 提取具体详情(货物品名/件数/单件重量/单件尺寸/报价目的地/运输方案)用于提醒展示
         $gd = Get-GoodsDetails $b.buyer $snapDir
         $wTxt = if ($gd.weight) { $gd.weight } else { "未知" }
         $dTxt = if ($gd.dims) { $gd.dims } else { "未知" }
@@ -67,8 +67,8 @@ function Send-QuoteReminders([string]$OnlyBuyer = "", [string]$stateFile = "", [
             try { $ageH = ((Get-Date) - ([datetime]::ParseExact($saved.time, "yyyy-MM-dd HH:mm:ss", $null))).TotalHours } catch {}
             if ($ageH -lt 24 -and $saved.hash -eq $contentHash) { continue }
         }
-        # 消息按 货物品名/件数/单件重量/单件尺寸/收货地址 逐行显示,有运输方案则追加一行(项目间换行)
-        $msg = "[报价提醒] 买家 $($b.buyer) 货物信息已齐全`n货物品名: $($b.goods)`n件数: $qTxt`n单件重量: $uTxt`n单件尺寸: $dTxt`n收货地址: $aTxt"
+        # 消息按 货物品名/件数/单件重量/单件尺寸/报价目的地 逐行显示,有运输方案则追加一行(项目间换行)
+        $msg = "[报价提醒] 买家 $($b.buyer) 货物信息已齐全`n货物品名: $($b.goods)`n件数: $qTxt`n单件重量: $uTxt`n单件尺寸: $dTxt`n报价目的地: $aTxt"
         if ($tTxt) { $msg += "`n运输方案: $tTxt" }
         $msg += "`n建议: 人工核对后给出报价"
         $res = Send-WecomMessage $msg

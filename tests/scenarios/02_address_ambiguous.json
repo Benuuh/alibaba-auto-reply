@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "02_address_ambiguous",
@@ -6,9 +6,9 @@
   "category": "ambiguous address meaning",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. 'address' appears in the buyer line but nothing in the lines says WHICH address, so the only honest answer is a clarifying question.",
   "conversationLines": [
-    "[ME] Hi, could you share the pickup details when you have a moment? @@TS:1791018000000",
-    "[BUYER] ok @@TS:1791018120000 @@OT:b2s=",
-    "[BUYER] which address should I use for this one? @@TS:1791018300000 @@OT:d2hpY2ggYWRkcmVzcyBzaG91bGQgSSB1c2UgZm9yIHRoaXMgb25lPw=="
+    "[ME] Hi, could you share the pickup details when you have a moment? @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] ok @@TS:1791018120000 @@MT:1791018120000 @@OT:b2s=",
+    "[BUYER] which address should I use for this one? @@TS:1791018300000 @@MT:1791018300000 @@OT:d2hpY2ggYWRkcmVzcyBzaG91bGQgSSB1c2UgZm9yIHRoaXMgb25lPw=="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "address_clarify",

@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "10_simple_acknowledgement",
@@ -6,8 +6,8 @@
   "category": "simple acknowledgement",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. 'ok' is 2 characters: under the HEAD extractor it never became a message event (monitor.ps1:274 skips clean.length <= 2), so this fixture only exists because of the normalization fix.",
   "conversationLines": [
-    "[ME] Could you share the total weight when you have it? @@TS:1791018000000",
-    "[BUYER] ok @@TS:1791018420000 @@OT:b2s="
+    "[ME] Could you share the total weight when you have it? @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] ok @@TS:1791018420000 @@MT:1791018420000 @@OT:b2s="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "short_ack",

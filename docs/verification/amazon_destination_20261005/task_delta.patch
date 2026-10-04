@@ -1,0 +1,1384 @@
+diff --git a/scripts/lib/destination.ps1 b/scripts/lib/destination.ps1
+new file mode 100644
+index 0000000..4558768
+--- /dev/null
++++ b/scripts/lib/destination.ps1
+@@ -0,0 +1,79 @@
++﻿# Pure destination facts; grammar identifies intent, not warehouse existence/serviceability.
++# Candidate grammar: 3-4 ASCII letters + 1-2 digits, with Amazon/FBA receiving context.
++function Get-QuoteDestination {
++    [CmdletBinding()]
++    param([Parameter(Mandatory = $true)]$Conversation)
++    $trusted = [bool]$Conversation.Order.Confident
++    $amazon = $false; $targets = @{}; $evidence = @(); $notes = @(); $postal = ''; $untrustedChange = $false; $unsupported = $false
++    foreach ($m in @($Conversation.Messages)) {
++        if (-not $m -or $m.IsSystemCard) { continue }
++        $t = Get-MsgPlainText ([string]$m.Orig)
++        $t = $t -replace 'https?://\S+|\b\S+\.(?:pdf|xlsx?|csv|jpg|png|zip)\b', ''
++        # A question supplies context only; the code still must come from a buyer.
++        $humanConfirmed = $m.Source -eq 'human' -and $t -match '(?i)confirmed buyer destination|buyer confirmed|confirmed delivery destination|客户确认|已确认.*(?:目的|收货|送到)'
++        if ($m.Role -ne 'buyer' -and -not $humanConfirmed) {
++            if ($t -match '(?i)(which|what|provide|send|share).*(amazon|fba).*(warehouse|code)|哪个.*亚马逊.*仓') { $amazon = $true }
++            continue
++        }
++        $explicit = $t -match '(?i)\b(amazon|fba)\b|亚马逊'
++        $replace = $t -match '(?i)\b(change|switch|instead|replace|now deliver|now ship)\b|改送|改为|换仓|改到|不是.+改'
++        $cancel = $t -match "(?i)(cancel|no longer|do not|don'?t|not).{0,18}(ship|deliver|send).{0,18}(amazon|fba)|取消.*(亚马逊|送仓)|不再.*(亚马逊|送仓)|不送.*亚马逊"
++        if ($cancel) {
++            $targets = @{}; $postal = ''; $amazon = $false; $untrustedChange = $untrustedChange -or (-not $trusted)
++            $notes += 'amazon delivery cancelled'; $evidence += @{ Source = 'buyer'; Text = $m.Orig; MessageId = $m.StableId }
++            continue
++        }
++        $excluded = $t -match '(?i)\b(model|sku|order\s*(number|no\.?))\b|型号|订单号|\b(pick\s*up|pickup|collect).{0,20}\bfrom\b|提货|取货|\b(used|previous|formerly|before|historical)\b|以前|历史|曾经'
++        if ($explicit -and -not $excluded) { $amazon = $true }
++        $codes = @()
++        if (($explicit -or ($amazon -and $trusted)) -and -not $excluded) {
++            if ($replace -and $trusted) { $unsupported = $false }
++            foreach ($candidate in [regex]::Matches($t, '(?i)(?<![A-Z0-9])[A-Z]{1,8}\d{1,8}(?![A-Z0-9])')) {
++                if ($candidate.Value -notmatch '^(?i)[A-Z]{3,4}\d{1,2}$') { $unsupported = $true; $notes += ('unsupported candidate ' + $candidate.Value) }
++            }
++            foreach ($hit in [regex]::Matches($t, '(?i)(?<![A-Z0-9])[A-Z]{3,4}\d{1,2}(?![A-Z0-9])')) {
++                $code = $hit.Value.ToUpperInvariant(); $prefix = $t.Substring(0, $hit.Index)
++                if ($prefix -match '(?i)(?:\bnot|\bno|不是|不要|不送|非)\s*(?:amazon\s*|fba\s*)?$') {
++                    $targets.Remove('amazon:' + $code); $untrustedChange = $untrustedChange -or (-not $trusted)
++                    $notes += ('negated ' + $code); continue
++                }
++                if ($codes -notcontains $code) { $codes += $code }
++            }
++        }
++        $address = ''
++        if (-not $excluded -and $t -notmatch '(?i)\b(send|share|provide|need|unknown|no address|what|which)\b.{0,25}\baddress\b|没有地址|地址未知') {
++            $pa = [regex]::Match($t, '(?i)\b\d{1,5}\s+(?:[A-Za-z]+\s+){1,3}(?:rd|st|ave|blvd|ln|dr|pkwy|hwy|street|road|avenue|lane|drive|boulevard|way)\b|(?:delivery address|shipping address|address|收货地址|私人地址|地址|endere[cç]o|direcci[oó]n)\s*[:：]\s*\S.+')
++            if ($pa.Success) {
++                $address = $t.Substring($pa.Index) -replace '^(?i)(delivery address|shipping address|address|收货地址|私人地址|地址|endere[cç]o|direcci[oó]n)\s*[:：]\s*', ''
++                $address = ($address -split '(?i)\b(?:Shipping|Total Boxes|Total Weight|Box Dimensions|Box Weight|Cartons|Delivery Method)\s*[:：]|(?:运输|件数|数量)\s*[:：]', 2)[0]
++                $address = (($address -replace '\?{2,}|<br\s*/?>', ' ') -replace '\s+', ' ').Trim()
++            }
++        }
++        if ($replace -and ($codes.Count -gt 0 -or $address)) {
++            if ($trusted) { $targets = @{}; $postal = '' } else { $untrustedChange = $true }
++        }
++        $ev = @{ Source = $(if ($humanConfirmed) { 'human' } else { 'buyer' }); Text = $m.Orig; MessageId = $m.StableId }
++        foreach ($code in $codes) { $targets['amazon:' + $code] = @{ Kind = 'amazon_warehouse'; Code = $code; Display = 'Amazon ' + $code; Evidence = $ev } }
++        if ($address) {
++            $postal = $address
++            # A warehouse and its address in the same message are associated unless explicitly separate.
++            if ($codes.Count -eq 0 -or $t -match '(?i)\b(?:also|or)\b|another|separate|另外|另一个|或者') {
++                $targets['postal:' + $address.ToLowerInvariant()] = @{ Kind = 'postal_address'; Code = ''; Display = $address; Evidence = $ev }
++                if ($replace -and $trusted) { $amazon = $false }
++            }
++        }
++        if ($codes.Count -gt 0 -or $address) { $evidence += $ev }
++    }
++    $kind = 'unknown'; $codeValue = ''; $display = ''; $usable = $false; $reason = 'no supported buyer destination'; $source = 'unknown'
++    if ($targets.Count -gt 1 -or $untrustedChange -or ($unsupported -and $targets.Count -gt 0)) { $kind = 'ambiguous'; $reason = 'conflicting targets, unsupported alternative or change without trusted order' }
++    elseif ($unsupported) { $reason = 'unsupported warehouse candidate grammar' }
++    elseif ($targets.Count -eq 1) {
++        $chosen = @($targets.Values)[0]; $kind = $chosen.Kind; $codeValue = $chosen.Code; $display = $chosen.Display
++        $usable = $true; $source = $chosen.Evidence.Source; $reason = $source + ' provided destination'
++    }
++    return [pscustomobject]@{
++        Kind = $kind; WarehouseCode = $codeValue; DisplayName = $display; QuoteUsable = $usable
++        HasPostalAddress = [bool]$postal; PostalAddress = $postal; Source = $source; Evidence = @($evidence)
++        Candidates = @($targets.Values | ForEach-Object { $_.Display }); Reason = $reason; Notes = @($notes); AmazonContext = $amazon
++    }
++}
+diff --git a/scripts/lib/msg_norm.ps1 b/scripts/lib/msg_norm.ps1
+index c298a9f..496849b 100644
+--- a/scripts/lib/msg_norm.ps1
++++ b/scripts/lib/msg_norm.ps1
+@@ -37,6 +37,9 @@ if (-not (Get-Command Get-NormalizedMsgText -ErrorAction SilentlyContinue)) {
+ # Structured message schema version. Bump on any field change to the message object.
+ $script:MsgSchemaVersion = 3
+ 
++if (-not (Get-Command Get-QuoteDestination -ErrorAction SilentlyContinue)) {
++    . (Join-Path $PSScriptRoot 'destination.ps1')
++}
+ function Get-MsgSchemaVersion { return $script:MsgSchemaVersion }
+ 
+ # Strip time, original-text, card and attachment transport markers from a raw line, returning the
+@@ -279,11 +282,14 @@ function Get-ConversationFacts {
+     $allText = (@($buyerText, $meText, $humanText) | Where-Object { $_ }) -join [string][char]10
+     $bl = $buyerText.ToLowerInvariant()
+     $al = $allText.ToLowerInvariant()
++    $destination = Get-QuoteDestination $Conversation
+ 
+     return [pscustomobject]@{
+         HasWeight       = [bool]($bl -match '\d+\s*(kg|kgs|kilo|kilos|ton|tons)\b|\d+\s*(公斤|千克|吨)|weight\s*[:=]?\s*\d|peso\s*[:=]?\s*\d')
+         HasDimensions   = [bool]($bl -match '\d+\s*[x\u00d7*]\s*\d+|\d+(\.\d+)?\s*(cm|mm)\s*[x\u00d7*]|dimension|尺寸|medidas')
+-        HasAddress      = [bool]($bl -match 'address|addr|calle|rua|street|avenue|road|endere|direcci|收货地址|邮编|cep|postal|zip|city|ciudad|cidade|country|pa[ií]s|deliver to|consignee|destinatario')
++        HasAddress      = $destination.HasPostalAddress
++        HasQuoteDestination = $destination.QuoteUsable
++        Destination     = $destination
+         HasImages       = [bool](@($msgs | Where-Object { $_.Role -eq 'buyer' -and $_.HasImage }).Count -gt 0)
+         HasFile         = [bool](@($msgs | Where-Object { $_.Role -eq 'buyer' -and $_.HasFile }).Count -gt 0)
+         # "Mentioned a supplier" and "gave us the supplier's contact" are different facts and must
+diff --git a/scripts/lib/reply_policy.ps1 b/scripts/lib/reply_policy.ps1
+index d5885a9..2290cde 100644
+--- a/scripts/lib/reply_policy.ps1
++++ b/scripts/lib/reply_policy.ps1
+@@ -137,7 +137,8 @@ function Test-ReplyCompliance {
+     [CmdletBinding()]
+     param(
+         [string]$Text,
+-        $Rules = $null
++        $Rules = $null,
++        $Decision = $null
+     )
+     $violations = New-Object System.Collections.ArrayList
+     if ([string]::IsNullOrWhiteSpace($Text)) {
+@@ -146,6 +147,17 @@ function Test-ReplyCompliance {
+     }
+ 
+     # 1) Banned words - delegated to the existing single authority, never re-implemented.
++    $dest = $null
++    if ($Decision -and $Decision.Facts) { $dest = $Decision.Facts.Destination }
++    if ($dest -and $dest.QuoteUsable -and $dest.Kind -eq 'amazon_warehouse') {
++        # Deterministic request vocabulary; deliberately does not reject a simple acknowledgment.
++        $request = '(?i)(?:send|share|provide|give|need|require|confirm|tell|what|which|could|can you|please)[^.!?]{0,100}(?:address|street|city|state|zip|postal|warehouse|destination|code)|(?:address|street|city|state|zip|postal|warehouse|destination|code)[^.!?]{0,45}(?:required|needed|missing|please|\?)'
++        $code = [regex]::Escape([string]$dest.WarehouseCode)
++        $codeRequest = '(?i)\b(?:confirm|verify|provide|send|share)\s+(?:the\s+)?(?:amazon\s+)?' + $code + '\b|\b(?:is|should|can|which|what)\b[^.!?]{0,60}\b' + $code + '\b[^.!?]*\?'
++        if ($Text -match $request -or $Text -match $codeRequest) {
++            [void]$violations.Add(@{ Code = 'DESTINATION_REASK'; Severity = 'block'; Detail = 'Buyer already provided a usable Amazon warehouse; do not re-request destination, address, postal details or warehouse code.' })
++        }
++    }
+     $banned = $null
+     if ($Rules -and $Rules.banned_phrases) { $banned = @($Rules.banned_phrases) }
+     $banHit = Test-BannedText $Text $banned
+@@ -247,7 +259,7 @@ function Get-AskCounts([object[]]$Messages) {
+         $lc = $m.Text.ToLowerInvariant()
+         if ($lc -match 'weight|kg|peso|公斤|千克|gross') { $counts.weight++ }
+         if ($lc -match 'dimension|size|尺寸|medida|\bcm\b|\bmm\b') { $counts.dimension++ }
+-        if ($lc -match 'address|addr|地址|calle|street|endere|rua') { $counts.address++ }
++        if ($lc -match 'address|addr|地址|calle|street|endere|rua|(?:which|what).{0,30}(?:amazon|fba).{0,15}warehouse|warehouse.{0,15}code') { $counts.address++ }
+         if ($lc -match 'image|photo|picture|图片|图') { $counts.image++ }
+         if ($lc -match 'supplier|供应商|fornecedor|proveedor') { $counts.supplier++ }
+     }
+@@ -272,7 +284,7 @@ function Get-AskableFields {
+         switch ($f) {
+             'weight'    { $provided = [bool]$Facts.HasWeight }
+             'dimension' { $provided = [bool]$Facts.HasDimensions }
+-            'address'   { $provided = [bool]$Facts.HasAddress }
++            'address'   { $provided = [bool]$Facts.HasQuoteDestination }
+             'image'     { $provided = [bool]$Facts.HasImages }
+             # Only an actual contact value counts as provided (see Get-ConversationFacts).
+             'supplier'  { $provided = [bool]$Facts.HasSupplierContact }
+@@ -541,6 +553,9 @@ function Get-ReplyDecision {
+     }
+     # Never ask a field the buyer already promised (belt and braces on top of Get-AskableFields).
+     $askFields = @($askFields | Where-Object { $promised -notcontains $_ })
++    if ($Facts.Destination -and ($Facts.Destination.Kind -eq 'ambiguous' -or $Facts.Destination.AmazonContext) -and
++        -not $Facts.HasQuoteDestination -and $askable -contains 'address' -and
++        $scenario -in @('new_inquiry','details_given','attachment_only','attachment_parse_failed','quote_ready_query','general')) { $askFields = @('address') }
+ 
+     # Does this request need a real human fact? Anything about fulfillment, money, supplier
+     # handoff, an explicit human request, a complaint or an unreadable attachment does.
+diff --git a/scripts/lib/reply_gen.ps1 b/scripts/lib/reply_gen.ps1
+index 8dbcd3b..94e5cab 100644
+--- a/scripts/lib/reply_gen.ps1
++++ b/scripts/lib/reply_gen.ps1
+@@ -33,7 +33,6 @@ function Get-FactEvidenceTable {
+     $fields = @(
+         @{ Key = 'weight';    Label = 'total weight (kg)'; Pattern = '\d+\s*(kg|kgs|kilo|kilos)\b|\d+\s*(公斤|千克)|weight\s*[:=]?\s*\d|peso\s*[:=]?\s*\d' },
+         @{ Key = 'dimension'; Label = 'packaging dimensions (L*W*H)'; Pattern = '\d+\s*[x\u00d7*]\s*\d+|\d+(\.\d+)?\s*(cm|mm)\s*[x\u00d7*]|dimension|尺寸|medidas' },
+-        @{ Key = 'address';   Label = 'recipient address'; Pattern = 'address|addr|calle|rua|street|avenue|road|endere|direcci|邮编|cep|postal|zip|city|ciudad|cidade|country|pa[ií]s|deliver to|consignee|destinatario' },
+         @{ Key = 'quantity';  Label = 'cartons / pieces'; Pattern = '\d+\s*(pcs|pieces|cartons|ctns|boxes|units)\b|\d+\s*(件|箱)' },
+         @{ Key = 'supplier';  Label = 'supplier contact'; Pattern = 'supplier|vendor|factory|proveedor|fornecedor|供应商' },
+         @{ Key = 'mode';      Label = 'shipping mode'; Pattern = 'by sea|by air|ocean|air freight|\bfcl\b|\blcl\b|shipping method|transport' }
+@@ -56,6 +55,13 @@ function Get-FactEvidenceTable {
+         elseif ($botHit) { $state = 'unconfirmed'; $evidence = 'we mentioned it; not confirmed by the buyer' }
+         [void]$rows.Add(@{ Field = $f.Key; Label = $f.Label; State = $state; Evidence = $evidence })
+     }
++    $dest = Get-QuoteDestination $Conversation
++    $destState = if ($dest.QuoteUsable) { $dest.DisplayName + ' (' + $dest.Source + ' provided)' } else { $dest.Kind }
++    [void]$rows.Add(@{ Field = 'address'; Label = 'quote destination'; State = $destState; Evidence = $dest.Reason + '; ' + ((@($dest.Evidence | ForEach-Object { $_.Text })) -join ' | ') })
++    $postalState = 'unknown'
++    if ($dest.HasPostalAddress) { $postalState = 'provided' }
++    elseif ($dest.QuoteUsable -and $dest.Kind -eq 'amazon_warehouse') { $postalState = 'unknown; not required for warehouse quote preparation' }
++    [void]$rows.Add(@{ Field = 'postal_address'; Label = 'street address'; State = $postalState; Evidence = $dest.Source })
+     return @($rows.ToArray())
+ }
+ 
+@@ -133,6 +139,11 @@ function New-ReplyContextBlock {
+     [void]$sb.AppendLine('')
+     [void]$sb.AppendLine('=== OPEN ITEMS ===')
+     [void]$sb.AppendLine('- scenario: ' + $Decision.Scenario)
++    if ($Decision.Facts.Destination.QuoteUsable -and $Decision.Facts.Destination.Kind -eq 'amazon_warehouse') {
++        [void]$sb.AppendLine('- Use the confirmed Amazon warehouse for quote preparation. Do not ask again for address, city, state, zip/postal details, destination or warehouse code. Do not invent its full address or a price.')
++    } elseif ($Decision.Facts.Destination.AmazonContext) {
++        [void]$sb.AppendLine('- address means the exact Amazon receiving warehouse code; ask for that code or a single warehouse choice, not a street address.')
++    }
+     if ($Decision.AskFields.Count -gt 0) {
+         [void]$sb.AppendLine('- you may ask about: ' + ($Decision.AskFields -join ', '))
+     } else {
+@@ -222,11 +233,14 @@ function Get-ReplySystemPrompt {
+ # ---------------------------------------------------------------------------------------------
+ # Human-readable label for an askable field key. Single definition so every fallback that lists
+ # fields reads like a person wrote it instead of leaking internal keys.
+-function Get-AskFieldLabel([string]$Field) {
++function Get-AskFieldLabel([string]$Field, $Decision = $null) {
+     switch ($Field) {
+         'weight'    { return 'the total weight' }
+         'dimension' { return 'the carton sizes (L x W x H)' }
+-        'address'   { return 'the delivery address' }
++        'address'   {
++            if ($Decision -and $Decision.Facts.Destination.AmazonContext) { return 'the exact Amazon receiving warehouse code' }
++            return 'the delivery address'
++        }
+         'image'     { return 'a couple of reference photos' }
+         'supplier'  { return 'your supplier''s contact' }
+         default     { return [string]$Field }
+@@ -234,8 +248,8 @@ function Get-AskFieldLabel([string]$Field) {
+ }
+ 
+ # Join field keys into a natural English list: "a, b and c".
+-function Join-AskFieldLabels([string[]]$Fields) {
+-    $labels = @(@($Fields) | ForEach-Object { Get-AskFieldLabel $_ })
++function Join-AskFieldLabels([string[]]$Fields, $Decision = $null) {
++    $labels = @(@($Fields) | ForEach-Object { Get-AskFieldLabel $_ $Decision })
+     if ($labels.Count -eq 0) { return '' }
+     if ($labels.Count -eq 1) { return $labels[0] }
+     if ($labels.Count -eq 2) { return ($labels[0] + ' and ' + $labels[1]) }
+@@ -251,6 +265,12 @@ function Get-ScenarioFallback {
+     $scenario = 'general'
+     if ($Decision -and $Decision.Scenario) { $scenario = [string]$Decision.Scenario }
+     $withDeadline = [bool]($Decision -and $Decision.AllowTimeCommitment)
++    $dest = $null
++    if ($Decision -and $Decision.Facts) { $dest = $Decision.Facts.Destination }
++    if ($dest -and $dest.Kind -eq 'ambiguous' -and $Decision.AskFields -contains 'address') {
++        if ($dest.AmazonContext -and -not $dest.HasPostalAddress) { return 'Which Amazon warehouse should I quote for?' }
++        return 'Which delivery destination should I quote for?'
++    }
+ 
+     switch ($scenario) {
+         'human_requested' {
+@@ -294,7 +314,9 @@ function Get-ScenarioFallback {
+             }
+             # Buyer has no supplier at all: keep the approved "we do not strictly need the supplier
+             # contact" sentence, minus the dimensions clause the buyer has just said they cannot give.
+-            return "No problem at all - we do not strictly need the supplier's contact. Just tell me what you are shipping, roughly how much it weighs, and the destination address, and I will take it from there."
++            $destinationAsk = ''
++            if ($Decision.AskableFields -contains 'address') { $destinationAsk = ', and ' + (Get-AskFieldLabel 'address' $Decision) }
++            return "No problem at all - we do not strictly need the supplier's contact. Just tell me what you are shipping, roughly how much it weighs$destinationAsk, and I will take it from there."
+         }
+         'address_clarify' {
+             return "Happy to help with the address. Just so I get this right - is this the pickup address for the cargo, or the address it should be delivered to?"
+@@ -323,17 +345,21 @@ function Get-ScenarioFallback {
+             return "Thanks for the images. I am looking at them now - if the carton sizes or the total weight are handy, send them over and I can price this accurately."
+         }
+         'attachment_parse_failed' {
++            if ($Decision -and $Decision.Facts.Destination) {
++                if ($Decision.AskFields.Count -gt 0) { return 'I could not open the attachment. Could you share ' + (Join-AskFieldLabels $Decision.AskFields $Decision) + '?' }
++                return 'I could not open the attachment. Please paste any missing cargo details in the message.'
++            }
+             return "Thanks for sending that. I could not open it properly on my side, so could you tell me the key details in the message instead - weight, carton sizes and the delivery address?"
+         }
+         'details_given' {
+             if ($Decision -and $Decision.AskFields.Count -gt 0) {
+-                return "Thanks, I have noted those details. To finish the rate I just need " + (Join-AskFieldLabels $Decision.AskFields) + "."
++                return "Thanks, I have noted those details. To finish the rate I just need " + (Join-AskFieldLabels $Decision.AskFields $Decision) + "."
+             }
+             return "Thanks, I have all of that noted. I am working on the rate now and will come back to you with the exact figure."
+         }
+         'new_inquiry' {
+             if ($Decision -and $Decision.AskFields.Count -gt 0) {
+-                return "Happy to help with this. To price it accurately, could you share " + (Join-AskFieldLabels $Decision.AskFields) + "?"
++                return "Happy to help with this. To price it accurately, could you share " + (Join-AskFieldLabels $Decision.AskFields $Decision) + "?"
+             }
+             return "Happy to help with this. Could you tell me a bit more about the cargo and where it needs to go?"
+         }
+@@ -372,6 +398,7 @@ function Invoke-ReplyGeneration {
+         Text = ''; Source = 'NONE'; ModelCalls = 0; Rewrites = 0
+         Violations = @(); FallbackReason = ''; ContextChars = 0; AttachmentNote = ''
+     }
++    $MaxRewrites = [Math]::Min(1, [Math]::Max(0, $MaxRewrites))
+ 
+     if ($Conversation.Anomaly -or -not $Conversation.LatestBuyer -or $Conversation.LatestBuyer.IsSystemCard -or
+         -not $Decision.CanReply -or $Decision.LatestBuyerText -ne $Conversation.LatestBuyer.Orig) {
+@@ -400,6 +427,7 @@ function Invoke-ReplyGeneration {
+         $result.Text = Get-ScenarioFallback -Decision $Decision -Rules $Rules
+         $result.Source = 'FALLBACK'
+         $result.FallbackReason = 'llm-unavailable'
++        if (-not (Test-ReplyCompliance -Text $result.Text -Rules $Rules -Decision $Decision).Ok) { $result.Text = ''; $result.Source = 'BLOCKED' }
+         return [pscustomobject]$result
+     }
+ 
+@@ -425,7 +453,7 @@ function Invoke-ReplyGeneration {
+     $rewrites = 0
+     $violations = @()
+     if ($text) {
+-        $check = Test-ReplyCompliance -Text $text -Rules $Rules
++        $check = Test-ReplyCompliance -Text $text -Rules $Rules -Decision $Decision
+         $violations = @($check.Violations)
+         while ((-not $check.Ok) -and $rewrites -lt $MaxRewrites) {
+             $rewrites++
+@@ -441,7 +469,7 @@ function Invoke-ReplyGeneration {
+             $retry = Invoke-LLM $retryMessages $Temperature $MaxTokens $LogFile
+             if ($retry) { $result.ModelCalls++ } else { break }
+             $text = $retry
+-            $check = Test-ReplyCompliance -Text $text -Rules $Rules
++            $check = Test-ReplyCompliance -Text $text -Rules $Rules -Decision $Decision
+             $violations = @($check.Violations)
+         }
+         if ($check.Ok) {
+@@ -461,10 +489,12 @@ function Invoke-ReplyGeneration {
+             $result.FallbackReason = 'llm-failed'
+         }
+         # The fallback itself must satisfy the same policy, otherwise we would ship a violation.
+-        $fbCheck = Test-ReplyCompliance -Text $result.Text -Rules $Rules
++        $fbCheck = Test-ReplyCompliance -Text $result.Text -Rules $Rules -Decision $Decision
+         if (-not $fbCheck.Ok) {
+             $codes = @($fbCheck.Violations | ForEach-Object { $_.Code }) -join ','
+             $result.FallbackReason += '|fallback-noncompliant:' + $codes
++            $result.Text = ''
++            $result.Source = 'BLOCKED'
+         }
+     }
+ 
+diff --git a/scripts/lib/goods.ps1 b/scripts/lib/goods.ps1
+index e839389..2e2baad 100644
+--- a/scripts/lib/goods.ps1
++++ b/scripts/lib/goods.ps1
+@@ -1,8 +1,21 @@
+ ﻿# lib/goods.ps1 - 买家货物数据判断(从 summarize.ps1 抽取,复用不复制)
+-# Get-GoodsDataStatus: 判断快照中买家货物 5 项数据齐全度(重量/尺寸/图片/地址/供应商)
++# Get-GoodsDataStatus: 判断快照中买家货物 5 项数据齐全度(重量/尺寸/图片/报价目的地/供应商)
+ # Get-GoodsName: 提取货物品名(产品链接标题优先,其次品名词)
+-# Get-GoodsDetails: 提取重量/尺寸/地址具体值
++# Get-GoodsDetails: 提取重量/尺寸/报价目的地具体值
+ # 依赖: config.ps1(Get-SkillPath "data")
++if (-not (Get-Command ConvertTo-MessageList -ErrorAction SilentlyContinue)) {
++    . (Join-Path $PSScriptRoot 'msg_norm.ps1')
++}
++# Same role/original/transport normalization as the reply chain. No snapshot filename evidence.
++function Get-SnapshotDestination([string]$raw) {
++    return Get-QuoteDestination (ConvertTo-MessageList $raw)
++}
++# Shared presentation for quote reminders and reports (addr means quote destination).
++function Get-GoodsDestinationLabel($Status) {
++    if ($Status -and $Status.Destination -and $Status.Destination.QuoteUsable) { return $Status.Destination.DisplayName }
++    if ($Status -and $Status.Destination -and $Status.Destination.Kind -eq 'ambiguous') { return '待确认报价目的地' }
++    return '未知报价目的地'
++}
+ # 快照查找(三个函数共用):返回该买家最新的 msgs_*.txt(文件名升序中最后一个匹配,即最新快照)
+ function Get-LatestSnapshot([string]$buyer, [string]$snapDir = "") {
+     if (-not $snapDir) { $snapDir = Get-SkillPath "data" }
+@@ -33,25 +46,26 @@ function Get-GoodsDataStatus([string]$buyer, [string]$snapDir = "") {
+     $side = Get-VisionSidecarForGoods $buyer $snapDir
+     $latest = Get-LatestSnapshot $buyer $snapDir
+     if (-not $latest) {
++        $unknownDestination = Get-SnapshotDestination ''
+         if ($side -and ($side.weight_kg -or $side.dims)) {
+-            return @{ weight = [bool]$side.weight_kg; dims = [bool]$side.dims; img = $false; addr = $false; supplier = $false; file = $null; source = 'vision' }
++            return @{ weight = [bool]$side.weight_kg; dims = [bool]$side.dims; img = $false; addr = $false; supplier = $false; file = $null; source = 'vision'; Destination = $unknownDestination; HasPostalAddress = $false }
+         }
+         return $null
+     }
+     $raw = Get-Content $latest.FullName -Raw -Encoding UTF8
+-    $w = $false; $d = $false; $i = $false; $a = $false; $s = $false
++    $destination = Get-SnapshotDestination $raw
++    $w = $false; $d = $false; $i = $false; $s = $false
+     foreach ($line in @($raw -split "`r?`n")) {
+         if ($line -notmatch '^\[BUYER\]') { continue }
+         if ($line -match '(?i)\b\d+(\.\d+)?\s*(kg|kgs|kilograms?|ton|tons|tonnes?)\b') { $w = $true }
+         if ($line -match '(?i)\bdimensions?\b' -or $line -match '\b\d+\s*[x×*]\s*\d+\s*[x×*]\s*\d+\s*(cm|mm|m)?\b') { $d = $true }
+         if ($line -match '\[IMG\]') { $i = $true }
+-        if ($line -match '(?i)\b(address|street|avenue|av\.|avenida|rua|calle|road|endere[cç]o|direcci[oó]n|cep|zip code)\b' -or $line -match '(?i)(brazil|brasil|united states|usa|eua|estados unidos|são paulo|sao paulo|rio de janeiro|los angeles|new york|houston|miami|dallas|curitiba|manaus|fortaleza|recife|belo horizonte|porto alegre)') { $a = $true }
+         if ($line -match '(?i)\b(supplier|vendor|fornecedor|proveedor|fabricante|manufacturer)\b') { $s = $true }
+     }
+     # B6: 快照正则外合并 sidecar(附件识别提取的重量/尺寸)
+     if (-not $w -and $side -and $side.weight_kg) { $w = $true }
+     if (-not $d -and $side -and $side.dims) { $d = $true }
+-    return @{ weight = $w; dims = $d; img = $i; addr = $a; supplier = $s; file = $latest.Name }
++    return @{ weight = $w; dims = $d; img = $i; addr = $destination.QuoteUsable; supplier = $s; file = $latest.Name; Destination = $destination; HasPostalAddress = $destination.HasPostalAddress }
+ }
+ 
+ function Get-GoodsName([string]$buyer, [string]$snapDir = "") {
+@@ -103,15 +117,16 @@ function Get-GoodsName([string]$buyer, [string]$snapDir = "") {
+     return @{ known = $false; name = "未知" }
+ }
+ 
+-# 提取买家货物详情具体值(重量/尺寸/地址),供报价提醒展示。提取不到返回空串。
++# 提取买家货物详情具体值(重量/尺寸/报价目的地),供报价提醒展示。提取不到返回空串。
+ function Get-GoodsDetails([string]$buyer, [string]$snapDir = "") {
+     $side = Get-VisionSidecarForGoods $buyer $snapDir
+     $latest = Get-LatestSnapshot $buyer $snapDir
+     if (-not $latest) {
++        $unknownDestination = Get-SnapshotDestination ''
+         if ($side) {
+-            return @{ weight = [string]$side.weight_kg; dims = [string]$side.dims; addr = ''; qty = [string]$side.cartons; unit_weight = ''; transport = '' }
++            return @{ weight = [string]$side.weight_kg; dims = [string]$side.dims; addr = ''; qty = [string]$side.cartons; unit_weight = ''; transport = ''; Destination = $unknownDestination; HasPostalAddress = $false }
+         }
+-        return @{ weight = ''; dims = ''; addr = '' }
++        return @{ weight = ''; dims = ''; addr = ''; Destination = $unknownDestination; HasPostalAddress = $false }
+     }
+     $weight = ''; $dims = ''; $addr = ''; $qty = ''; $unitW = ''; $transport = ''
+     foreach ($line in @((Get-Content $latest.FullName -Raw -Encoding UTF8) -split "`r?`n")) {
+@@ -190,5 +205,8 @@ function Get-GoodsDetails([string]$buyer, [string]$snapDir = "") {
+     if (-not $weight -and $side -and $side.weight_kg) { $weight = [string]$side.weight_kg }
+     if (-not $dims -and $side -and $side.dims) { $dims = [string]$side.dims }
+     if (-not $qty -and $side -and $side.cartons) { $qty = [string]$side.cartons }
+-    return @{ weight = $weight; dims = $dims; addr = $addr; qty = $qty; unit_weight = $unitW; transport = $transport }
++    $destination = Get-SnapshotDestination (Get-Content $latest.FullName -Raw -Encoding UTF8)
++    $addr = ''
++    if ($destination.QuoteUsable) { $addr = $destination.DisplayName }
++    return @{ weight = $weight; dims = $dims; addr = $addr; qty = $qty; unit_weight = $unitW; transport = $transport; Destination = $destination; HasPostalAddress = $destination.HasPostalAddress }
+ }
+diff --git a/scripts/lib/quote.ps1 b/scripts/lib/quote.ps1
+index 58b8e33..ae2d251 100644
+--- a/scripts/lib/quote.ps1
++++ b/scripts/lib/quote.ps1
+@@ -1,5 +1,5 @@
+ ﻿# lib/quote.ps1 - 报价提醒核心逻辑
+-# Get-QuoteReadyBuyers: 扫描快照,返回数据齐全(重量+尺寸+地址 3 项)的买家列表(人工接管白名单买家除外)
++# Get-QuoteReadyBuyers: 扫描快照,返回数据齐全(重量+尺寸+报价目的地 3 项)的买家列表(人工接管白名单买家除外)
+ # Send-QuoteReminders: 推送提醒 + 去重(24h 节流,内容 hash 变化可再提醒);名单买家跳过
+ # 依赖: config.ps1, lib\goods.ps1, lib\wecom.ps1, lib\log.ps1, lib\no_reply.ps1
+ . (Join-Path $PSScriptRoot "no_reply.ps1")
+@@ -19,7 +19,7 @@ function Get-QuoteReadyBuyers([string]$snapDir = "") {
+             $st = Get-GoodsDataStatus $buyer $snapDir
+             if ($st -and $st.weight -and $st.dims -and $st.addr) {
+                 $g = Get-GoodsName $buyer $snapDir
+-                $result += [pscustomobject]@{ buyer = $buyer; goods = $g.name; goodsKnown = $g.known; file = $st.file }
++                $result += [pscustomobject]@{ buyer = $buyer; goods = $g.name; goodsKnown = $g.known; file = $st.file; Destination = $st.Destination }
+             }
+         }
+     }
+@@ -48,7 +48,7 @@ function Send-QuoteReminders([string]$OnlyBuyer = "", [string]$stateFile = "", [
+             continue
+         }
+         $skey = $b.buyer.Trim().ToLowerInvariant()
+-        # 提取具体详情(货物品名/件数/单件重量/单件尺寸/收货地址/运输方案)用于提醒展示
++        # 提取具体详情(货物品名/件数/单件重量/单件尺寸/报价目的地/运输方案)用于提醒展示
+         $gd = Get-GoodsDetails $b.buyer $snapDir
+         $wTxt = if ($gd.weight) { $gd.weight } else { "未知" }
+         $dTxt = if ($gd.dims) { $gd.dims } else { "未知" }
+@@ -67,8 +67,8 @@ function Send-QuoteReminders([string]$OnlyBuyer = "", [string]$stateFile = "", [
+             try { $ageH = ((Get-Date) - ([datetime]::ParseExact($saved.time, "yyyy-MM-dd HH:mm:ss", $null))).TotalHours } catch {}
+             if ($ageH -lt 24 -and $saved.hash -eq $contentHash) { continue }
+         }
+-        # 消息按 货物品名/件数/单件重量/单件尺寸/收货地址 逐行显示,有运输方案则追加一行(项目间换行)
+-        $msg = "[报价提醒] 买家 $($b.buyer) 货物信息已齐全`n货物品名: $($b.goods)`n件数: $qTxt`n单件重量: $uTxt`n单件尺寸: $dTxt`n收货地址: $aTxt"
++        # 消息按 货物品名/件数/单件重量/单件尺寸/报价目的地 逐行显示,有运输方案则追加一行(项目间换行)
++        $msg = "[报价提醒] 买家 $($b.buyer) 货物信息已齐全`n货物品名: $($b.goods)`n件数: $qTxt`n单件重量: $uTxt`n单件尺寸: $dTxt`n报价目的地: $aTxt"
+         if ($tTxt) { $msg += "`n运输方案: $tTxt" }
+         $msg += "`n建议: 人工核对后给出报价"
+         $res = Send-WecomMessage $msg
+diff --git a/scripts/lib/reply_metrics.ps1 b/scripts/lib/reply_metrics.ps1
+index 8570dec..f0ccdd5 100644
+--- a/scripts/lib/reply_metrics.ps1
++++ b/scripts/lib/reply_metrics.ps1
+@@ -1,92 +1,92 @@
+-﻿# lib/reply_metrics.ps1 - 质量报告新增指标(只读, 无副作用)
+-#
+-# 背景(spec 更像真人销售_20260926 S8): 旧评分只考"话说得漂不漂亮"
+-#   (负面 -3 / 重复提问 -2 / 新信息 +2 / 实质互动 +1), 不考"有没有推进"。
+-#   本文件**只新增**指标计算, 不改动任何既有分值项的语义(否则历史报告不可比)。
+-#
+-# 依赖: lib\goods.ps1(可报价买家数)、lib\msg_source.ps1(消息来源)。
+-# 契约: 本文件所有函数**只读**, 不写任何状态文件; 出错一律返回 0 / 空, 不得让调用方崩掉。
+-
+-# 安抚式等待语(D6/S7 的频率限制对象): 对同一买家整个对话最多 1 次
+-function Get-SoothingPhrasePatterns {
+-    return @('take your time', 'no rush', 'whenever you are ready', "whenever you're ready",
+-             'just let me know', 'happy to wait', 'no worries at all')
+-}
+-
+-# 从快照全文里统计"安抚语重复"(同一会话同一句出现 >= 2 次即计一次违规)
+-# 返回: @{ Repeats = <int>; MaxSameCount = <int> }
+-function Get-SoothingPhraseRepeatStats([string]$snapshotContent) {
+-    $res = @{ Repeats = 0; MaxSameCount = 0 }
+-    if (-not $snapshotContent) { return $res }
+-    $pats = Get-SoothingPhrasePatterns
+-    $counts = @{}
+-    foreach ($line in @($snapshotContent -split "`n")) {
+-        if ((Get-MessageSource $line) -eq 'buyer') { continue }
+-        $low = $line.ToLower()
+-        foreach ($p in $pats) {
+-            if ($low.Contains($p)) {
+-                if (-not $counts.ContainsKey($p)) { $counts[$p] = 0 }
+-                $counts[$p]++
+-            }
+-        }
+-    }
+-    foreach ($k in $counts.Keys) {
+-        if ($counts[$k] -gt $res.MaxSameCount) { $res.MaxSameCount = $counts[$k] }
+-        if ($counts[$k] -ge 2) { $res.Repeats++ }
+-    }
+-    return $res
+-}
+-
+-# 尺寸引导命中: 我方消息里是否出现了"引导买家给尺寸/给供应商联系方式"的成品话术
+-function Test-DimensionGuidanceHit([string]$snapshotContent) {
+-    if (-not $snapshotContent) { return $false }
+-    $pats = @(
+-        "supplier's contact",
+-        "packing list",
+-        'confirm the cargo details with them directly',
+-        'rough size is fine',
+-        'carton sizes',
+-        '\bL\s*[*x×]\s*W\s*[*x×]\s*H\b'
+-    )
+-    foreach ($line in @($snapshotContent -split "`n")) {
+-        if ((Get-MessageSource $line) -ne 'bot') { continue }
+-        foreach ($p in $pats) { if ($line -match $p) { return $true } }
+-    }
+-    return $false
+-}
+-
+-# human_interjection 次数(S2 产生的日志计数)
+-# ⚠️ 禁止整文件读 monitor.log(spec §4-2: Add-Content + ErrorActionPreference=Stop 并发整读会让 monitor 抛
+-#    IOException 直接退出)。一律用 -Tail, 并且只统计**本文件尾部** —— 返回值是"最近 N 行内的次数",
+-#    不是全历史次数(报告里必须写明这一点, 否则会被误读)。
+-function Get-HumanInterjectionCount([string]$logFile, [int]$TailLines = 20000) {
+-    $res = @{ Count = 0; TailLines = $TailLines; Scanned = 0 }
+-    if (-not $logFile -or -not (Test-Path $logFile)) { return $res }
+-    try {
+-        $tail = @(Get-Content $logFile -Tail $TailLines -ErrorAction Stop)
+-        $res.Scanned = $tail.Count
+-        $res.Count = @($tail | Where-Object { $_ -match 'HUMAN-REPLIED-SKIP' }).Count
+-    } catch {
+-        $res.Count = 0
+-    }
+-    return $res
+-}
+-
+-# 可报价买家数(重量+尺寸+地址三项齐全) —— 复用 lib\goods.ps1, 注意其返回键名为**小写**
+-function Get-QuotableBuyerCount([string]$dataDir) {
+-    $n = 0
+-    try {
+-        $names = @{}
+-        Get-ChildItem (Join-Path $dataDir 'msgs_*.txt') -ErrorAction SilentlyContinue | ForEach-Object {
+-            $first = Get-Content $_.FullName -Encoding UTF8 -TotalCount 1 -ErrorAction SilentlyContinue
+-            if ($first -and $first.StartsWith('# BUYER: ')) { $names[$first.Substring(9).Trim()] = $true }
+-        }
+-        foreach ($k in $names.Keys) {
+-            $g = Get-GoodsDataStatus $k $dataDir
+-            if ($g -and $g.weight -and $g.dims -and $g.addr) { $n++ }
+-        }
+-    } catch {
+-        return 0
+-    }
+-    return $n
+-}
++﻿# lib/reply_metrics.ps1 - 质量报告新增指标(只读, 无副作用)
++#
++# 背景(spec 更像真人销售_20260926 S8): 旧评分只考"话说得漂不漂亮"
++#   (负面 -3 / 重复提问 -2 / 新信息 +2 / 实质互动 +1), 不考"有没有推进"。
++#   本文件**只新增**指标计算, 不改动任何既有分值项的语义(否则历史报告不可比)。
++#
++# 依赖: lib\goods.ps1(可报价买家数)、lib\msg_source.ps1(消息来源)。
++# 契约: 本文件所有函数**只读**, 不写任何状态文件; 出错一律返回 0 / 空, 不得让调用方崩掉。
++
++# 安抚式等待语(D6/S7 的频率限制对象): 对同一买家整个对话最多 1 次
++function Get-SoothingPhrasePatterns {
++    return @('take your time', 'no rush', 'whenever you are ready', "whenever you're ready",
++             'just let me know', 'happy to wait', 'no worries at all')
++}
++
++# 从快照全文里统计"安抚语重复"(同一会话同一句出现 >= 2 次即计一次违规)
++# 返回: @{ Repeats = <int>; MaxSameCount = <int> }
++function Get-SoothingPhraseRepeatStats([string]$snapshotContent) {
++    $res = @{ Repeats = 0; MaxSameCount = 0 }
++    if (-not $snapshotContent) { return $res }
++    $pats = Get-SoothingPhrasePatterns
++    $counts = @{}
++    foreach ($line in @($snapshotContent -split "`n")) {
++        if ((Get-MessageSource $line) -eq 'buyer') { continue }
++        $low = $line.ToLower()
++        foreach ($p in $pats) {
++            if ($low.Contains($p)) {
++                if (-not $counts.ContainsKey($p)) { $counts[$p] = 0 }
++                $counts[$p]++
++            }
++        }
++    }
++    foreach ($k in $counts.Keys) {
++        if ($counts[$k] -gt $res.MaxSameCount) { $res.MaxSameCount = $counts[$k] }
++        if ($counts[$k] -ge 2) { $res.Repeats++ }
++    }
++    return $res
++}
++
++# 尺寸引导命中: 我方消息里是否出现了"引导买家给尺寸/给供应商联系方式"的成品话术
++function Test-DimensionGuidanceHit([string]$snapshotContent) {
++    if (-not $snapshotContent) { return $false }
++    $pats = @(
++        "supplier's contact",
++        "packing list",
++        'confirm the cargo details with them directly',
++        'rough size is fine',
++        'carton sizes',
++        '\bL\s*[*x×]\s*W\s*[*x×]\s*H\b'
++    )
++    foreach ($line in @($snapshotContent -split "`n")) {
++        if ((Get-MessageSource $line) -ne 'bot') { continue }
++        foreach ($p in $pats) { if ($line -match $p) { return $true } }
++    }
++    return $false
++}
++
++# human_interjection 次数(S2 产生的日志计数)
++# ⚠️ 禁止整文件读 monitor.log(spec §4-2: Add-Content + ErrorActionPreference=Stop 并发整读会让 monitor 抛
++#    IOException 直接退出)。一律用 -Tail, 并且只统计**本文件尾部** —— 返回值是"最近 N 行内的次数",
++#    不是全历史次数(报告里必须写明这一点, 否则会被误读)。
++function Get-HumanInterjectionCount([string]$logFile, [int]$TailLines = 20000) {
++    $res = @{ Count = 0; TailLines = $TailLines; Scanned = 0 }
++    if (-not $logFile -or -not (Test-Path $logFile)) { return $res }
++    try {
++        $tail = @(Get-Content $logFile -Tail $TailLines -ErrorAction Stop)
++        $res.Scanned = $tail.Count
++        $res.Count = @($tail | Where-Object { $_ -match 'HUMAN-REPLIED-SKIP' }).Count
++    } catch {
++        $res.Count = 0
++    }
++    return $res
++}
++
++# 可报价买家数(重量+尺寸+报价目的地三项齐全) —— 复用 lib\goods.ps1, 注意其返回键名为**小写**
++function Get-QuotableBuyerCount([string]$dataDir) {
++    $n = 0
++    try {
++        $names = @{}
++        Get-ChildItem (Join-Path $dataDir 'msgs_*.txt') -ErrorAction SilentlyContinue | ForEach-Object {
++            $first = Get-Content $_.FullName -Encoding UTF8 -TotalCount 1 -ErrorAction SilentlyContinue
++            if ($first -and $first.StartsWith('# BUYER: ')) { $names[$first.Substring(9).Trim()] = $true }
++        }
++        foreach ($k in $names.Keys) {
++            $g = Get-GoodsDataStatus $k $dataDir
++            if ($g -and $g.weight -and $g.dims -and $g.addr) { $n++ }
++        }
++    } catch {
++        return 0
++    }
++    return $n
++}
+diff --git a/scripts/analyze_replies.ps1 b/scripts/analyze_replies.ps1
+index 706bfde..696e435 100644
+--- a/scripts/analyze_replies.ps1
++++ b/scripts/analyze_replies.ps1
+@@ -169,7 +169,7 @@ $lines = @(
+     "  - 含义：我方消息里出现了「引导买家给尺寸/给供应商联系方式」成品话术的会话数。",
+     "- **安抚语重复次数（>1 即计违规）**: $($soothingViolators) 个会话",
+     "  - 含义：同一会话里同一句安抚式等待语（take your time / no rush 等）出现 ≥ 2 次；D6/S7 规定对同一买家最多 1 次。",
+-    "- **可报价买家数（重量+尺寸+地址三项齐全）**: $($quotable)",
++    "- **可报价买家数（重量+尺寸+报价目的地三项齐全）**: $($quotable)",
+     "  - 含义：达到「资料齐可报价」门槛的买家数（复用 lib\goods.ps1::Get-GoodsDataStatus，键名小写）。", "",
+     "| 买家 | 安抚语重复 | 尺寸引导 |",
+     "|------|-----------|---------|",
+diff --git a/scripts/monitor.ps1 b/scripts/monitor.ps1
+index 94f8940..352fc0a 100644
+--- a/scripts/monitor.ps1
++++ b/scripts/monitor.ps1
+@@ -1343,16 +1343,17 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+                 # rewrite sharing the remaining budget, so the rewrite now lives in lib\reply_gen.ps1
+                 # (driven by the full violation list) and this gate never calls the model at all.
+                 # The guarantee is unchanged: a reply that cannot be made compliant is never sent.
+-                $finalCheck = Test-ReplyCompliance -Text $reply -Rules $rules
++                $sendDecision = Get-ReplyDecision -Conversation $replyConversation -Facts (Get-ConversationFacts $replyConversation) -Rules $rules
++                $finalCheck = Test-ReplyCompliance -Text $reply -Rules $rules -Decision $sendDecision
+                 if (-not $finalCheck.Ok) {
+                     $codes = @($finalCheck.Violations | ForEach-Object { $_.Code }) -join ','
+                     $detail = (@($finalCheck.Violations | Where-Object { $_.Severity -eq 'block' } | ForEach-Object { $_.Code + ':' + $_.Detail }) -join ' | ')
+                     $sum = $reply.Trim()
+                     if ($sum.Length -gt 60) { $sum = $sum.Substring(0, 60) + '...' }
+                     Write-Log "SEND-GATE-BLOCK $($key) src=$($src) codes=[$codes] detail=[$detail] action=SCENARIO_FALLBACK summary=$($sum)"
+-                    $reply = Get-ScenarioFallback -Decision $script:lastReplyDecision -Rules $rules
++                    $reply = Get-ScenarioFallback -Decision $sendDecision -Rules $rules
+                     $src = 'FALLBACK'
+-                    $postCheck = Test-ReplyCompliance -Text $reply -Rules $rules
++                    $postCheck = Test-ReplyCompliance -Text $reply -Rules $rules -Decision $sendDecision
+                     if (-not $postCheck.Ok) {
+                         # Even the scenario fallback is not clean. Ship the neutral holding line and
+                         # record it loudly rather than sending a policy violation.
+@@ -1383,7 +1384,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
+                     Write-Log "POST-SEND-COOLDOWN $($key) $($script:replyPostSendCooldownMin)min (config key reply_post_send_cooldown_min)"
+                     # [SPEC §4.3-G4 2026-09-27 / SPEC-待回复列表 §2 行3-4] 记录成功发送时刻
+                     #   —— 上方已赋值，秒级下限与分钟门禁共用这一个数据面。
+-                    # B2 报价提醒:买家数据齐全(重量+尺寸+地址)则推送企微提醒(24h 节流由 remind_state 控制)
++                    # B2 报价提醒:买家数据齐全(重量+尺寸+报价目的地)则推送企微提醒(24h 节流由 remind_state 控制)
+                     try {
+                         $gst = Get-GoodsDataStatus $key $script:dataDir
+                         if ($gst -and $gst.weight -and $gst.dims -and $gst.addr) {
+diff --git a/scripts/summarize.ps1 b/scripts/summarize.ps1
+index 1970c63..1bebd77 100644
+--- a/scripts/summarize.ps1
++++ b/scripts/summarize.ps1
+@@ -104,7 +104,7 @@ foreach ($buyer in ($byBuyer.Keys | Sort-Object)) {
+ [void]$sb.AppendLine("---")
+ [void]$sb.AppendLine("## 货物数据齐全度（供报价判断）")
+ [void]$sb.AppendLine()
+-[void]$sb.AppendLine("| 买家 | 货物名称 | 总重量 | 尺寸L\*W\*H | 收货地址 | 图片(参考) | 供应商(参考) | 状态 |")
++[void]$sb.AppendLine("| 买家 | 货物名称 | 总重量 | 尺寸L\*W\*H | 报价目的地 | 图片(参考) | 供应商(参考) | 状态 |")
+ [void]$sb.AppendLine("|------|---------|--------|-----------|---------|----------|----------|------|")
+ foreach ($buyer in ($byBuyer.Keys | Sort-Object)) {
+     $st = Get-GoodsDataStatus $buyer
+@@ -118,15 +118,15 @@ foreach ($buyer in ($byBuyer.Keys | Sort-Object)) {
+     $missing = @()
+     if (-not $st.weight) { $missing += "总重量" }
+     if (-not $st.dims) { $missing += "尺寸" }
+-    if (-not $st.addr) { $missing += "地址" }
++    if (-not $st.addr) { $missing += "报价目的地" }
+     if (-not $g.known) { $missing += "货物名称" }
+     $concl = if ($missing.Count -eq 0) { "✅ 齐全，可报价" } else { "缺: " + ($missing -join "、") }
+     $escBuyer = $buyer -replace '\|', '\|'
+     $escGoods = $g.name -replace '\|', '\|'
+-    [void]$sb.AppendLine("| $escBuyer | $escGoods | $($marks[0]) | $($marks[1]) | $($marks[3]) | $($marks[2]) | $($marks[4]) | $concl |")
++    [void]$sb.AppendLine("| $escBuyer | $escGoods | $($marks[0]) | $($marks[1]) | $(Get-GoodsDestinationLabel $st) | $($marks[2]) | $($marks[4]) | $concl |")
+ }
+ [void]$sb.AppendLine()
+-[void]$sb.AppendLine("> 注：齐全度由规则从买家消息自动判断（重量=数字+kg/吨，尺寸=三维数字或 dimensions，地址=地址词或城市/国家，货物名称=产品链接或品名词）。图片与供应商联系列为参考，不计入齐全判定；结论仅供报价参考，请以实际聊天内容为准。")
++[void]$sb.AppendLine("> 注：齐全度由规则从买家消息自动判断（重量=数字+kg/吨，尺寸=三维数字或 dimensions，报价目的地=买家原文中的收货地址或明确 Amazon/FBA 收货仓代码；仓库代码不代表街道地址已提供，货物名称=产品链接或品名词）。图片与供应商联系列为参考，不计入齐全判定；结论仅供报价参考，请以实际聊天内容为准。")
+ [void]$sb.AppendLine()
+ [void]$sb.AppendLine("---")
+ [void]$sb.AppendLine("由 alibaba-auto-reply 监控自动生成")
+diff --git a/scripts/reply_scenarios.md b/scripts/reply_scenarios.md
+index 89c813b..e817d7f 100644
+--- a/scripts/reply_scenarios.md
++++ b/scripts/reply_scenarios.md
+@@ -176,6 +176,9 @@ Never say: a weight, a size or a part number that was not clearly legible.
+ 
+ ## attachment_parse_failed
+ 
++Ask only the current decision's missing fields. When an Amazon warehouse is confirmed, omit
++delivery address, city, state, zip/postal details and warehouse code from any attachment retry.
++
+ Buyer signal: a file arrived but it could not be read.
+ 
+ Say so once, without blaming the buyer, and ask for the details in the message instead. Never
+@@ -187,6 +190,17 @@ Never say: "please send your weight, dimensions, images and address" as a four-i
+ 
+ ## details_given
+ 
++When the facts confirm an Amazon receiving warehouse, that code is enough for quote preparation.
++For a virtual shipment of 18 cartons, 53 x 41 x 32 cm, 216 kg gross, DDP to Amazon FTW1:
++
++> Amazon FTW1 works for the destination. I can use the details you sent to prepare the quote.
++
++If weight is missing, ask only for weight. Never ask again for street address, city, state,
++postal code or warehouse code. Do not invent the warehouse's full address or a price.
++For unresolved FTW1 or TEST2 candidates (TEST2 is fictional):
++
++> Which Amazon warehouse should I quote for?
++
+ Buyer signal: they just supplied cargo data.
+ 
+ Confirm what you received in their terms, and ask only for what is still genuinely missing.
+diff --git a/scripts/reply_agent_prompt.md b/scripts/reply_agent_prompt.md
+index e4673d9..0167427 100644
+--- a/scripts/reply_agent_prompt.md
++++ b/scripts/reply_agent_prompt.md
+@@ -42,6 +42,11 @@ Write the way a competent person types in a chat window:
+ 3. Never re-ask for anything already given or already promised. "Open items" in the request
+    tells you exactly what, if anything, you may still ask for. If it says not to ask, do not ask.
+ 4. Ask at most one thing per reply unless you were explicitly given a short list.
++   A confirmed Amazon/FBA receiving warehouse code is enough for quote preparation. Do not
++   ask again for a street address, city, state, postal code or the warehouse code. An unknown
++   Amazon destination needs the exact receiving warehouse code; unresolved alternatives need
++   one warehouse selection. Never infer this fact from the assistant's own repetition, and
++   never invent the warehouse's full address or a rate.
+ 5. When you cannot give a real answer yet, say so plainly and say what you are doing next.
+    Do not fill the gap with a new promise.
+ 6. One concrete next step beats three vague reassurances.
+diff --git a/tests/amazon_destination.tests.ps1 b/tests/amazon_destination.tests.ps1
+new file mode 100644
+index 0000000..3c71ae4
+--- /dev/null
++++ b/tests/amazon_destination.tests.ps1
+@@ -0,0 +1,167 @@
++﻿$ErrorActionPreference = 'Stop'
++$repo = Split-Path $PSScriptRoot -Parent
++. (Join-Path $repo 'scripts/lib/msg_norm.ps1')
++. (Join-Path $repo 'scripts/lib/reply_policy.ps1')
++. (Join-Path $repo 'scripts/lib/reply_gen.ps1')
++. (Join-Path $repo 'scripts/lib/goods.ps1')
++. (Join-Path $repo 'scripts/lib/quote.ps1')
++. (Join-Path $repo 'scripts/lib/reply_metrics.ps1')
++$script:pass = 0; $script:fail = 0
++function Check([string]$name, [bool]$ok) {
++    if ($ok) { $script:pass++; Write-Output "PASS $name" }
++    else { $script:fail++; Write-Output "FAIL $name" }
++}
++function Conversation([string[]]$texts) {
++    $lines = @(); $ts = 1791000000000L
++    foreach ($t in $texts) { $lines += "[BUYER] $t @@MT:$ts"; $ts += 1000 }
++    return ConvertTo-MessageList ($lines -join "`n") 'Virtual Destination Buyer'
++}
++$taskDir = Join-Path $env:TEMP ('amazon_destination_test_' + [guid]::NewGuid().ToString('N'))
++New-Item -ItemType Directory -Path $taskDir | Out-Null
++function Get-SkillPath([string]$key) { throw "unexpected production path: $key" }
++function Test-NoReplyBuyer([string]$buyer) { return [bool]$script:manual }
++function Save-Snapshot($conv) {
++    Set-Content -Encoding UTF8 (Join-Path $taskDir 'msgs_001.txt') ("# BUYER: Virtual Destination Buyer`n" + ($conv.Lines -join "`n"))
++}
++function Decision($conv, [string]$scenario = '') { return Get-ReplyDecision -Conversation $conv -Facts (Get-ConversationFacts $conv) -ForceScenario $scenario }
++function Destination([string[]]$texts) { return Get-QuoteDestination (Conversation $texts) }
++function Generate($conv, $decision) { return Invoke-ReplyGeneration -Conversation $conv -Decision $decision -PromptPath (Join-Path $repo 'scripts/reply_agent_prompt.md') -ScenarioPath (Join-Path $repo 'scripts/reply_scenarios.md') }
++try {
++    $c = Conversation @('18 cartons, 53 x 41 x 32 cm, 216 kg gross, DDP to Amazon FTW1')
++    $f = Get-ConversationFacts $c
++    $d = Get-ReplyDecision -Conversation $c -Facts $f
++    Check 'B1 quote destination fact' ([bool]$f.HasQuoteDestination)
++    Check 'B1 no address ask' ($d.AskFields -notcontains 'address')
++    Set-Content -Encoding UTF8 (Join-Path $taskDir 'msgs_001.txt') ("# BUYER: Virtual Destination Buyer`n" + ($c.Lines -join "`n"))
++    $ready = @(Get-QuoteReadyBuyers $taskDir)
++    Check 'B1 goods to quote candidate' ($ready.Count -eq 1)
++    Check 'B1 warehouse is not postal address' (-not $f.HasAddress -and -not $f.Destination.HasPostalAddress)
++    $context = New-ReplyContextBlock -Conversation $c -Decision $d
++    Check 'B1 model context distinguishes warehouse and street' ($context -match 'quote destination: Amazon FTW1 \(buyer provided\)' -and $context -match 'street address: unknown; not required')
++    Check 'B1 source evidence is buyer original' ($f.Destination.Evidence[0].Source -eq 'buyer' -and $f.Destination.Evidence[0].Text -match 'DDP to Amazon FTW1')
++    $r = Generate $c $d
++    Check 'B3 unavailable model real generation fallback' ($r.Source -eq 'FALLBACK' -and $r.FallbackReason -eq 'llm-unavailable' -and (Test-ReplyCompliance -Text $r.Text -Decision $d).Ok)
++    function Invoke-LLM { param($Messages,$Temperature,$MaxTokens,$LogFile) $script:models++; $script:input = $Messages; return 'Please send the delivery address.' }
++    $script:models = 0; $r = Generate $c $d
++    Check 'B2 real model chain bounded rewrite then compliant fallback' ($script:models -eq 2 -and $r.Rewrites -eq 1 -and $r.Source -eq 'FALLBACK' -and $r.Violations.Code -contains 'DESTINATION_REASK' -and (Test-ReplyCompliance -Text $r.Text -Decision $d).Ok)
++    foreach ($bad in @('Please send the delivery address.','What is the zip code?','Could you confirm the warehouse code?','I need the destination city and state.','Delivery address is required.','Please confirm Amazon FTW1.','Should I quote to FTW1?')) {
++        Check "B2 deterministic address request [$bad]" (-not (Test-ReplyCompliance -Text $bad -Decision $d).Ok)
++    }
++    Check 'B2 acknowledgment allowed' ((Test-ReplyCompliance -Text 'Amazon FTW1 works for the destination. I can use the details you sent to prepare the quote.' -Decision $d).Ok)
++    $script:models = 0
++    $bounded = Invoke-ReplyGeneration -Conversation $c -Decision $d -PromptPath (Join-Path $repo 'scripts/reply_agent_prompt.md') -MaxRewrites 5
++    Check 'B2 excessive caller rewrite budget still bounded to one' ($script:models -eq 2 -and $bounded.Rewrites -eq 1)
++    Check 'B2 price prohibition retained' (-not (Test-ReplyCompliance -Text 'The price is $55 per kg.' -Decision $d).Ok)
++    foreach ($text in @('DDP to amazon: ftw1.','deliver to FBA warehouse FTW1','亚马逊 FTW1 仓','送到亚马逊：ftw1','Amazon LGB8')) {
++        $x = Destination @($text)
++        Check "B4 positive expression [$text]" ($x.QuoteUsable -and $x.Kind -eq 'amazon_warehouse' -and $x.WarehouseCode -eq $(if($text -match 'LGB8'){'LGB8'}else{'FTW1'}))
++    }
++    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('DDP to Amazon FTW1'))
++    $origConv = ConvertTo-MessageList ('[BUYER] 亚马逊送仓 @@MT:1791000000000 @@OT:' + $encoded)
++    Check 'B4 decoded original over translation' ((Get-QuoteDestination $origConv).WarehouseCode -eq 'FTW1')
++    Check 'B5 buyer Amazon context bare answer' ((Destination @('Deliver to Amazon warehouse','FTW1')).WarehouseCode -eq 'FTW1')
++    $q = ConvertTo-MessageList "[ME] Which Amazon warehouse code should I quote for? @@TS:1791000000000 @@MT:1791000000000`n[BUYER] FTW1 @@MT:1791000001000"
++    Check 'B5 bot question provides context only' ((Get-QuoteDestination $q).WarehouseCode -eq 'FTW1' -and (Get-QuoteDestination $q).Evidence.Count -eq 1)
++    foreach ($text in @('Our model is FTW1','SKU FTW1','order number FTW1','https://example.invalid/Amazon/FTW1','Amazon FTW1.pdf','FTW1')) {
++        Check "B6 unsupported source [$text]" (-not (Destination @($text)).QuoteUsable)
++    }
++    $botConv = ConvertTo-MessageList "[ME] DDP to Amazon FTW1 @@TS:1791000000000 @@MT:1791000000000`n[BUYER] Please quote @@MT:1791000001000"
++    Check 'B6 robot repetition not buyer evidence' (-not (Get-QuoteDestination $botConv).QuoteUsable)
++    Save-Snapshot $botConv
++    Check 'B6 goods also ignores bot destination' (-not (Get-GoodsDataStatus 'Virtual Destination Buyer' $taskDir).addr)
++    $human = ConvertTo-MessageList '[ME] Confirmed buyer destination: Amazon FTW1 @@MT:1791000000000'
++    $humanDest = Get-QuoteDestination $human
++    Check 'B6 explicit owner confirmation has human source' ($humanDest.QuoteUsable -and $humanDest.Source -eq 'human' -and $humanDest.Evidence[0].Source -eq 'human')
++    $bot = ConvertTo-MessageList '[ME] Confirmed buyer destination: Amazon FTW1 @@MT:1791000000000 @@TS:1791000000000'
++    Check 'B6 bot cannot forge owner confirmation' (-not (Get-QuoteDestination $bot).QuoteUsable)
++    foreach ($text in @('Deliver to Amazon warehouse','FBA','DDP to Amazon X123456')) {
++        $x = Conversation @($text); $xd = Decision $x; $fb = Get-ScenarioFallback $xd
++        Check "B7 exact code question [$text]" (-not $xd.Facts.HasQuoteDestination -and $xd.AskFields -contains 'address' -and $fb -match 'exact Amazon receiving warehouse code' -and $fb -notmatch 'street|delivery address')
++    }
++    foreach ($text in @('not FTW1','we used FTW1 before','pickup from Amazon FTW1','Our model is FTW1')) {
++        $x = Destination @('Deliver to Amazon warehouse', $text)
++        Check "B8 non receiving location [$text]" (-not $x.QuoteUsable)
++    }
++    Check 'B8 trusted explicit revocation drops warehouse' (-not (Destination @('Amazon FTW1','Do not ship to Amazon')).QuoteUsable)
++    Check 'B8 trusted negation drops selected warehouse' (-not (Destination @('Amazon FTW1','not FTW1')).QuoteUsable)
++    Check 'B8 unrelated text retains destination' ((Destination @('Amazon FTW1','Thanks, packing is ready')).WarehouseCode -eq 'FTW1')
++    $changed = Conversation @('Amazon FTW1','不是 FTW1，改送 TEST2')
++    $changedD = Decision $changed
++    Check 'B9 trusted switch updates current warehouse' ($changedD.Facts.Destination.WarehouseCode -eq 'TEST2')
++    Check 'B9 context current quote destination updated' ((New-ReplyContextBlock $changed $changedD) -match 'quote destination: Amazon TEST2')
++    Save-Snapshot $changed
++    Check 'B9 goods current destination updated' ((Get-GoodsDetails 'Virtual Destination Buyer' $taskDir).addr -eq 'Amazon TEST2')
++    foreach ($texts in @(@('Amazon FTW1 or TEST2'), @('Amazon FTW1','Amazon TEST2'), @('Amazon FTW1','Delivery address: 246 Fiction Road, Sample City 99999'), @('Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999'))) {
++        $x = Conversation $texts; $xd = Decision $x
++        Check ('B10 ambiguous ' + ($texts -join '/')) ($xd.Facts.Destination.Kind -eq 'ambiguous' -and -not $xd.Facts.HasQuoteDestination -and $xd.AskFields.Count -eq 1 -and (Get-ScenarioFallback $xd) -match '^Which')
++        Save-Snapshot $x
++        Check 'B10 ambiguous goods not complete' (-not (Get-GoodsDataStatus 'Virtual Destination Buyer' $taskDir).addr)
++    }
++    $x = Destination @('Amazon FTW1, delivery address: 246 Fiction Road, Sample City 99999')
++    Check 'B10 associated same message address retained' ($x.QuoteUsable -and $x.HasPostalAddress -and $x.WarehouseCode -eq 'FTW1')
++    $x = Destination @('Amazon FTW1 or X123456')
++    Check 'B10 known plus unsupported alternative remains ambiguous' ($x.Kind -eq 'ambiguous' -and -not $x.QuoteUsable)
++    foreach ($text in @('53 x 41 x 32 cm, Amazon FTW1','216 kg, Amazon FTW1')) {
++        $x = Conversation @($text); $xd = Decision $x; Save-Snapshot $x
++        $st = Get-GoodsDataStatus 'Virtual Destination Buyer' $taskDir
++        Check "B11 required cargo missing [$text]" ($xd.AskFields -notcontains 'address' -and ($xd.AskFields -contains 'weight' -or $xd.AskFields -contains 'dimension') -and ($st.weight -eq $false -or $st.dims -eq $false) -and @(Get-QuoteReadyBuyers $taskDir).Count -eq 0)
++    }
++    $x = Conversation @('216 kg, 53 x 41 x 32 cm, Delivery address: 246 Fiction Road, Sample City 99999')
++    $xd = Decision $x
++    Check 'B12 ordinary postal address usable' ($xd.Facts.HasAddress -and $xd.Facts.HasQuoteDestination -and $xd.Facts.Destination.Kind -eq 'postal_address' -and $xd.AskFields -notcontains 'address')
++    $xd = Decision (Conversation @('216 kg, 53 x 41 x 32 cm, shipping to a private home'))
++    Check 'B12 ordinary missing destination still asks address' ($xd.AskFields -contains 'address' -and (Get-ScenarioFallback $xd) -match 'delivery address')
++    $xd = Decision (Conversation @('which address do you need from me?'))
++    Check 'B12 address ownership clarification retained' ($xd.Scenario -eq 'address_clarify')
++    $private = Destination @('Amazon FTW1','Instead deliver to my private address: 246 Fiction Road, Sample City 99999')
++    Check 'B12 explicit switch to private address' ($private.Kind -eq 'postal_address' -and $private.WarehouseCode -eq '')
++    Save-Snapshot $c
++    $stateFile = Join-Path $taskDir 'reminders.json'; $script:notices = @(); $script:notifyResult = 'SENT_OK'
++    function Send-WecomMessage($text) { $script:notices += $text; return $script:notifyResult }
++    Check 'B13 actual goods quote reminder success' ((Send-QuoteReminders -stateFile $stateFile -snapDir $taskDir) -eq 1 -and $script:notices[0] -match '报价目的地: Amazon FTW1')
++    $beforeState = [IO.File]::ReadAllText($stateFile)
++    Check 'B13 same content suppressed' ((Send-QuoteReminders -stateFile $stateFile -snapDir $taskDir) -eq 0 -and $script:notices.Count -eq 1)
++    $changed = Conversation @('18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1','Change to Amazon TEST2'); Save-Snapshot $changed
++    $script:notifyResult = 'FAILED'
++    Check 'B13 failed changed notification not success' ((Send-QuoteReminders -stateFile $stateFile -snapDir $taskDir) -eq 0 -and [IO.File]::ReadAllText($stateFile) -eq $beforeState)
++    $script:notifyResult = 'SENT_OK'
++    Check 'B13 changed destination hash permits reminder' ((Send-QuoteReminders -stateFile $stateFile -snapDir $taskDir) -eq 1 -and $script:notices[-1] -match 'Amazon TEST2' -and [IO.File]::ReadAllText($stateFile) -ne $beforeState)
++    $script:manual = $true
++    Check 'B14 manual takeover excluded without notification' (@(Get-QuoteReadyBuyers $taskDir).Count -eq 0 -and (Send-QuoteReminders -stateFile $stateFile -snapDir $taskDir) -eq 0)
++    $script:manual = $false
++    $card = ConvertTo-MessageList '[BUYER] Amazon FTW1 @@CARD:system @@MT:1791000000000'
++    Check 'B14 system card cannot provide destination or generate' (-not (Get-QuoteDestination $card).QuoteUsable -and (Generate $card (Decision $card)).Source -eq 'BLOCKED')
++    $old = ConvertTo-MessageList "[BUYER] Amazon FTW1`n[BUYER] Change to Amazon TEST2"
++    Check 'B14 legacy conflict cannot use DOM to switch' ((Get-QuoteDestination $old).Kind -eq 'ambiguous' -and (Generate $old (Decision $old)).Source -eq 'BLOCKED')
++    $singleOld = ConvertTo-MessageList '[BUYER] Amazon FTW1'
++    Check 'B14 legacy single declaration conservatively useful for goods' ((Get-QuoteDestination $singleOld).QuoteUsable)
++    $split = Conversation @('18 cartons, 53 x 41 x 32 cm, 216 kg gross','DDP to Amazon FTW1','Any update on my quote?')
++    $splitD = Decision $split
++    Check 'B15 split messages keep complete facts' ($splitD.Facts.HasWeight -and $splitD.Facts.HasDimensions -and $splitD.Facts.HasQuoteDestination -and $splitD.AskFields -notcontains 'address')
++    Check 'B15 chasing quote requires human fact and no invented rate' ($splitD.NeedHumanTodo -and (Test-ReplyCompliance -Text (Get-ScenarioFallback $splitD) -Decision $splitD).Ok)
++    Save-Snapshot $c; $st = Get-GoodsDataStatus 'Virtual Destination Buyer' $taskDir
++    Check 'B16 report label uses warehouse without false postal claim' ((Get-GoodsDestinationLabel $st) -eq 'Amazon FTW1' -and -not $st.HasPostalAddress -and $st.addr)
++    Check 'B16 real quotable metric uses same destination status' ((Get-QuotableBuyerCount $taskDir) -eq 1)
++    # Execute only the real report table statements; no report I/O, config, logs or notification.
++    $statusBody = (Get-Command Get-GoodsDataStatus).ScriptBlock
++    $nameBody = (Get-Command Get-GoodsName).ScriptBlock
++    function Get-GoodsDataStatus($buyer) { return & $statusBody $buyer $taskDir }
++    function Get-GoodsName($buyer) { return & $nameBody $buyer $taskDir }
++    $byBuyer = @{ 'Virtual Destination Buyer' = @() }; $sb = New-Object Text.StringBuilder
++    $reportSource = Get-Content (Join-Path $repo 'scripts/summarize.ps1') -Raw -Encoding UTF8
++    $reportStart = $reportSource.IndexOf('[void]$sb.AppendLine("## 货物数据齐全度')
++    $reportEnd = $reportSource.IndexOf('[void]$sb.AppendLine("由 alibaba-auto-reply', $reportStart)
++    Invoke-Expression $reportSource.Substring($reportStart, $reportEnd - $reportStart)
++    Check 'B16 real report table displays current quote destination' ($sb.ToString() -match '\| Amazon FTW1 \|' -and $sb.ToString() -match '报价目的地' -and $sb.ToString() -notmatch '缺: 地址')
++    Set-Item Function:Get-GoodsDataStatus $statusBody
++    Set-Item Function:Get-GoodsName $nameBody
++    foreach ($scenario in @('attachment_parse_failed','dimension_missing')) {
++        $x = Conversation @('Amazon FTW1','I have no supplier and cannot give dimensions'); $xd = Decision $x $scenario
++        $fb = Get-ScenarioFallback $xd
++        Check "B17 fallback [$scenario] no repeated destination" ((Test-ReplyCompliance -Text $fb -Decision $xd).Ok -and $fb -notmatch 'address|zip|postal|warehouse code')
++    }
++} finally {
++    Remove-Item -LiteralPath $taskDir -Recurse -Force
++}
++Write-Output "RESULT pass=$script:pass fail=$script:fail"
++if ($script:fail) { exit 1 }
+diff --git a/tests/new_message_cooldown.tests.ps1 b/tests/new_message_cooldown.tests.ps1
+index 4e8bd36..5c55800 100644
+--- a/tests/new_message_cooldown.tests.ps1
++++ b/tests/new_message_cooldown.tests.ps1
+@@ -203,6 +203,21 @@ $script:accioFlags.read = $false
+ $ctx = Reset; $ctx.state = [pscustomobject]@{ replied = [pscustomobject]@{} }; $ctx.lastSendAt = @{}; $script:raw = Line 'first request' 1791170000000; Invoke-ConvoItem $ctx $item
+ Check 'A14 first buyer without key or successful-send time can reply' ($script:sends -eq 1 -and $script:writes -eq 1)
+ 
++# Warehouse destination regression through the real production entry, including send-time defence.
++$ctx = Reset; $script:raw = Line '18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1' 1791170001000
++Invoke-ConvoItem $ctx $item
++Check 'B2 real entry rejects model destination-city question and sends fallback' ($script:sends -eq 1 -and $script:modelCalls -eq 2 -and $script:sentText -notmatch 'address|city|postal|zip|warehouse code')
++$adapterBody = (Get-Command Generate-Reply-LLM).ScriptBlock
++function Generate-Reply-LLM { return 'Please send the delivery address.' }
++$ctx = Reset; $script:raw = Line '18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1' 1791170001000
++Invoke-ConvoItem $ctx $item
++Check 'B2 actual send-time gate rejects a bypassed dirty adapter result' ($script:sends -eq 1 -and ($script:logs -match 'DESTINATION_REASK') -and $script:sentText -notmatch 'address|city|postal|zip|warehouse code')
++Set-Item Function:Generate-Reply-LLM $adapterBody
++$ctx = Reset; $script:manual = $true; $script:raw = Line 'Amazon FTW1' 1791170001000; Invoke-ConvoItem $ctx $item
++Check 'B14 warehouse destination never overrides manual takeover' ($script:sends -eq 0 -and $script:modelCalls -eq 0)
++$ctx = Reset; $script:raw = (Line 'Amazon FTW1' 1791170000000) + "`n[ME] Owner answered @@MT:1791170001000"; Invoke-ConvoItem $ctx $item
++Check 'B14 warehouse destination never overrides real human interjection' ($script:sends -eq 0 -and $script:modelCalls -eq 0)
++
+ # Real scan entry, external lock/page-health boundaries mocked. Page-down returns before
+ # handlers; lock-busy returns before even a snapshot. Unexpected healing throws.
+ function Get-AppLock { return $script:lockAvailable }
+diff --git a/docs/当前状态.md b/docs/当前状态.md
+index 496db94..1588d2c 100644
+--- a/docs/当前状态.md
++++ b/docs/当前状态.md
+@@ -1,5 +1,7 @@
+ ﻿# 当前状态与待解决问题
+ 
++2026-10-05：亚马逊收货仓代码作为报价目的地的工作区修正及 B1–B17 隔离离线验收完成。回复追问、模型证据、生成与发送前检查、附件回退、goods、quote 和报告共用目的地解析；FTW1 可满足报价目的地，但不代表已提供街道地址。尚未加载到生产进程，也未进行真实模型/发送/通知验收。见 [目的地修复交付](亚马逊仓库目的地修复交付_20261005.md)。
++
+ 核验时间：2026-10-04 01:11（北京时间）。依据为当前工作区源码、本机配置、Windows 计划任务和进程查询。本文是带日期的快照；后续状态以重新查询为准。
+ 
+ > 2026-10-05 补充：工作区已在 main，已发布基线为 fbbbef4 / v0.0.1；本轮另有未提交的 [消息顺序修复](消息顺序修复_20261005.md)。只读查询已发现 monitor/watchdog 在运行，Watchdog 任务为 Running，Health 为 Ready。以下 2026-10-04 的停用状态保留为历史快照，不代表目前仍停用。本轮未重启进程或改任务设置，新代码需重新加载后生效。
+diff --git a/docs/项目地图.md b/docs/项目地图.md
+index 93d7c62..cece00c 100644
+--- a/docs/项目地图.md
++++ b/docs/项目地图.md
+@@ -18,6 +18,7 @@
+ | 可选历史读取 | `lib/accio.ps1`、`tools/accio-client` | 网关上下文；失败或不匹配时回退 CDP |
+ | 消息来源 | `lib/msg_source.ps1` | 区分买家、人工与机器人消息，支持人工让路 |
+ | 消息整理 | `lib/msg_norm.ps1` | 消息结构、时间顺序、最新买家消息和资料事实 |
++| 报价目的地 | `lib/destination.ps1` | 规范化角色/买家原文 → 仓代码/地址、来源证据、冲突和换仓；reply、goods/quote/report 共用 |
+ | 是否回复 | `reply_engine.ps1` | `Test-ShouldReply` 及哈希、去重、时间门禁基础函数 |
+ | 回复策略 | `lib/reply_policy.ps1` | 场景、允许追问字段、已问次数、人工处理需求标记 |
+ | 语言生成 | `lib/reply_gen.ps1` | 上下文、匹配场景示例、候选文字、重写与固定话术 |
+@@ -28,7 +29,7 @@
+ 回复模块的加载顺序为：
+ 
+ ~~~text
+-reply_engine → msg_norm → reply_policy → reply_gen
++reply_engine → msg_norm（加载纯 destination）→ reply_policy → reply_gen
+ ~~~
+ 
+ 2026-10-04 已修复 monitor 中三个新增模块的路径。应验证入口引用、依赖顺序和导出函数，而不只直接加载模块跑单元测试。
+@@ -97,3 +98,5 @@ reply_engine → msg_norm → reply_policy → reply_gen
+ 纯模块测试、入口加载检查、离线场景回放、真实模型效果和真实页面发送是不同层次的证据。文档改动先跑文档一致性检查；业务修改按行为选择测试，并查看完整测试的副作用审计。
+ 
+ `docs/specs`、2026-10-03 的 inventory/change_report/test_audit 和历史设计记录保留当时结论。当前代码与现场核验优先，存在后续变动时以当前状态说明补充。
++
++报价目的地契约：Facts.HasAddress 仅表示邮寄地址证据；HasQuoteDestination 表示本轮人工报价目的地可用。goods 的兼容 addr 布尔/字符串改为报价目的地可用/展示值（如 Amazon FTW1），不代表街道地址。quote hash 包含展示目的地，改仓可更新提醒；只有 SENT_OK 写成功提醒状态。summarize 使用同一目的地展示函数。详见 [目的地交付](亚马逊仓库目的地修复交付_20261005.md)。
+diff --git a/docs/CHANGELOG.md b/docs/CHANGELOG.md
+index 9ae725b..05862f7 100644
+--- a/docs/CHANGELOG.md
++++ b/docs/CHANGELOG.md
+@@ -1,5 +1,13 @@
+ ﻿# CHANGELOG - alibaba-auto-reply
+ 
++## 2026-10-05 - Amazon 收货仓代码作为报价目的地（未上线）
++
++- 新增带买家/明确人工来源证据的共享目的地事实，区分仓代码、邮寄地址、未知和歧义；可信顺序支持换仓，旧无时间快照不猜测冲突顺序。
++- 接通回复策略、模型事实区、一次重写/固定回退、发送前检查、goods、人工报价候选/提醒及 summarize 展示，停止重复索取已满足的地址或仓代码。
++- 虚拟数据 B1–B17、故意追问地址的模型桩、真实 goods→quote 模拟提醒、前置冷却回归通过；保留源码修改前失败输出及相对开始工作区差异。见目的地修复交付。
++- 不查询或编造仓库完整地址/价格；未重启生产、投递通知、真实发送、修改版本或发布。
++
++
+ ## 未发布 - 2026-10-05 新消息冷却与统一时间门禁
+ 
+ - 以已有消息顺序修复及回复模块精简工作区为基线，按 [本次 spec](specs/新消息冷却豁免与统一时间门禁_20261005.md) 修订旧无条件五分钟条款；历史事故和验收报告保留。
+diff --git a/docs/specs/亚马逊仓库代码作为报价目的地_20261005.md b/docs/specs/亚马逊仓库代码作为报价目的地_20261005.md
+index ba41190..9884cba 100644
+--- a/docs/specs/亚马逊仓库代码作为报价目的地_20261005.md
++++ b/docs/specs/亚马逊仓库代码作为报价目的地_20261005.md
+@@ -1,128 +1,128 @@
+-# 亚马逊仓库代码作为报价目的地
+-
+-日期：2026-10-05（北京时间）。状态：设计完成，等待前置任务完成后实施。
+-
+-前置任务：[新消息冷却豁免与统一时间门禁](新消息冷却豁免与统一时间门禁_20261005.md)。执行会话 ID：`01a10869-8dd0-7963-8562-d458edd4b491`。只有该任务实现完成并交付通过的离线验收后，才创建本 spec 的新执行会话；暂停、报错、等待用户或单纯处于空闲状态均不代表完成。
+-
+-## 1. 用户确认的业务规则与问题
+-
+-用户明确确认：客户给出作为亚马逊收货仓的代码（本次为 FTW1）即可确定报价目的地，不需要为报价再索要一次街道地址。
+-
+-截图中的回复已经复述了“DDP to Amazon FTW1”，却继续问 delivery address。截图展示的是我方回复，本身不能替代原始买家证据；实现必须从规范化的买家原文确认目的地，不能从机器人自己的复述推导“客户已提供”。测试使用虚拟买家和另编货物数字，不复制真实客户资料。
+-
+-当前链路存在多套地址判断：`msg_norm::Get-ConversationFacts` 生成 `HasAddress`，`reply_policy::Get-AskableFields` 据此决定是否问地址，`reply_gen::Get-FactEvidenceTable` 独立用正则标记地址证据，而 `goods::Get-GoodsDataStatus/Get-GoodsDetails` 又独立决定资料齐全及展示地址，`quote::Get-QuoteReadyBuyers` 依赖其 `addr`。只改提示词或只加一个 FTW1 正则，其他环节仍可能追问或不触发报价提醒。
+-
+-## 2. 目标与边界
+-
+-“完整邮寄地址已提供”与“报价目的地已足够明确”是不同事实。明确的 Amazon/FBA 收货仓代码属于后一类。
+-
+-修正后，买家提供足够明确的亚马逊目的仓代码且现有其他必要货物信息齐全时：不再问街道地址、城市、州、邮编或重复问目的仓代码；资料判断可进入人工报价准备，内部提醒展示仓库代码。
+-
+-本任务不实现自动计算价格或自动发报价、不放宽报价禁令，不补造仓库的街道地址、国家、邮编、营业状态或送仓规则。FTW1 的业务可用性依据本次用户确认；其他代码的“客户已指明目的地”不等于系统已查询验证其真实存在或当前可送达。
+-
+-无需联网仓库目录才能停止重复问地址。后续实际下单、预约或出运所需的运输文件地址由相应业务阶段处理，不能把它变成本轮报价的前置追问。对无法识别或歧义代码可询问准确的亚马逊仓库代码，不能默认要求完整街道地址。
+-
+-## 3. 一个共享的目的地解析结果
+-
+-建立或复用纯函数，从规范化、顺序可信的会话消息获得目的地结果。回复事实、证据表、快照资料判断及报价提醒都消费这一处结果，不复制多套仓库正则。现有普通地址提取可以保留兼容，但仓库代码的识别、选择和冲突处理必须只有一份实现。
+-
+-建议结果字段（名称可按现有风格调整，语义必须保持）：
+-
+-| 字段 | 语义 |
+-|---|---|
+-| `Kind` | `amazon_warehouse` / `postal_address` / `unknown` / `ambiguous` |
+-| `WarehouseCode` | 单一已选中的规范化代码，如 `FTW1`；歧义时不得随意选一个 |
+-| `DisplayName` | 如 `Amazon FTW1`，只含有证据的信息 |
+-| `QuoteUsable` | 当前目的地是否足够进行人工报价准备 |
+-| `HasPostalAddress` | 是否确有完整地址证据；代码本身不能使它为 true |
+-| `Evidence` / `Source` | 哪条买家原文或明确人工确认支持该结果；机器人复述只可作为未确认信息 |
+-| `Candidates` / `Reason` | 多候选、否定、撤销、来源不足等原因，供决策与日志说明 |
+-
+-原 `Facts.HasAddress` 不应因代码存在而谎称完整地址存在。可增加 `Facts.HasQuoteDestination` 和 `Facts.Destination`，让可追问字段中的兼容键 `address` 消费“报价目的地是否足够”。`Get-FactEvidenceTable` 的输出也需区分“仓库代码已提供”与“街道地址未知”，避免上下文一边写 FTW1、一边写报价目的地 unknown。
+-
+-快照消费者通过同一规范化入口解析角色、原文和传输标记，不用机器人的 `[ME]` 回答或文件名、产品 URL、`@@OT` 编码串凑出目的地。历史快照缺可靠消息时间时不得自创排序来解决多个仓库冲突；仅有单一无冲突仓库声明时可保守识别，冲突则待确认。
+-
+-## 4. 识别与更新规则
+-
+-### 4.1 正面证据
+-
+-- 支持 `Amazon FTW1`、`DDP to Amazon FTW1`、`deliver to FBA warehouse FTW1`、`亚马逊 FTW1 仓`、大小写和合理标点差异。代码统一大写。
+-- 可使用明确 Amazon/FBA 送仓对话上下文承接买家的单独代码回答，例如前文确认是送亚马逊，买家后文回答 `FTW1`。这只是解释回答的语境，具体代码仍须由买家提供或由人工明确确认。
+-- 不能以代码形状作为全球仓库数据库。可定义可维护的候选词法规则并说明适用范围；不得用只支持 FTW1 的硬编码，也不得把任意“字母+数字”当仓库。
+-- 英文及中文业务表达至少覆盖。若原文有可靠代码而翻译遗漏，优先使用已解码买家原文；翻译与原文是同一消息，不能把它们计成两个冲突目的地。
+-
+-### 4.2 不构成目的地的情况
+-
+-- 单独出现疑似型号、SKU、订单号、产品链接或文件名，没有亚马逊收货目的地语境。
+-- `Our model is FTW1`、`not FTW1`、`we used FTW1 before`、`pickup from Amazon FTW1` 等型号、否定、历史仓库或提货地点。提货仓不能自动充当收货仓。
+-- 系统卡片、机器人复述、机器人自行猜测；仅有模型推测而无可核对的买家/人工证据。
+-- 仅说 `Amazon warehouse` 或 `FBA`，没有准确仓库标识。
+-
+-### 4.3 变更与冲突
+-
+-- 明确的更改语句（例如“不是 FTW1，改送 TEST2”）按可信消息顺序更新当前目的地，保留证据，不能继续使用旧仓。`TEST2` 在测试里仅为虚拟候选标识，不声称是实际仓库。
+-- `FTW1 or TEST2`、同时列多个仓但未分配货物、旧新代码冲突且未表达替换：标记 ambiguous，问一个明确的问题“Which Amazon warehouse should I quote for?”。
+-- 已选择单仓后，后续无关消息不撤销它；明确取消亚马逊送仓或改送私人地址时，按新目的地重新判断。不能因历史中曾出现 FTW1 就永久停止询问。
+-- 仓库代码与普通地址同时提供、关系清楚时保持两项信息，不重复追问；若明显对应不同送达目标且无法消解，不擅自选一个。
+-
+-## 5. 生产消费链
+-
+-1. `msg_norm` / 共享目的地函数：生成上述目的地事实与证据；保留现有消息身份和顺序保护。
+-2. `reply_policy`：目的地 `QuoteUsable=true` 时，`AskFields` 不得包含兼容键 `address`；歧义时问仓库选择，未知且明确为亚马逊送仓时优先问仓库代码。其他缺失字段仍按既有次数和优先级处理。
+-3. `reply_gen`：事实区明确列出 `quote destination: Amazon FTW1 (buyer provided)`；街道地址可注明未提供但不是本轮报价所需。固定话术和匹配场景示例消费同一事实，附件解析失败、尺寸帮助等回退也不能重新索要已满足的目的地。
+-4. 生成输出检查：增加有针对性的上下文检查（可为 `Test-ReplyCompliance` 增加可选 Decision/Facts 参数），阻止在已确认可报价仓库目的地下重新要求收货街道地址/邮编或重复仓库代码。覆盖正常生成、一次重写、最终回退和实际发送前检查。不能只依赖模型自觉遵守提示词。说明确定性检查的覆盖边界，不宣称能理解所有自然语言。
+-5. `goods`：资料齐全度将“完整地址或有效报价目的地”作为目的地项。返回明确的目的地类型和代码；若保留 `addr` 兼容布尔/字符串，文档标明它代表报价目的地，不代表街道地址，展示值可为 `Amazon FTW1`。
+-6. `quote`：有重量、尺寸及可用目的地时进入原有人工报价候选逻辑；提醒显示“报价目的地：Amazon FTW1”。内容去重包含当前目的地，改仓能触发更新提醒，同一内容仍受原有去重约束。通知失败不能写成提醒成功。
+-7. `summarize` 及其他已发现消费者：统一标签和齐全度语义，不能出现回复不问地址、报告却写“缺地址”的矛盾。不要顺带重写重量、尺寸、货名等其他业务规则。
+-
+-不能把报价候选状态误写成“已报价”或“已通知团队”。单纯代码准备完成也不能解除人工接管名单。现有通知调用时机保持原约束；无法完成真正通知的路径要在报告中说明。
+-
+-## 6. 回复示例（虚拟货物资料）
+-
+-买家原文：“20 cartons, 50 x 40 x 30 cm each, 200 kg gross, DDP to Amazon FTW1.”
+-
+-若目的地与其他必要资料已明确，可回复：
+-
+-> FTW1 works for the destination. I can use the details you've sent to prepare the quote.
+-
+-此句不提供具体价格、期限或通知成功承诺。若还缺重量，则仅追问重量，不能顺带问完整地址。
+-
+-仓库不确定：“Amazon FTW1 or TEST2, not sure yet.”
+-
+-> Which Amazon warehouse should I quote for?
+-
+-## 7. 离线验收
+-
+-先加入至少能复现“事实或 AskFields 仍缺地址”和“报价候选漏收仓库代码”的失败回归，再实现。使用虚拟快照、模拟通知和模型，隔离数据目录与提醒状态。
+-
+-| 编号 | 情景 | 期望 |
+-|---|---|---|
+-| B1 | 完整虚拟货物资料 + 买家 `DDP to Amazon FTW1`，无街道地址 | 目的地可报价，AskFields 无 address，模型上下文证据一致，进入人工报价候选 |
+-| B2 | B1，但模型输出“please send the delivery address” | 输出检查阻断；至多一次重写或合规回退，最终不追问地址 |
+-| B3 | B1，模型不可用 | 固定话术不问街道地址/邮编，不编造价格或期限 |
+-| B4 | 大小写、标点、中英表达；翻译遗漏代码但原文有代码 | 规范化到 FTW1，识别结果一致 |
+-| B5 | 明确 Amazon/FBA 对话后买家单独回复 FTW1 | 承接语境，代码证据来自买家 |
+-| B6 | 只有机器人说 FTW1，或产品型号/URL/附件名含 FTW1 | 不构成已提供报价目的地 |
+-| B7 | 亚马逊送仓但没仓库代码；未知候选格式 | 询问准确目的仓代码，不默认索要街道地址 |
+-| B8 | 否定 FTW1、历史仓、提货仓、取消送仓 | 不继续使用旧目的地；依当前目标决策 |
+-| B9 | 明确由 FTW1 改成虚拟仓 TEST2 | 当前目的地、模型上下文、goods 展示与提醒 hash 同步变更 |
+-| B10 | 同时有两个未选定目的仓，或仓库与地址冲突 | ambiguous，不自动选仓，不标记资料齐全，单次询问选择 |
+-| B11 | FTW1 已确定，但缺重量或尺寸 | 只问确实缺失且可问的字段；不能因有仓库就声称全部资料齐全 |
+-| B12 | 普通私人收货地址或非亚马逊送货，确实未提供目的地 | 保留原有合理地址追问和地址归属澄清 |
+-| B13 | 报价提醒 | 展示 FTW1 而非“地址未知”；相同内容不重复提醒，改仓可更新；失败不推进成功状态 |
+-| B14 | 系统卡片、消息顺序不可信、人工接管、人工插话 | 保留原阻断；不从机器人补全资料，不自动发价格 |
+-| B15 | 三条消息分批提供货物信息、仓库代码、再催报价 | 当前完整事实可用，无重复地址追问；催价仍受现有报价权限约束 |
+-| B16 | 报告及资料齐全度消费者 | 与回复链一致；没有完整地址仍可展示可报价仓库目的地，但不伪造地址已提供 |
+-| B17 | 附件解析失败/尺寸帮助等回退，当前已明确 FTW1 | 回退也不重复索要地址；其他必要缺失信息保持原规则 |
+-
+-至少一条回归必须走真实生成检查链（模型桩故意索要地址），至少一条走真实 goods → quote 候选与模拟提醒链，不能只断言新解析器识别 FTW1。后续实现不得破坏前置时间门禁 spec 的入口验收。
+-
+-## 8. 执行与交付
+-
+-- 前置任务完成并验收后，在同一项目创建独立新会话，从前置任务完成后的工作区继续。保留所有未提交修改，不重置、不覆盖前置成果。
+-- 先读 `SKILL.md`、前置 spec、消息顺序修复文档及测试副作用审计。PowerShell 5.1 兼容、UTF-8 BOM；新共享函数避免引入循环加载或重复定义。
+-- 逐个审查并运行相关纯逻辑/隔离测试：新增目的地回归、reply_chain、dimension_guidance、message_order、goods_engine、前置时间门禁入口回归、docs_consistency 与离线 acceptance。不默认运行不隔离的全套测试；不直接加载 monitor 主循环。
+-- 不重启监控或 watchdog、不启停计划任务、不修改生产配置/账本、不访问真实买家试发送、不真实投递通知、不提交或推送。上线仍等待单独指令。
+-- 更新当前状态、项目地图中涉及的共享职责、场景示例、报告说明和 CHANGELOG。提交交付报告，列明失败基线、已通过验收、未覆盖语义/候选格式边界，以及代码尚未上线。
+-
+-完成条件：B1–B17 的对应行为得到验证，共享目的地事实贯通回复追问、输出检查、回退、资料齐全度和人工报价提醒；同仓不重复问地址，歧义不会被当作可报价单仓，普通地址业务与前置冷却修正仍保持正确。
++﻿# 亚马逊仓库代码作为报价目的地
++
++日期：2026-10-05（北京时间）。状态：工作区源码修正与 B1–B17 隔离离线验收完成；未上线。见 [修复交付](../亚马逊仓库目的地修复交付_20261005.md)。
++
++前置任务：[新消息冷却豁免与统一时间门禁](新消息冷却豁免与统一时间门禁_20261005.md)。执行会话 ID：`01a10869-8dd0-7963-8562-d458edd4b491`。只有该任务实现完成并交付通过的离线验收后，才创建本 spec 的新执行会话；暂停、报错、等待用户或单纯处于空闲状态均不代表完成。
++
++## 1. 用户确认的业务规则与问题
++
++用户明确确认：客户给出作为亚马逊收货仓的代码（本次为 FTW1）即可确定报价目的地，不需要为报价再索要一次街道地址。
++
++截图中的回复已经复述了“DDP to Amazon FTW1”，却继续问 delivery address。截图展示的是我方回复，本身不能替代原始买家证据；实现必须从规范化的买家原文确认目的地，不能从机器人自己的复述推导“客户已提供”。测试使用虚拟买家和另编货物数字，不复制真实客户资料。
++
++当前链路存在多套地址判断：`msg_norm::Get-ConversationFacts` 生成 `HasAddress`，`reply_policy::Get-AskableFields` 据此决定是否问地址，`reply_gen::Get-FactEvidenceTable` 独立用正则标记地址证据，而 `goods::Get-GoodsDataStatus/Get-GoodsDetails` 又独立决定资料齐全及展示地址，`quote::Get-QuoteReadyBuyers` 依赖其 `addr`。只改提示词或只加一个 FTW1 正则，其他环节仍可能追问或不触发报价提醒。
++
++## 2. 目标与边界
++
++“完整邮寄地址已提供”与“报价目的地已足够明确”是不同事实。明确的 Amazon/FBA 收货仓代码属于后一类。
++
++修正后，买家提供足够明确的亚马逊目的仓代码且现有其他必要货物信息齐全时：不再问街道地址、城市、州、邮编或重复问目的仓代码；资料判断可进入人工报价准备，内部提醒展示仓库代码。
++
++本任务不实现自动计算价格或自动发报价、不放宽报价禁令，不补造仓库的街道地址、国家、邮编、营业状态或送仓规则。FTW1 的业务可用性依据本次用户确认；其他代码的“客户已指明目的地”不等于系统已查询验证其真实存在或当前可送达。
++
++无需联网仓库目录才能停止重复问地址。后续实际下单、预约或出运所需的运输文件地址由相应业务阶段处理，不能把它变成本轮报价的前置追问。对无法识别或歧义代码可询问准确的亚马逊仓库代码，不能默认要求完整街道地址。
++
++## 3. 一个共享的目的地解析结果
++
++建立或复用纯函数，从规范化、顺序可信的会话消息获得目的地结果。回复事实、证据表、快照资料判断及报价提醒都消费这一处结果，不复制多套仓库正则。现有普通地址提取可以保留兼容，但仓库代码的识别、选择和冲突处理必须只有一份实现。
++
++建议结果字段（名称可按现有风格调整，语义必须保持）：
++
++| 字段 | 语义 |
++|---|---|
++| `Kind` | `amazon_warehouse` / `postal_address` / `unknown` / `ambiguous` |
++| `WarehouseCode` | 单一已选中的规范化代码，如 `FTW1`；歧义时不得随意选一个 |
++| `DisplayName` | 如 `Amazon FTW1`，只含有证据的信息 |
++| `QuoteUsable` | 当前目的地是否足够进行人工报价准备 |
++| `HasPostalAddress` | 是否确有完整地址证据；代码本身不能使它为 true |
++| `Evidence` / `Source` | 哪条买家原文或明确人工确认支持该结果；机器人复述只可作为未确认信息 |
++| `Candidates` / `Reason` | 多候选、否定、撤销、来源不足等原因，供决策与日志说明 |
++
++原 `Facts.HasAddress` 不应因代码存在而谎称完整地址存在。可增加 `Facts.HasQuoteDestination` 和 `Facts.Destination`，让可追问字段中的兼容键 `address` 消费“报价目的地是否足够”。`Get-FactEvidenceTable` 的输出也需区分“仓库代码已提供”与“街道地址未知”，避免上下文一边写 FTW1、一边写报价目的地 unknown。
++
++快照消费者通过同一规范化入口解析角色、原文和传输标记，不用机器人的 `[ME]` 回答或文件名、产品 URL、`@@OT` 编码串凑出目的地。历史快照缺可靠消息时间时不得自创排序来解决多个仓库冲突；仅有单一无冲突仓库声明时可保守识别，冲突则待确认。
++
++## 4. 识别与更新规则
++
++### 4.1 正面证据
++
++- 支持 `Amazon FTW1`、`DDP to Amazon FTW1`、`deliver to FBA warehouse FTW1`、`亚马逊 FTW1 仓`、大小写和合理标点差异。代码统一大写。
++- 可使用明确 Amazon/FBA 送仓对话上下文承接买家的单独代码回答，例如前文确认是送亚马逊，买家后文回答 `FTW1`。这只是解释回答的语境，具体代码仍须由买家提供或由人工明确确认。
++- 不能以代码形状作为全球仓库数据库。可定义可维护的候选词法规则并说明适用范围；不得用只支持 FTW1 的硬编码，也不得把任意“字母+数字”当仓库。
++- 英文及中文业务表达至少覆盖。若原文有可靠代码而翻译遗漏，优先使用已解码买家原文；翻译与原文是同一消息，不能把它们计成两个冲突目的地。
++
++### 4.2 不构成目的地的情况
++
++- 单独出现疑似型号、SKU、订单号、产品链接或文件名，没有亚马逊收货目的地语境。
++- `Our model is FTW1`、`not FTW1`、`we used FTW1 before`、`pickup from Amazon FTW1` 等型号、否定、历史仓库或提货地点。提货仓不能自动充当收货仓。
++- 系统卡片、机器人复述、机器人自行猜测；仅有模型推测而无可核对的买家/人工证据。
++- 仅说 `Amazon warehouse` 或 `FBA`，没有准确仓库标识。
++
++### 4.3 变更与冲突
++
++- 明确的更改语句（例如“不是 FTW1，改送 TEST2”）按可信消息顺序更新当前目的地，保留证据，不能继续使用旧仓。`TEST2` 在测试里仅为虚拟候选标识，不声称是实际仓库。
++- `FTW1 or TEST2`、同时列多个仓但未分配货物、旧新代码冲突且未表达替换：标记 ambiguous，问一个明确的问题“Which Amazon warehouse should I quote for?”。
++- 已选择单仓后，后续无关消息不撤销它；明确取消亚马逊送仓或改送私人地址时，按新目的地重新判断。不能因历史中曾出现 FTW1 就永久停止询问。
++- 仓库代码与普通地址同时提供、关系清楚时保持两项信息，不重复追问；若明显对应不同送达目标且无法消解，不擅自选一个。
++
++## 5. 生产消费链
++
++1. `msg_norm` / 共享目的地函数：生成上述目的地事实与证据；保留现有消息身份和顺序保护。
++2. `reply_policy`：目的地 `QuoteUsable=true` 时，`AskFields` 不得包含兼容键 `address`；歧义时问仓库选择，未知且明确为亚马逊送仓时优先问仓库代码。其他缺失字段仍按既有次数和优先级处理。
++3. `reply_gen`：事实区明确列出 `quote destination: Amazon FTW1 (buyer provided)`；街道地址可注明未提供但不是本轮报价所需。固定话术和匹配场景示例消费同一事实，附件解析失败、尺寸帮助等回退也不能重新索要已满足的目的地。
++4. 生成输出检查：增加有针对性的上下文检查（可为 `Test-ReplyCompliance` 增加可选 Decision/Facts 参数），阻止在已确认可报价仓库目的地下重新要求收货街道地址/邮编或重复仓库代码。覆盖正常生成、一次重写、最终回退和实际发送前检查。不能只依赖模型自觉遵守提示词。说明确定性检查的覆盖边界，不宣称能理解所有自然语言。
++5. `goods`：资料齐全度将“完整地址或有效报价目的地”作为目的地项。返回明确的目的地类型和代码；若保留 `addr` 兼容布尔/字符串，文档标明它代表报价目的地，不代表街道地址，展示值可为 `Amazon FTW1`。
++6. `quote`：有重量、尺寸及可用目的地时进入原有人工报价候选逻辑；提醒显示“报价目的地：Amazon FTW1”。内容去重包含当前目的地，改仓能触发更新提醒，同一内容仍受原有去重约束。通知失败不能写成提醒成功。
++7. `summarize` 及其他已发现消费者：统一标签和齐全度语义，不能出现回复不问地址、报告却写“缺地址”的矛盾。不要顺带重写重量、尺寸、货名等其他业务规则。
++
++不能把报价候选状态误写成“已报价”或“已通知团队”。单纯代码准备完成也不能解除人工接管名单。现有通知调用时机保持原约束；无法完成真正通知的路径要在报告中说明。
++
++## 6. 回复示例（虚拟货物资料）
++
++买家原文：“20 cartons, 50 x 40 x 30 cm each, 200 kg gross, DDP to Amazon FTW1.”
++
++若目的地与其他必要资料已明确，可回复：
++
++> FTW1 works for the destination. I can use the details you've sent to prepare the quote.
++
++此句不提供具体价格、期限或通知成功承诺。若还缺重量，则仅追问重量，不能顺带问完整地址。
++
++仓库不确定：“Amazon FTW1 or TEST2, not sure yet.”
++
++> Which Amazon warehouse should I quote for?
++
++## 7. 离线验收
++
++先加入至少能复现“事实或 AskFields 仍缺地址”和“报价候选漏收仓库代码”的失败回归，再实现。使用虚拟快照、模拟通知和模型，隔离数据目录与提醒状态。
++
++| 编号 | 情景 | 期望 |
++|---|---|---|
++| B1 | 完整虚拟货物资料 + 买家 `DDP to Amazon FTW1`，无街道地址 | 目的地可报价，AskFields 无 address，模型上下文证据一致，进入人工报价候选 |
++| B2 | B1，但模型输出“please send the delivery address” | 输出检查阻断；至多一次重写或合规回退，最终不追问地址 |
++| B3 | B1，模型不可用 | 固定话术不问街道地址/邮编，不编造价格或期限 |
++| B4 | 大小写、标点、中英表达；翻译遗漏代码但原文有代码 | 规范化到 FTW1，识别结果一致 |
++| B5 | 明确 Amazon/FBA 对话后买家单独回复 FTW1 | 承接语境，代码证据来自买家 |
++| B6 | 只有机器人说 FTW1，或产品型号/URL/附件名含 FTW1 | 不构成已提供报价目的地 |
++| B7 | 亚马逊送仓但没仓库代码；未知候选格式 | 询问准确目的仓代码，不默认索要街道地址 |
++| B8 | 否定 FTW1、历史仓、提货仓、取消送仓 | 不继续使用旧目的地；依当前目标决策 |
++| B9 | 明确由 FTW1 改成虚拟仓 TEST2 | 当前目的地、模型上下文、goods 展示与提醒 hash 同步变更 |
++| B10 | 同时有两个未选定目的仓，或仓库与地址冲突 | ambiguous，不自动选仓，不标记资料齐全，单次询问选择 |
++| B11 | FTW1 已确定，但缺重量或尺寸 | 只问确实缺失且可问的字段；不能因有仓库就声称全部资料齐全 |
++| B12 | 普通私人收货地址或非亚马逊送货，确实未提供目的地 | 保留原有合理地址追问和地址归属澄清 |
++| B13 | 报价提醒 | 展示 FTW1 而非“地址未知”；相同内容不重复提醒，改仓可更新；失败不推进成功状态 |
++| B14 | 系统卡片、消息顺序不可信、人工接管、人工插话 | 保留原阻断；不从机器人补全资料，不自动发价格 |
++| B15 | 三条消息分批提供货物信息、仓库代码、再催报价 | 当前完整事实可用，无重复地址追问；催价仍受现有报价权限约束 |
++| B16 | 报告及资料齐全度消费者 | 与回复链一致；没有完整地址仍可展示可报价仓库目的地，但不伪造地址已提供 |
++| B17 | 附件解析失败/尺寸帮助等回退，当前已明确 FTW1 | 回退也不重复索要地址；其他必要缺失信息保持原规则 |
++
++至少一条回归必须走真实生成检查链（模型桩故意索要地址），至少一条走真实 goods → quote 候选与模拟提醒链，不能只断言新解析器识别 FTW1。后续实现不得破坏前置时间门禁 spec 的入口验收。
++
++## 8. 执行与交付
++
++- 前置任务完成并验收后，在同一项目创建独立新会话，从前置任务完成后的工作区继续。保留所有未提交修改，不重置、不覆盖前置成果。
++- 先读 `SKILL.md`、前置 spec、消息顺序修复文档及测试副作用审计。PowerShell 5.1 兼容、UTF-8 BOM；新共享函数避免引入循环加载或重复定义。
++- 逐个审查并运行相关纯逻辑/隔离测试：新增目的地回归、reply_chain、dimension_guidance、message_order、goods_engine、前置时间门禁入口回归、docs_consistency 与离线 acceptance。不默认运行不隔离的全套测试；不直接加载 monitor 主循环。
++- 不重启监控或 watchdog、不启停计划任务、不修改生产配置/账本、不访问真实买家试发送、不真实投递通知、不提交或推送。上线仍等待单独指令。
++- 更新当前状态、项目地图中涉及的共享职责、场景示例、报告说明和 CHANGELOG。提交交付报告，列明失败基线、已通过验收、未覆盖语义/候选格式边界，以及代码尚未上线。
++
++完成条件：B1–B17 的对应行为得到验证，共享目的地事实贯通回复追问、输出检查、回退、资料齐全度和人工报价提醒；同仓不重复问地址，歧义不会被当作可报价单仓，普通地址业务与前置冷却修正仍保持正确。
+diff --git a/tools/acceptance/README.md b/tools/acceptance/README.md
+index 40f29cd..1a73be9 100644
+--- a/tools/acceptance/README.md
++++ b/tools/acceptance/README.md
+@@ -30,4 +30,10 @@ powershell -ExecutionPolicy Bypass -NoProfile -File tools\acceptance\old_vs_new.
+ 
+ ## 发布前
+ 
++仓代码目的地专项验收：`tests/amazon_destination.tests.ps1` 使用虚拟买家、独立临时
++快照/提醒账本和模型/通知桩，覆盖共享目的地、真实生成重写、goods→quote 及报告表格。
++`tests/new_message_cooldown.tests.ps1` 另在保留 A1–A14 的真实入口保护上验证仓代码回复的
++生成检查、发送前检查和人工让路。它们均不加载 monitor 主循环，也不投递真实通知。
++证据及边界见 [目的地修复交付](../../docs/亚马逊仓库目的地修复交付_20261005.md)。
++
+ 先运行回复链与建议测试，使用桩模型回放验证实际源码。脱敏检查会阻止本机真实路径与凭据进入提交；本机配置、运行数据和临时排查脚本不入库。
+diff --git a/docs/亚马逊仓库目的地修复交付_20261005.md b/docs/亚马逊仓库目的地修复交付_20261005.md
+new file mode 100644
+index 0000000..7c2ecba
+--- /dev/null
++++ b/docs/亚马逊仓库目的地修复交付_20261005.md
+@@ -0,0 +1,64 @@
++# 亚马逊仓库目的地修复交付
++
++日期：2026-10-05（北京时间）。按 [本次 spec](specs/亚马逊仓库代码作为报价目的地_20261005.md) 完成工作区源码修正及隔离离线验收；代码尚未上线，未验证真实模型、买家发送或通知投递。
++
++买家明确提供 Amazon/FBA 收货仓代码时，该代码满足人工报价准备的目的地项。FTW1 无需再提供街道地址；仍须遵守重量、尺寸、人工报价权限及原有消息/接管保护。代码不代表仓库真实存在、当前可送达，也不代表已提供街道地址。
++
++## 实现与原有工作区
++
++以任务开始时的完整工作区副本为基线，保留消息顺序修复、回复模块精简及前置冷却修正，没有用 HEAD 覆盖文件。本次独立差异见 [task_delta.patch](verification/amazon_destination_20261005/task_delta.patch)，开始/完成源码 SHA256 及未涉及文件一致性见 [workspace_preservation.txt](verification/amazon_destination_20261005/workspace_preservation.txt)。Git 对 HEAD 的总差异含前置成果，不全部归于本次。
++
++- `lib/destination.ps1` 为唯一仓代码识别/选择实现。消费规范化角色、解码买家原文、系统卡片过滤和可信顺序，返回 Kind、WarehouseCode、DisplayName、QuoteUsable、HasPostalAddress、PostalAddress、Source、Evidence、Candidates、Reason、Notes、AmazonContext。来源仅为买家，或明确写有确认目的地的人工消息；机器人只能提供仓代码提问语境，不能提供已确认代码。
++- `msg_norm` 保持消息 schema 3、顺序及身份保护；事实增加 HasQuoteDestination/Destination。HasAddress 仅表示邮寄地址证据，不因仓代码为 true。`reply_policy` 的兼容 address 字段改为报价目的地；未知 Amazon 目的地优先问准确仓代码，冲突只问一个目的地选择问题，原追问次数限制保留。
++- `reply_gen` 用同一解析器建立事实证据表，区分当前目的地与街道地址。场景示例、固定话术、附件读取失败和尺寸帮助遵循当前缺失字段。正常模型、至多一次重写、不可用模型回退、最终回退都检查目的地追问；不合规生成回退返回空文本/BLOCKED。
++- `monitor` 发送前从当前可信会话重建策略，传给同一个 Test-ReplyCompliance；即使适配器返回未检查的地址追问也替换为合规回退。保留原预算、时间、去重、人工接管/插话、页面身份与发送成功条件。报价通知仍仅在原先的成功发送后处理位置调用。
++- `goods` 快照复用 ConvertTo-MessageList → Get-QuoteDestination。`addr` 是兼容的报价目的地布尔/展示字符串，如 Amazon FTW1，不是街道地址声明；Destination 和 HasPostalAddress 显式返回。没有快照的附件 sidecar 不补目的地。重量、尺寸、箱数、品名和供应商提取规则未重写。
++- `quote` 候选携带 Destination；提醒展示“报价目的地：Amazon FTW1”，既有内容 hash 含目的地展示值，所以换仓可更新，24 小时同内容去重保留。失败通知不计成功、不推进提醒账本。`summarize` 显示同一目的地，reply_metrics/analyze_replies 的“可报价”标签也统一到报价目的地。报告仍保留原有货物名称参考/缺失规则，候选不表示已报价或已通知。
++
++同步当前状态、项目地图、CHANGELOG、spec 状态、模型提示词、场景示例和验收工具说明；未改 VERSION。
++
++## 副作用审查和失败基线
++
++执行前阅读项目 SKILL、前置 spec/交付、消息顺序交付及 [测试副作用审计](test_audit_20261003.md)，再审阅所运行的当前测试。没有运行 tests/run_tests.ps1 或其他不隔离的整套测试。
++
++新增目的地测试只在 GUID 独立临时目录写虚拟快照与模拟提醒状态；模型和 Send-WecomMessage 是桩，默认生产路径解析直接抛错。真实执行规范化、策略、模型上下文/生成、合规检查、goods、quote、指标和报告表格。报告只提取资料表格的代码片段，数据目录由包装函数传入临时目录，不执行 summarize 顶层报告 I/O。
++
++前置入口测试只 AST 提取 monitor 函数；真实执行入口、策略、生成和发送前检查。页面、时钟、发送、通知、配置和持久化为桩，不加载 monitor 主循环。其他关联测试使用生产纯函数、AST 或仓库夹具，message_order 仅运行本地 Node DOM 桩并清理临时文件；docs_consistency 只读配置。回放使用独立临时目录、20 个虚拟场景和模型桩。未访问浏览器、网络、真实模型、计划任务或服务。
++
++生产源码修改前的新增回归为 **pass=0 / fail=3 / exit=1**：缺 HasQuoteDestination、AskFields 仍包含 address、goods→quote 漏收仓代码。保留 [失败输出](verification/amazon_destination_20261005/failed_baseline.txt)，没有改写历史失败。
++
++## 行为验收
++
++| 编号 | 真实行为覆盖 |
++|---|---|
++| B1 | 完整虚拟货物+FTW1；HasQuoteDestination=true、HasAddress=false，无 address 追问；上下文证据一致；真实 goods→quote 候选 |
++| B2 | 模型故意追问地址，两次模型调用后合规回退；邮编/城市/州/仓代码及 FTW1 确认问句被阻断；过大重写预算仍夹限一次；真实入口及绕过生成检查的适配器验证发送前拦截 |
++| B3 | 没有 Invoke-LLM 的真实生成路径返回合规固定话术；没有价格或期限 |
++| B4 | 大小写、标点、中英 Amazon/FBA 表达和另一代码；翻译遗漏代码而 @@OT 原文保留时正确识别 |
++| B5 | 可信送仓上下文后买家单独回答代码；机器人提问只提供语境，代码证据仍来自买家 |
++| B6 | 型号/SKU/订单号/URL/附件名、裸代码及机器人复述不构成目的地；明确人工确认记录 human 来源，机器人不能伪装确认 |
++| B7 | Amazon/FBA 无代码及不支持格式，固定话术问准确收货仓代码 |
++| B8 | 否定、历史仓、提货仓和型号排除；可信取消/否定撤销已选仓；无关消息保留仓 |
++| B9 | 中英明确换仓，当前代码、上下文、goods 展示同步；提醒内容变化见 B13 |
++| B10 | 未选多仓、跨消息冲突、仓与私人地址备选冲突，以及有效代码+不支持备选格式均不当作可报价单仓；只问一次选择；明确同消息关联地址可保留两类事实 |
++| B11 | 已有 FTW1 但缺重量或尺寸，只问缺字段，goods 不齐全、quote 不收候选 |
++| B12 | 私人街道地址可用；普通未知收货地继续问地址；地址归属澄清保留；可信改送私人地址撤销仓目的地 |
++| B13 | 真实 goods→quote→模拟提醒，展示仓代码；同内容不重复、换仓可提醒；失败不改成功账本 |
++| B14 | 系统卡片、无可信顺序的多目标不生成；旧单一声明保守识别；人工接管及真实人工插话入口保护不被仓目的地绕过，报价禁令保留 |
++| B15 | 货物信息、仓代码、催价分三条提供；当前完整事实可用，无重复地址追问，催价仍需人工事实 |
++| B16 | goods 状态、真实汇总表格及真实可报价统计均消费同一目的地；FTW1 展示明确且 HasPostalAddress=false |
++| B17 | 附件解析失败、尺寸帮助/没有供应商的回退不重复索取地址或仓代码，其他字段仍缺失 |
++
++最终 [通过输出](verification/amazon_destination_20261005/passed_tests.txt)：目的地专项 80/0；前置冷却入口 79/0（原有 75 项全部保留，另加本次 4 项）；reply_chain 148/0；dimension_guidance 44/0；message_order 35/0；goods_engine 27/0；reply_engine 75/0；reply_gate_dupskip 41/0；should_reply_v2 90/0；docs_consistency 17/0。每个测试子进程 exit=0。
++
++20 场景离线回放：20/20，580 个断言、0 失败；报告见 [reply_chain_replay.md](verification/amazon_destination_20261005/reply_chain_replay.md)。模拟时间仅验证工具链，不能代表平台响应时效。变更 .ps1 使用 Windows PowerShell 5.1 运行，保持 UTF-8 BOM；语法及编码核验见保存的通过输出。
++
++## 实现边界及上线状态
++
++- 仓代码词法为 3–4 个 ASCII 字母+1–2 位数字，必须有 Amazon/FBA 收货语境；TEST2 仅为虚拟测试标识。未联网验证仓库目录、国家、街道、邮编、营业状态或送仓规则。未覆盖其他代码格式、仓别名、跨语种的所有表达。
++- 解析是保守规则，不理解所有自然语言。复杂的“历史仓+新仓”同句、提货和收货混句等可能整体排除，需进一步确认。不同消息里的仓与地址默认视为潜在冲突；只对同消息无备选关系的仓与地址作关联。旧快照无可靠顺序时不按文件名、DOM 或渲染时间猜换仓。
++- 输出检查覆盖常见英文地址/邮编/城市/州/仓代码请求和已知代码确认问句；不是通用语义理解，可能保守误拦包含这些词的句子，未宣称阻止所有绕写法。合规固定回退和实际发送前检查继续兜底，真实模型效果尚待授权验收。
++- 字符串地址证据沿用有限街道/显式地址标签规则，不表示已校验邮政完整性；仓代码永不补造地址。附件 sidecar 不推断仓库。人工确认必须来自已规范化的 human 来源且有明确确认措辞。
++- 人工报价候选和内部提醒不自动算价、不自动发报价，也不清除接管名单。既有 NeedHumanTodo 仍只是标记，未新增真实待办系统；不能声称已交接团队。
++
++未重启 monitor/watchdog、启停任务、改生产配置/账本或执行真实买家发送/通知。生产运行状态按任务授权保持，本次未以状态脚本触发健康恢复。未提交、推送、更新版本或发布；统一审查、脱敏和 0.0.2 发布由发起会话负责。后续上线须单独授权，重新加载源码后再验真实模型、发送及提醒，不将本交付当作已上线证据。

@@ -1,0 +1,5 @@
+FAIL B1 quote destination fact
+FAIL B1 no address ask
+FAIL B1 goods to quote candidate
+RESULT pass=0 fail=3
+exit=1

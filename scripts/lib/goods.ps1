@@ -1,8 +1,21 @@
 ﻿# lib/goods.ps1 - 买家货物数据判断(从 summarize.ps1 抽取,复用不复制)
-# Get-GoodsDataStatus: 判断快照中买家货物 5 项数据齐全度(重量/尺寸/图片/地址/供应商)
+# Get-GoodsDataStatus: 判断快照中买家货物 5 项数据齐全度(重量/尺寸/图片/报价目的地/供应商)
 # Get-GoodsName: 提取货物品名(产品链接标题优先,其次品名词)
-# Get-GoodsDetails: 提取重量/尺寸/地址具体值
+# Get-GoodsDetails: 提取重量/尺寸/报价目的地具体值
 # 依赖: config.ps1(Get-SkillPath "data")
+if (-not (Get-Command ConvertTo-MessageList -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot 'msg_norm.ps1')
+}
+# Same role/original/transport normalization as the reply chain. No snapshot filename evidence.
+function Get-SnapshotDestination([string]$raw) {
+    return Get-QuoteDestination (ConvertTo-MessageList $raw)
+}
+# Shared presentation for quote reminders and reports (addr means quote destination).
+function Get-GoodsDestinationLabel($Status) {
+    if ($Status -and $Status.Destination -and $Status.Destination.QuoteUsable) { return $Status.Destination.DisplayName }
+    if ($Status -and $Status.Destination -and $Status.Destination.Kind -eq 'ambiguous') { return '待确认报价目的地' }
+    return '未知报价目的地'
+}
 # 快照查找(三个函数共用):返回该买家最新的 msgs_*.txt(文件名升序中最后一个匹配,即最新快照)
 function Get-LatestSnapshot([string]$buyer, [string]$snapDir = "") {
     if (-not $snapDir) { $snapDir = Get-SkillPath "data" }
@@ -33,25 +46,26 @@ function Get-GoodsDataStatus([string]$buyer, [string]$snapDir = "") {
     $side = Get-VisionSidecarForGoods $buyer $snapDir
     $latest = Get-LatestSnapshot $buyer $snapDir
     if (-not $latest) {
+        $unknownDestination = Get-SnapshotDestination ''
         if ($side -and ($side.weight_kg -or $side.dims)) {
-            return @{ weight = [bool]$side.weight_kg; dims = [bool]$side.dims; img = $false; addr = $false; supplier = $false; file = $null; source = 'vision' }
+            return @{ weight = [bool]$side.weight_kg; dims = [bool]$side.dims; img = $false; addr = $false; supplier = $false; file = $null; source = 'vision'; Destination = $unknownDestination; HasPostalAddress = $false }
         }
         return $null
     }
     $raw = Get-Content $latest.FullName -Raw -Encoding UTF8
-    $w = $false; $d = $false; $i = $false; $a = $false; $s = $false
+    $destination = Get-SnapshotDestination $raw
+    $w = $false; $d = $false; $i = $false; $s = $false
     foreach ($line in @($raw -split "`r?`n")) {
         if ($line -notmatch '^\[BUYER\]') { continue }
         if ($line -match '(?i)\b\d+(\.\d+)?\s*(kg|kgs|kilograms?|ton|tons|tonnes?)\b') { $w = $true }
         if ($line -match '(?i)\bdimensions?\b' -or $line -match '\b\d+\s*[x×*]\s*\d+\s*[x×*]\s*\d+\s*(cm|mm|m)?\b') { $d = $true }
         if ($line -match '\[IMG\]') { $i = $true }
-        if ($line -match '(?i)\b(address|street|avenue|av\.|avenida|rua|calle|road|endere[cç]o|direcci[oó]n|cep|zip code)\b' -or $line -match '(?i)(brazil|brasil|united states|usa|eua|estados unidos|são paulo|sao paulo|rio de janeiro|los angeles|new york|houston|miami|dallas|curitiba|manaus|fortaleza|recife|belo horizonte|porto alegre)') { $a = $true }
         if ($line -match '(?i)\b(supplier|vendor|fornecedor|proveedor|fabricante|manufacturer)\b') { $s = $true }
     }
     # B6: 快照正则外合并 sidecar(附件识别提取的重量/尺寸)
     if (-not $w -and $side -and $side.weight_kg) { $w = $true }
     if (-not $d -and $side -and $side.dims) { $d = $true }
-    return @{ weight = $w; dims = $d; img = $i; addr = $a; supplier = $s; file = $latest.Name }
+    return @{ weight = $w; dims = $d; img = $i; addr = $destination.QuoteUsable; supplier = $s; file = $latest.Name; Destination = $destination; HasPostalAddress = $destination.HasPostalAddress }
 }
 
 function Get-GoodsName([string]$buyer, [string]$snapDir = "") {
@@ -103,15 +117,16 @@ function Get-GoodsName([string]$buyer, [string]$snapDir = "") {
     return @{ known = $false; name = "未知" }
 }
 
-# 提取买家货物详情具体值(重量/尺寸/地址),供报价提醒展示。提取不到返回空串。
+# 提取买家货物详情具体值(重量/尺寸/报价目的地),供报价提醒展示。提取不到返回空串。
 function Get-GoodsDetails([string]$buyer, [string]$snapDir = "") {
     $side = Get-VisionSidecarForGoods $buyer $snapDir
     $latest = Get-LatestSnapshot $buyer $snapDir
     if (-not $latest) {
+        $unknownDestination = Get-SnapshotDestination ''
         if ($side) {
-            return @{ weight = [string]$side.weight_kg; dims = [string]$side.dims; addr = ''; qty = [string]$side.cartons; unit_weight = ''; transport = '' }
+            return @{ weight = [string]$side.weight_kg; dims = [string]$side.dims; addr = ''; qty = [string]$side.cartons; unit_weight = ''; transport = ''; Destination = $unknownDestination; HasPostalAddress = $false }
         }
-        return @{ weight = ''; dims = ''; addr = '' }
+        return @{ weight = ''; dims = ''; addr = ''; Destination = $unknownDestination; HasPostalAddress = $false }
     }
     $weight = ''; $dims = ''; $addr = ''; $qty = ''; $unitW = ''; $transport = ''
     foreach ($line in @((Get-Content $latest.FullName -Raw -Encoding UTF8) -split "`r?`n")) {
@@ -190,5 +205,8 @@ function Get-GoodsDetails([string]$buyer, [string]$snapDir = "") {
     if (-not $weight -and $side -and $side.weight_kg) { $weight = [string]$side.weight_kg }
     if (-not $dims -and $side -and $side.dims) { $dims = [string]$side.dims }
     if (-not $qty -and $side -and $side.cartons) { $qty = [string]$side.cartons }
-    return @{ weight = $weight; dims = $dims; addr = $addr; qty = $qty; unit_weight = $unitW; transport = $transport }
+    $destination = Get-SnapshotDestination (Get-Content $latest.FullName -Raw -Encoding UTF8)
+    $addr = ''
+    if ($destination.QuoteUsable) { $addr = $destination.DisplayName }
+    return @{ weight = $weight; dims = $dims; addr = $addr; qty = $qty; unit_weight = $unitW; transport = $transport; Destination = $destination; HasPostalAddress = $destination.HasPostalAddress }
 }

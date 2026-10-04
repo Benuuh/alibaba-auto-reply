@@ -34,12 +34,12 @@ try {
     )
     $lines = @(ConvertTo-ReplyLines $msgs 7)
     Assert-Eq "l1-count-skip-empty" $lines.Count 3
-    Assert-True "l1-newest-first" ($lines[0] -eq '[BUYER] buyer latest @@TS:300')
-    Assert-True "l1-me-mapping" ($lines[1] -eq '[ME] us reply @@TS:200')
-    Assert-True "l1-newline-collapsed" ($lines[2] -eq '[ME] hello world @@TS:100')
+    Assert-True "l1-newest-first" ($lines[0] -eq '[BUYER] buyer latest @@TS:300 @@MT:300')
+    Assert-True "l1-me-mapping" ($lines[1] -eq '[ME] us reply @@TS:200 @@MT:200')
+    Assert-True "l1-newline-collapsed" ($lines[2] -eq '[ME] hello world @@TS:100 @@MT:100')
     Assert-Eq "l1-empty-input" @(ConvertTo-ReplyLines @() 7).Count 0
     $noSelf = @(ConvertTo-ReplyLines $msgs 0)
-    Assert-True "l1-no-self-defaults-buyer" ($noSelf[0] -eq '[BUYER] buyer latest @@TS:300')
+    Assert-True "l1-no-self-defaults-buyer" ($noSelf[0] -eq '[BUYER] buyer latest @@TS:300 @@MT:300')
 
     # ---- 2. 归一化 / 时间戳解析 ----
     Assert-Eq "n1-strip-prefix-ts" (Get-AccioNormText '[BUYER] hi   there @@TS:123') 'hi there'

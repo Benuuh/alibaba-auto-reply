@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "01_cargo_received_query",
@@ -6,8 +6,8 @@
   "category": "cargo-received query",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The fulfillment status itself is NOT in the lines (there is no tracking feed), which is exactly the fact under test: the reply must not invent one.",
   "conversationLines": [
-    "[ME] Thanks for the details - I am checking the rate for you. @@TS:1791018000000",
-    "[BUYER] hi, did you receive the cargo? @@TS:1791018300000 @@OT:aGksIGRpZCB5b3UgcmVjZWl2ZSB0aGUgY2FyZ28/"
+    "[ME] Thanks for the details - I am checking the rate for you. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] hi, did you receive the cargo? @@TS:1791018300000 @@MT:1791018300000 @@OT:aGksIGRpZCB5b3UgcmVjZWl2ZSB0aGUgY2FyZ28/"
   ],
   "domOrder": "oldest-first",
   "expectedAction": "delivery_status",

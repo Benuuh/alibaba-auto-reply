@@ -1,0 +1,63 @@
+﻿TEST: new_message_cooldown
+RESULT pass=75 fail=0
+EXIT: 0
+TEST: should_reply_v2
+== should_reply_v2 tests ==
+  §2 判定表: 5 行(行 2 两种形态)逐行断言, Reason 逐字
+  §4.1 裁决: 方案甲(保守) —— 账本不可读 ⇒ 判据行 1 fail-closed, 且整轮门禁 P6 保持
+
+RESULT: pass=90 fail=0
+ALL PASS
+EXIT: 0
+TEST: reply_gate_dupskip
+== reply_gate_dupskip tests ==
+
+RESULT: pass=41 fail=0
+ALL PASS
+EXIT: 0
+TEST: reply_chain
+== reply_chain tests ==
+RESULT: pass=148 fail=0
+ALL PASS
+EXIT: 0
+TEST: message_order
+RESULT: pass=35 fail=0
+ALL PASS
+EXIT: 0
+TEST: dimension_guidance
+== dimension_guidance tests ==
+RESULT: pass=44 fail=0
+ALL PASS
+EXIT: 0
+TEST: docs_consistency
+== docs_consistency tests ==
+  ok   health_check.ps1 能派生出检查项
+  ok   README_部署说明.md 有检查项声明行
+  ok   检查项【数量】一致
+  ok   检查项【名单】无遗漏
+  ok   检查项【名单】无多余
+  ok   config.json.example 存在
+  ok   config.json.example 是合法 JSON
+  ok   模板键集 ⊇ 现役键集
+  ok   config.json.example 含 reply_min_gap_min = 5
+  ok   config.json 含 reply_min_gap_min = 5
+  ok   config.json.example 含 reply_post_send_cooldown_min = 5
+  ok   config.json 含 reply_post_send_cooldown_min = 5
+  ok   发送后冷却 ≥ 最小间隔（§0.1 硬要求）
+  ok   README.md 未写死测试数字
+  ok   README_部署说明.md 未写死测试数字
+  ok   docs\KNOWN_EXCEPTIONS.md 未写死测试数字
+  ok   SKILL.md 未写死测试数字
+RESULT: pass=17 fail=0
+ALL PASS
+EXIT: 0
+TEST: reply_engine
+== reply_engine tests ==
+RESULT: pass=75 fail=0
+ALL PASS
+EXIT: 0
+
+TEST: tools/acceptance/replay.ps1 (explicit isolated WorkDir)
+scenarios=20 pass=20 fail=0; assertions=580 failed=0
+EXIT: 0
+PS5.1 parser / UTF-8 BOM: PASS (five edited .ps1 files)

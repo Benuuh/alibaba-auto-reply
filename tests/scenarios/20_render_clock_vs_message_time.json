@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "harnessShape": "one scenario per file; see tools/acceptance/README.md",
+  "id": "20_render_clock_vs_message_time",
+  "title": "Per-message time overrides an increasing render clock and an old system card",
+  "category": "message ordering regression",
+  "factsSource": "Invented messages, prices and times only. @@TS deliberately increases by milliseconds in a newest-first window; only @@MT supplies the actual per-message clock. The system product card stays in the buyer count for ledger compatibility but must not become the current question or a cargo fact.",
+  "conversationLines": [
+    "[BUYER] Is the rate still high for a 40ft container of modular cabins? @@TS:1791095628552 @@MT:1791095619000",
+    "[ME] Do you have any upcoming procurement needs? @@TS:1791095628556 @@MT:1790816557000",
+    "[BUYER] Shipping service Freight Supplier $0.30-0.80 最小订购量: 1 Kilometer 系统自动发送 @@TS:1791095628560 @@MT:1790384400000 @@CARD:system"
+  ],
+  "domOrder": "newest-first",
+  "expectedAction": "new_inquiry",
+  "notifyChannelAvailable": false,
+  "clock": {
+    "firstSeenAt": "2026-10-04T06:33:39Z",
+    "sentAt": "2026-10-04T06:34:03Z"
+  },
+  "fakeModel": {
+    "mode": "compliant",
+    "compliantReply": "The current rate needs checking for that container size before I can confirm whether it is lower."
+  },
+  "expectedDecision": {
+    "canReply": true,
+    "latestBuyerText": "Is the rate still high for a 40ft container of modular cabins?",
+    "allowTimeCommitment": false
+  },
+  "forbiddenContent": [
+    {
+      "kind": "regex",
+      "pattern": "(?i)auto.?sent|advertisement|not your (actual|real) question|Kilometer|Shipping service|系统自动发送",
+      "why": "the opening system card must not drive the reply"
+    },
+    {
+      "kind": "regex",
+      "pattern": "\\$\\s*\\d",
+      "why": "no confirmed current quote"
+    }
+  ],
+  "requiredQualities": [
+    {
+      "id": "addresses-container-rate",
+      "check": "mustMatch",
+      "value": "(?i)(rate|container)",
+      "why": "address the actual latest buyer question"
+    }
+  ],
+  "expectBuyerCount": 2,
+  "expectLatestBuyerText": "Is the rate still high for a 40ft container of modular cabins?",
+  "expectSkippedZero": true,
+  "expectOrderConfident": true
+}

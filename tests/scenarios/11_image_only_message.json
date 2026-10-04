@@ -1,13 +1,13 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "11_image_only_message",
   "title": "Message is only an image",
   "category": "image-only message",
-  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The buyer line carries @@IMG markers and the original text is the literal '[IMG]', exactly what the page produces for an image-only message (no @@TS is emitted for it, which is why the order cannot be verified).",
+  "factsSource": "Invented messages and times only. The buyer line carries @@IMG and an explicit per-message @@MT timestamp, preserving the image-only row's printed time. Its original text is the literal '[IMG]'. A missing image-row timestamp is tested separately as an unverified, blocked conversation.",
   "conversationLines": [
-    "[ME] Could you send a photo of the cartons? @@TS:1791018000000",
-    "[BUYER] [IMG] @@IMG:https://example.invalid/img/carton-a.jpg|https://example.invalid/img/carton-b.jpg @@OT:W0lNR10="
+    "[ME] Could you send a photo of the cartons? @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] [IMG] @@IMG:https://example.invalid/img/carton-a.jpg|https://example.invalid/img/carton-b.jpg @@TS:1791018120000 @@MT:1791018120000 @@OT:W0lNR10="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "attachment_only",
@@ -23,7 +23,7 @@
   "expectedDecision": {
     "needHumanTodo": false,
     "allowTimeCommitment": false,
-    "orderConfident": false,
+    "orderConfident": true,
     "guidanceKey": "attachment_only"
   },
   "forbiddenContent": [
@@ -66,6 +66,6 @@
   "expectBuyerCount": 1,
   "expectLatestBuyerText": "[IMG]",
   "expectSkippedZero": true,
-  "expectOrderConfident": false,
-  "expectOrderWarningInContext": true
+  "expectOrderConfident": true,
+  "expectOrderWarningInContext": false
 }

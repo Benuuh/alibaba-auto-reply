@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "06_angry_buyer",
@@ -6,8 +6,8 @@
   "category": "angry buyer",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The prior [ME] apology is the fact that an apology was already sent once; the cause of the delay is NOT in the lines.",
   "conversationLines": [
-    "[ME] I am sorry for the delay, I am looking into it. @@TS:1791018000000",
-    "[BUYER] This is ridiculous, I have been waiting two weeks and nobody answers me. @@TS:1791019800000 @@OT:VGhpcyBpcyByaWRpY3Vsb3VzLCBJIGhhdmUgYmVlbiB3YWl0aW5nIHR3byB3ZWVrcyBhbmQgbm9ib2R5IGFuc3dlcnMgbWUu"
+    "[ME] I am sorry for the delay, I am looking into it. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] This is ridiculous, I have been waiting two weeks and nobody answers me. @@TS:1791019800000 @@MT:1791019800000 @@OT:VGhpcyBpcyByaWRpY3Vsb3VzLCBJIGhhdmUgYmVlbiB3YWl0aW5nIHR3byB3ZWVrcyBhbmQgbm9ib2R5IGFuc3dlcnMgbWUu"
   ],
   "domOrder": "oldest-first",
   "expectedAction": "complaint",

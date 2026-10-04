@@ -291,7 +291,7 @@ function Test-FixtureIntegrity {
         $plain = $ln -replace '^\[(BUYER|ME)\]\s*', ''
         $plain = $plain -replace '@@IMG:[^\s]*', ''
         $plain = $plain -replace '@@FILE:[^\s]*', ''
-        $plain = $plain -replace '@@TS:[^\s]*', ''
+        $plain = $plain -replace '@@(?:TS|MT|CARD):[^\s]*', ''
         $plain = $plain -replace '@@OT:[A-Za-z0-9\+/=]+', ''
         $plain = $plain.Trim()
         $decoded = ''

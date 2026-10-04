@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "13_several_short_messages",
@@ -6,10 +6,10 @@
   "category": "several short messages in a row",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. All three buyer lines are 2-11 character messages that the HEAD extractor dropped (monitor.ps1:274). The newest one ('ok') is the current message the reply must answer.",
   "conversationLines": [
-    "[ME] Could you send the packing details? @@TS:1791018000000",
-    "[BUYER] wait @@TS:1791018180000 @@OT:d2FpdA==",
-    "[BUYER] it is coming @@TS:1791018240000 @@OT:aXQgaXMgY29taW5n",
-    "[BUYER] ok @@TS:1791018300000 @@OT:b2s="
+    "[ME] Could you send the packing details? @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] wait @@TS:1791018180000 @@MT:1791018180000 @@OT:d2FpdA==",
+    "[BUYER] it is coming @@TS:1791018240000 @@MT:1791018240000 @@OT:aXQgaXMgY29taW5n",
+    "[BUYER] ok @@TS:1791018300000 @@MT:1791018300000 @@OT:b2s="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "short_ack",

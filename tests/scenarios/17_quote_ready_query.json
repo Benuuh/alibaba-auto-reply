@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "17_quote_ready_query",
@@ -6,8 +6,8 @@
   "category": "quote-ready query",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. No rate and no completion state exist in the lines, so 'still working on it' is the only truthful answer.",
   "conversationLines": [
-    "[ME] I am working on the rate for you. @@TS:1791018000000",
-    "[BUYER] is my quote ready? @@TS:1791018360000 @@OT:aXMgbXkgcXVvdGUgcmVhZHk/"
+    "[ME] I am working on the rate for you. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] is my quote ready? @@TS:1791018360000 @@MT:1791018360000 @@OT:aXMgbXkgcXVvdGUgcmVhZHk/"
   ],
   "domOrder": "oldest-first",
   "expectedAction": "quote_ready_query",

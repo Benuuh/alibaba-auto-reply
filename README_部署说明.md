@@ -1,12 +1,14 @@
 ﻿# 部署与运维
 
-更新：2026-10-04。本文对应 0.0.1 版本的 PowerShell、Chrome CDP、回复决策/生成模块和 dsh-im 通知出口。总体功能见 [README](README.md)，现场运行状态与待解决问题见 [当前状态](docs/当前状态.md)。
+更新：2026-10-05。本文对应 0.0.2 版本的 PowerShell、Chrome CDP、回复决策/生成模块和 dsh-im 通知出口。总体功能见 [README](README.md)，现场运行状态与待解决问题见 [当前状态](docs/当前状态.md)。
+
+0.0.2 统一可信新消息的冷却门禁，并支持将明确的 Amazon/FBA 收货仓代码用于报价准备。代码推送与打标签不自动重新加载运行进程；上线时按既有授权协调任务和进程，保留配置、账本及人工接管名单。真实模型、页面发送和通知投递须单独验收。
 
 ## 1. 部署前提
 
 使用 Windows、Windows PowerShell 5.1、Chrome 和 Node.js。`doc-reader` 声明 Node.js >=18；主监控程序没有根目录 npm 工程。Accio Desktop 仅在启用网关增强时需要；企业微信通知需要已经配置好的 DSH/dsh-im 宿主。
 
-先在 PowerShell 中进入代码根目录。下文的相对命令均以该目录为基准。本文提供操作方法，不表示应立即恢复当前停用的生产任务。
+先在 PowerShell 中进入代码根目录。下文的相对命令均以该目录为基准。本文提供操作方法；任务与进程的实际状态以查询结果为准，按用户授权执行启停。
 
 ~~~powershell
 Get-Command powershell.exe, node.exe

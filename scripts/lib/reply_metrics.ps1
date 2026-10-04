@@ -72,7 +72,7 @@ function Get-HumanInterjectionCount([string]$logFile, [int]$TailLines = 20000) {
     return $res
 }
 
-# 可报价买家数(重量+尺寸+地址三项齐全) —— 复用 lib\goods.ps1, 注意其返回键名为**小写**
+# 可报价买家数(重量+尺寸+报价目的地三项齐全) —— 复用 lib\goods.ps1, 注意其返回键名为**小写**
 function Get-QuotableBuyerCount([string]$dataDir) {
     $n = 0
     try {

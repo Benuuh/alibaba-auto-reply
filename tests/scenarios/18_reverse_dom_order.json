@@ -1,16 +1,16 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "18_reverse_dom_order",
   "title": "Extracted lines arrive newest-first",
   "category": "reverse DOM order",
-  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The @@TS values DECREASE along the array, which is the page's own evidence that the window arrived newest-first (msg_norm.ps1:149-197). The message that must be answered is the FIRST line. The oldest line is deliberately non-ASCII to prove @@OT round-trips through base64/UTF-8.",
+  "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The explicit per-message @@MT values DECREASE along the array; the synthetic fixture therefore supplies evidence that the window arrived newest-first. Naked legacy @@TS/showTime values are not ordering evidence. The message that must be answered is the FIRST line. The oldest line is deliberately non-ASCII to prove @@OT round-trips through base64/UTF-8.",
   "conversationLines": [
-    "[BUYER] where is my container? @@TS:1791021120000 @@OT:d2hlcmUgaXMgbXkgY29udGFpbmVyPw==",
-    "[ME] I am confirming the status with the warehouse. @@TS:1791021000000",
-    "[BUYER] any news on the shipment? @@TS:1791020880000 @@OT:YW55IG5ld3Mgb24gdGhlIHNoaXBtZW50Pw==",
-    "[ME] Thanks for the details, I have those noted. @@TS:1791020820000",
-    "[BUYER] hola, quiero enviar 12 cajas a Dallas @@TS:1791020760000 @@OT:aG9sYSwgcXVpZXJvIGVudmlhciAxMiBjYWphcyBhIERhbGxhcw=="
+    "[BUYER] where is my container? @@TS:1791021120000 @@MT:1791021120000 @@OT:d2hlcmUgaXMgbXkgY29udGFpbmVyPw==",
+    "[ME] I am confirming the status with the warehouse. @@TS:1791021000000 @@MT:1791021000000",
+    "[BUYER] any news on the shipment? @@TS:1791020880000 @@MT:1791020880000 @@OT:YW55IG5ld3Mgb24gdGhlIHNoaXBtZW50Pw==",
+    "[ME] Thanks for the details, I have those noted. @@TS:1791020820000 @@MT:1791020820000",
+    "[BUYER] hola, quiero enviar 12 cajas a Dallas @@TS:1791020760000 @@MT:1791020760000 @@OT:aG9sYSwgcXVpZXJvIGVudmlhciAxMiBjYWphcyBhIERhbGxhcw=="
   ],
   "domOrder": "newest-first",
   "expectedAction": "delivery_status",

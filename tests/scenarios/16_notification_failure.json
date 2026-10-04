@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "harnessShape": "one scenario per file; see tools/acceptance/README.md",
   "id": "16_notification_failure",
@@ -6,8 +6,8 @@
   "category": "notification failure",
   "factsSource": "RAW_PAGE_LINES: every asserted fact is read from the conversationLines below by the production ConvertTo-MessageList + Get-ConversationFacts. No fact outside those lines is asserted. Buyer identity is the placeholder 'Buyer A'; all names, companies, addresses and numbers are invented placeholders. The notify-channel state is a harness input (reply_engine/reply_policy consume -NotifyChannelAvailable); it is set false here, exactly as monitor.ps1 does when the notify path is unverified (monitor.ps1:436).",
   "conversationLines": [
-    "[ME] Thanks for your patience - I am checking with the warehouse. @@TS:1791018000000",
-    "[BUYER] has it shipped yet? I need to know before I book the next order. @@TS:1791018600000 @@OT:aGFzIGl0IHNoaXBwZWQgeWV0PyBJIG5lZWQgdG8ga25vdyBiZWZvcmUgSSBib29rIHRoZSBuZXh0IG9yZGVyLg=="
+    "[ME] Thanks for your patience - I am checking with the warehouse. @@TS:1791018000000 @@MT:1791018000000",
+    "[BUYER] has it shipped yet? I need to know before I book the next order. @@TS:1791018600000 @@MT:1791018600000 @@OT:aGFzIGl0IHNoaXBwZWQgeWV0PyBJIG5lZWQgdG8ga25vdyBiZWZvcmUgSSBib29rIHRoZSBuZXh0IG9yZGVyLg=="
   ],
   "domOrder": "oldest-first",
   "expectedAction": "delivery_status",
