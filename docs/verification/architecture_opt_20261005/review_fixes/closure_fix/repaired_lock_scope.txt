@@ -1,0 +1,4 @@
+== lock_scope tests ==
+
+RESULT: pass=25 fail=0
+ALL PASS

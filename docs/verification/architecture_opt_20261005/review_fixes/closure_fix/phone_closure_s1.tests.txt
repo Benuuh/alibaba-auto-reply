@@ -1,0 +1,19 @@
+PASS D01
+PASS D02
+PASS D02-phone-flow
+PASS D03
+PASS D04
+PASS D04-truncated-contact
+PASS D05
+PASS D06
+PASS D07
+PASS D08
+PASS D09
+PASS D10
+PASS D11
+PASS D12
+PASS D13
+PASS D14
+PASS D15
+PASS D16
+RESULT closure_s1 pass=18 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-a4b11229d490465ba4a33d1a83d05df4

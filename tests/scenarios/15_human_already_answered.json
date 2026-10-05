@@ -18,7 +18,7 @@
   },
   "fakeModel": {
     "mode": "compliant",
-    "compliantReply": "Got it, thanks. I will keep an eye on this and let you know if anything needs you."
+    "compliantReply": "Got it, thanks. Let me know if anything else is needed for the shipment."
   },
   "expectedDecision": {
     "needHumanTodo": false,

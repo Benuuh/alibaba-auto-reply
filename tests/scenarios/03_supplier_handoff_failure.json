@@ -18,7 +18,7 @@
   },
   "fakeModel": {
     "mode": "compliant",
-    "compliantReply": "That is frustrating, and I do not want to leave you stuck. I am having this checked from our side so it does not sit with you."
+    "compliantReply": "That is frustrating, and I do not want to leave you stuck. I can't check with your supplier from here."
   },
   "expectedDecision": {
     "needHumanTodo": true,
@@ -46,14 +46,19 @@
       "kind": "regex",
       "pattern": "(?i)(weight)[^.!?]{0,80}(dimension|size)[^.!?]{0,80}(address)",
       "why": "a fresh three-item questionnaire ignores the handoff problem"
+    },
+    {
+      "kind": "regex",
+      "pattern": "(?i)\b(from our side|having this checked|i am checking|i'm checking|let me check|i will check|i'll check|look into|get back to you|follow up|keep an eye on)\b",
+      "why": "2026-10-05 spec 6.3: this build wires no human-todo or notification loop, so claiming a check, a handoff or a follow-up is an unsupported action promise. Replaces the old 'takes-it-on' quality, which asserted exactly that forbidden wording."
     }
   ],
   "requiredQualities": [
     {
-      "id": "takes-it-on",
+      "id": "acknowledges-the-handoff-problem",
       "check": "mustMatch",
-      "value": "(?i)(from our side|checked|checking|look into|handle|take it)",
-      "why": "treat it as a handoff problem we act on"
+      "value": "(?i)(supplier|frustrating|sorry|understand|stuck|help)",
+      "why": "must address the supplier handoff problem itself (and not pivot to a cargo questionnaire); it may NOT claim an action we cannot take, which is now enforced by forbiddenContent"
     },
     {
       "id": "short",

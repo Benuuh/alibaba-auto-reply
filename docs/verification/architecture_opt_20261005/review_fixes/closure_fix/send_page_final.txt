@@ -1,0 +1,6 @@
+== send_page_param tests ==
+  child output lines = 16
+  child2 output lines = 15
+
+RESULT: pass=39 fail=0
+ALL PASS

@@ -1,0 +1,4 @@
+PASS G01
+PASS G02
+PASS G03
+RESULT closure_g1 pass=3 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-9820887e9e3243229bf85dbc729b0476

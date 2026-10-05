@@ -40,6 +40,7 @@ $root = "__SCRIPTS__"
 . (Join-Path $root "lib\cdp.ps1")
 . (Join-Path $root "reply_engine.ps1")
 . (Join-Path $root "lib\send.ps1")
+Set-SendEvaluationAdapter {param($js,$page) if($page){Invoke-GonghaiEvalOnPage -Page $page -Script $js}else{Invoke-CdpEval $js}}
 
 $script:Mode = "ok"
 $script:Order = New-Object System.Collections.ArrayList
@@ -162,6 +163,7 @@ $root = "__SCRIPTS__"
 . (Join-Path $root "lib\cdp.ps1")
 . (Join-Path $root "reply_engine.ps1")
 . (Join-Path $root "lib\send.ps1")
+Set-SendEvaluationAdapter {param($js,$page) if($page){Invoke-GonghaiEvalOnPage -Page $page -Script $js}else{Invoke-CdpEval $js}}
 
 $script:SendStageReached = $false
 $script:UsedOnPage = $false

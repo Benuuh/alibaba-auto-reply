@@ -19,7 +19,7 @@
   "fakeModel": {
     "mode": "violation_then_null",
     "violationReply": "I hear you. Sorry for the inconvenience, our system had an issue and the supplier did not reply. I will check with my manager and get back to you by tomorrow morning.",
-    "compliantReply": "I am sorry about this, and I understand why you are frustrated. I am checking the actual status right now, and I will come back to you as soon as I have something concrete."
+    "compliantReply": "I am sorry about this, and I understand why you are frustrated. I can't confirm the status from here."
   },
   "expectedDecision": {
     "needHumanTodo": true,

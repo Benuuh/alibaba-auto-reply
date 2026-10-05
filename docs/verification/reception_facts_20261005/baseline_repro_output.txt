@@ -1,0 +1,11 @@
+﻿BASELINE-DEFECT B1-template-allowed: policy Ok for placeholder text '[current time]' = True
+BASELINE-DEFECT B1-template-allowed: policy Ok for placeholder text 'It is [current time] now.' = True
+BASELINE-DEFECT B1-template-allowed: policy Ok for placeholder text '[company name]' = True
+BASELINE-DEFECT B1-template-allowed: policy Ok for placeholder text '{{company_name}}' = True
+BASELINE-DEFECT B2-own-name-misclassified: scenario for 'What's ur name' is 'new_inquiry' (no own-identity scenario exists)
+BASELINE-DEFECT B3-unsupported-promise-allowed: policy Ok for promise 'Let me check and get back to you.' = True
+BASELINE-DEFECT B3-unsupported-promise-allowed: policy Ok for promise 'I'm checking with the team.' = True
+BASELINE-DEFECT B3-unsupported-promise-allowed: policy Ok for promise 'I've passed this on.' = True
+BASELINE-DEFECT B3-unsupported-promise-allowed: policy Ok for promise 'I'll get back to you shortly.' = True
+BASELINE-DEFECT B3-unsupported-promise-allowed: policy Ok for promise 'I will keep an eye on this and let you know if anything needs you.' = True
+RESULT: reproduced_defects=10

@@ -1,0 +1,11 @@
+RuntimeRoot=C:\Users\<local-user>\AppData\Local\Temp\aar-review-closure-source-b2a96fe1b3cc43c6800f63a654c1f394
+Collision-before-correction hold=True until=2026-10-05T04:06:00.0000000Z
+Collision-after-correction hold=True AStoredKind=unknown AReceiptAmbiguous=True expected=True-until-04:05Z
+PASS C1-remaining-collision-must-still-hold
+Nested-invalid-deadline SyncOk=False PauseActive=False Error=[pause-store-corrupt] expected=fail-closed-or-once-bounded-legacy
+PASS C2-invalid-stored-deadline-fails-closed
+Legacy-unknown-no-anchor SyncOk=True HoldActive=True expected=True-once-bounded
+Actual-child-root-change Exit=0 Verified=False ActualChildRuntime=C:\Users\<local-user>\AppData\Local\Temp\aar-unattested-runtime-815125c1a54d42c091e0db4758ea9ba7 MarkerExists=False
+RealEgressStillBlocked=True Error=[] expected=unverified-runtime-change-not-PASS
+PASS C3-unattested-current-root-change-cannot-pass
+RESULT independent_source_guard pass=3 fail=0

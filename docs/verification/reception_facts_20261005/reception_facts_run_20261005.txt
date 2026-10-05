@@ -1,0 +1,2 @@
+== reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+RESULT pass=496 fail=0

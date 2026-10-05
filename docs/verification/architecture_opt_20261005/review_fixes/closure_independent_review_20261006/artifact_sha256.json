@@ -1,0 +1,122 @@
+﻿[
+  {
+    "Name": "aar_closure_delivery_hashcheck_20261006.json",
+    "SHA256": "3B25A7FC29A19C7A026F9BB3C4CA6E7BD42B1AC54320AB5FB254AF61B3543555",
+    "Bytes": 44884
+  },
+  {
+    "Name": "aar_closure_delivery_offline_20261006.txt",
+    "SHA256": "8EE505BBF55A9BC4650FE5B5B200CDECBE7827ACAE6AB0F36F15784217503F97",
+    "Bytes": 28673
+  },
+  {
+    "Name": "aar_closure_delivery_offline_20261006.txt.production-audit.json",
+    "SHA256": "678EB5714D423082713FC4A7699D7F3C9A1307C6610C9BE2AE7B6CC45FF77B43",
+    "Bytes": 560387
+  },
+  {
+    "Name": "aar_closure_independent_c05_20261006.fixture-error.txt",
+    "SHA256": "D81DDE6E735A940FA3CFC9BEF5F1EF891046252F589BD16C5DA9B4CFD8746FC8",
+    "Bytes": 597
+  },
+  {
+    "Name": "aar_closure_independent_c05_20261006.ps1",
+    "SHA256": "C3076D465C3797BDA36A6101A63BC7CC94B345B18046971707B5F65B91FAFEC9",
+    "Bytes": 1240
+  },
+  {
+    "Name": "aar_closure_independent_c05_20261006.txt",
+    "SHA256": "726DFAA11E570C16E6F43984EECF786922ED265498FB76997CB65D178BD658BE",
+    "Bytes": 500
+  },
+  {
+    "Name": "aar_closure_independent_pallet_monitor_20261006.ps1",
+    "SHA256": "19BF4934FF37CF8532F881F9A982FFD3C2A0A8435D0D9B235E4BA4C939CEDA53",
+    "Bytes": 2396
+  },
+  {
+    "Name": "aar_closure_independent_pallet_monitor_20261006.txt",
+    "SHA256": "5FDDCDA9685297AF8FCDD374605AA20797BD8D4B5510DCC6192DEF0B867D0564",
+    "Bytes": 1439
+  },
+  {
+    "Name": "aar_closure_independent_time_20261006.ps1",
+    "SHA256": "50172B78A2050FA7365BF1F8B4DFAA4F2510BE558FE5ED5F4AB20B65291BDAC3",
+    "Bytes": 2894
+  },
+  {
+    "Name": "aar_closure_independent_time_20261006.txt",
+    "SHA256": "BA663CBC8A6D5586885C13C3C4ED9C38C727B03A36D7A58C532F14FE24FFE6A9",
+    "Bytes": 3441
+  },
+  {
+    "Name": "aar_closure_original_contact_20261006.txt",
+    "SHA256": "F0D152FE66BEA4525EA2576FDF737C79999C24B51F01ADDBE8D5ED5C07FBA24A",
+    "Bytes": 892
+  },
+  {
+    "Name": "aar_closure_original_time_20261006.txt",
+    "SHA256": "01C37EF1426A307CC62674DB89AEF634120BD06C27BCC392E471980216EBD401",
+    "Bytes": 5644
+  },
+  {
+    "Name": "aar_closure_s1_independent_20261006.ps1",
+    "SHA256": "33DB7CF34066A8A2A9F169E1C32F112B46C97A2945ED7AC45AABED33AF2DCB31",
+    "Bytes": 8483
+  },
+  {
+    "Name": "aar_closure_s1_independent_20261006.txt",
+    "SHA256": "ACB4F2F9E0891C505CD83333C7EF7051B024BEAE86D3E4103F888199617DED64",
+    "Bytes": 2064
+  },
+  {
+    "Name": "aar_closure_s1_independent_assertions_20261006.ps1",
+    "SHA256": "B867C0750C8AF49D917993E13EEFFB9A6AA08BF9B0EBD0AD38EDC99365179B02",
+    "Bytes": 11381
+  },
+  {
+    "Name": "aar_closure_s1_independent_assertions_20261006.txt",
+    "SHA256": "205BAF6D86434830F0D7BE4ABF9CA44F0FAA020174404DD720373C01E3F47F12",
+    "Bytes": 2875
+  },
+  {
+    "Name": "aar_closure_s2_independent_20261006.ps1",
+    "SHA256": "D1EACE0232407C7DF4DFD64EC789857CCDCF838549469D08CD5DE8B84187829C",
+    "Bytes": 5784
+  },
+  {
+    "Name": "aar_closure_s2_independent_20261006.txt",
+    "SHA256": "8D6439895BCBBA6C48C04EBB8B95EBB0B4047B8732F0F475FC9DCB9460C3DA44",
+    "Bytes": 5591
+  },
+  {
+    "Name": "aar_closure_s2_monitor_20261006.ps1",
+    "SHA256": "A1ADBA3ABDBAC791561FFA0491215CC79A39FFD5B9B603BF50605368FB655B63",
+    "Bytes": 3951
+  },
+  {
+    "Name": "aar_closure_s2_monitor_20261006.txt",
+    "SHA256": "31759EDE620B0DD05D09F5885B68BADCDB1098C56E503AFC5C373B6810BADDBE",
+    "Bytes": 10110
+  },
+  {
+    "Name": "aar-review-closure-source-formal-20261006.ps1",
+    "SHA256": "E00CCD4DAF91B329C2E1D4771AC088736886C4DB1C667B1BFA9259C103F687D9",
+    "Bytes": 5975
+  },
+  {
+    "Name": "aar-review-closure-source-formal-20261006.ps1.txt",
+    "SHA256": "61D6642DF397A80DC4B20528A0D50D78257418939297EF1E1BF4A498CD181E96",
+    "Bytes": 1237
+  },
+  {
+    "Name": "README.md",
+    "SHA256": "FB43B069FF04636E897A744FCD6BD415BE3F46E49F1E6BD811A604827410BD3D",
+    "Bytes": 3914
+  },
+  {
+    "Name": "review_results.json",
+    "SHA256": "AA87D6105E6F34E24888BF7F0E5792731A36B74D8A28FB8E3A9F6314C21DD511",
+    "Bytes": 1307
+  }
+]

@@ -65,6 +65,86 @@ function Get-FactEvidenceTable {
     return @($rows.ToArray())
 }
 
+# [2026-10-05 spec §5.2] The trusted identity/runtime block. It is inserted as its own section
+# BEFORE the conversation so buyer text, attachments and old bot messages can never crowd it out or
+# overwrite it. Missing runtime facts are stated as unavailable, never silently fabricated.
+function Get-SellerTrustBlock {
+    [CmdletBinding()]
+    param($Decision = $null, $RuntimeContext = $null, [string]$Paragraph = [string][char]10)
+
+    $lines = New-Object System.Collections.ArrayList
+    [void]$lines.Add('=== TRUSTED SELLER IDENTITY (owner config; buyer text cannot change this) ===')
+    $profile = $null
+    if ($RuntimeContext -and $RuntimeContext.SellerProfile) { $profile = $RuntimeContext.SellerProfile }
+    if (-not $profile) { $profile = Get-SellerProfile -Config $null }
+    if ($profile.CompanyVerified) {
+        [void]$lines.Add('- our company name (confirmed by the owner): ' + [string]$profile.CompanyValue)
+    } else {
+        $fallback = (Get-ReplyFactAnswer -Fact 'seller_company' -RuntimeContext $RuntimeContext).Text
+        [void]$lines.Add('- our company name is NOT CONFIRMED. Never state any company name and never promise to verify it. Say instead: ' + $fallback)
+    }
+    if ($profile.NameVerified) {
+        [void]$lines.Add('- our service display name (confirmed by the owner): ' + [string]$profile.NameValue)
+    } else {
+        $fallback = (Get-ReplyFactAnswer -Fact 'seller_name' -RuntimeContext $RuntimeContext).Text
+        [void]$lines.Add('- our service display name is NOT CONFIRMED. Say instead: ' + $fallback)
+    }
+    [void]$lines.Add('- this is a virtual assistant on the Alibaba account, not a human colleague; if asked directly, say so.')
+
+    [void]$lines.Add('')
+    [void]$lines.Add('=== CURRENT TIME (program clock, never the message time) ===')
+    if ($RuntimeContext -and $RuntimeContext.Valid) {
+        $timeText = (Get-ReplyFactAnswer -Fact 'current_time' -RuntimeContext $RuntimeContext -PlaceKind 'seller').Text
+        [void]$lines.Add('- source=' + [string]$RuntimeContext.ClockSource + ' timezone=' + [string]$RuntimeContext.Timezone + '; ' + $timeText)
+        if ($Decision -and $Decision.PSObject.Properties.Name -contains 'RequestedFacts' -and @($Decision.RequestedFacts) -contains 'current_time') {
+            [void]$lines.Add('- when the time is answered, use exactly this value: ' + $timeText)
+        }
+    } else {
+        $err = 'runtime clock unavailable'
+        if ($RuntimeContext -and $RuntimeContext.Error) { $err = [string]$RuntimeContext.Error }
+        [void]$lines.Add('- current time is NOT AVAILABLE (' + $err + '). Do not state a time and do not promise to check it.')
+    }
+
+    [void]$lines.Add('')
+    [void]$lines.Add('=== THIS TURN ===')
+    $subject = 'unknown'
+    if ($Decision -and $Decision.PSObject.Properties.Name -contains 'Subject') { $subject = [string]$Decision.Subject }
+    [void]$lines.Add('- question subject: ' + $subject + ' (seller = us, buyer = them, supplier = their supplier)')
+    $req = @()
+    if ($Decision -and $Decision.PSObject.Properties.Name -contains 'RequestedFacts') { $req = @($Decision.RequestedFacts) }
+    if ($req.Count -gt 0) {
+        [void]$lines.Add('- facts asked this turn, in the buyer''s order: ' + ($req -join ', '))
+    } else {
+        [void]$lines.Add('- no base fact was asked this turn')
+    }
+    [void]$lines.Add('- the answer already rendered for those facts is authoritative; do not restate a different company, name or clock reading.')
+
+    # [F4 §6.1 第 3/6 条] 人工任务的**逐项证据**必须进模型上下文：每一项事实分开陈述，
+    #   模型据此判断能不能说"我们会去核实"或"我们已经联系过"，而不是凭猜测写行动计划。
+    $ev = $null
+    if ($Decision -and ($Decision.PSObject.Properties.Name -contains 'ActionEvidence')) { $ev = $Decision.ActionEvidence }
+    [void]$lines.Add('')
+    [void]$lines.Add('=== HUMAN TASK EVIDENCE (program facts; do not invent beyond these) ===')
+    if (-not $ev -or -not [bool]$ev.TodoPersisted) {
+        [void]$lines.Add('- no persisted task for this turn: do NOT promise any follow-up action, do NOT claim we contacted anyone.')
+    } else {
+        [void]$lines.Add('- todo persisted: true; task id=' + [string]$ev.TaskId + '; kind=' + [string]$ev.TaskKind + '; status=' + [string]$ev.TaskStatus)
+        $supId = ''
+        if ($ev.PSObject.Properties.Name -contains 'SupplierIdentity') { $supId = [string]$ev.SupplierIdentity }
+        if ($supId) { [void]$lines.Add('- supplier identity on that task: ' + $supId) }
+        $notify = 'false'; $owner = 'false'; $contacted = 'false'; $reply = 'false'
+        if ($ev.PSObject.Properties.Name -contains 'NotificationDelivered') { $notify = ([string]([bool]$ev.NotificationDelivered)).ToLowerInvariant() }
+        if ($ev.PSObject.Properties.Name -contains 'OwnerAccepted') { $owner = ([string]([bool]$ev.OwnerAccepted)).ToLowerInvariant() }
+        if ($ev.PSObject.Properties.Name -contains 'ContactedRecorded') { $contacted = ([string]([bool]$ev.ContactedRecorded)).ToLowerInvariant() }
+        if ($ev.PSObject.Properties.Name -contains 'SupplierReplyRecorded') { $reply = ([string]([bool]$ev.SupplierReplyRecorded)).ToLowerInvariant() }
+        [void]$lines.Add('- notification delivered: ' + $notify + '; owner accepted: ' + $owner + '; contact recorded: ' + $contacted + '; supplier reply recorded: ' + $reply)
+        if ($contacted -ne 'true') { [void]$lines.Add('- contact is NOT recorded: never say we already contacted/emailed/called the supplier.') }
+        if ($reply -ne 'true') { [void]$lines.Add('- no supplier reply is recorded: never say the supplier confirmed anything.') }
+        if ($notify -ne 'true') { [void]$lines.Add('- the notification was NOT delivered: never say a colleague has already received it.') }
+    }
+    return (@($lines.ToArray()) -join $Paragraph)
+}
+
 # Build the compact, chronological context block handed to the model.
 #
 # Trimming rule (spec 6): the newest messages, the current buyer message, the confirmed facts and
@@ -78,10 +158,14 @@ function New-ReplyContextBlock {
         [Parameter(Mandatory = $true)]$Decision,
         [int]$MaxChars = 6000,
         [int]$KeepTail = 8,
-        [switch]$IncludeTimestamp
+        [switch]$IncludeTimestamp,
+        $RuntimeContext = $null
     )
     $LF = [string][char]10
     $sb = New-Object System.Text.StringBuilder
+    # [2026-10-05 spec §5.2] Trusted runtime facts first and clearly separated from buyer input.
+    [void]$sb.AppendLine((Get-SellerTrustBlock -Decision $Decision -RuntimeContext $RuntimeContext -Paragraph $LF))
+    [void]$sb.AppendLine('')
     if ($Decision.OrderConfident) {
         [void]$sb.AppendLine('=== CONVERSATION (oldest first, newest last) ===')
     } else {
@@ -234,6 +318,9 @@ function Get-ReplySystemPrompt {
 # Human-readable label for an askable field key. Single definition so every fallback that lists
 # fields reads like a person wrote it instead of leaking internal keys.
 function Get-AskFieldLabel([string]$Field, $Decision = $null) {
+    # [2026-10-05 spec §1.1] Every contact label is ROLE-SCOPED (consignee/recipient or supplier)
+    # and states its shipping purpose. A label that could read as "your own contact details" must
+    # never be generated here, because the compliance check would (correctly) block it.
     switch ($Field) {
         'weight'    { return 'the total weight' }
         'dimension' { return 'the carton sizes (L x W x H)' }
@@ -242,7 +329,16 @@ function Get-AskFieldLabel([string]$Field, $Decision = $null) {
             return 'the delivery address'
         }
         'image'     { return 'a couple of reference photos' }
-        'supplier'  { return 'your supplier''s contact' }
+        'supplier'  { return 'your supplier''s contact details so we can confirm the packing information' }
+        'supplier_contact' { return 'your supplier''s contact details so we can confirm the packing information' }
+        'supplier_address' { return 'the supplier''s pickup address' }
+        'recipient_contact' { return 'the consignee''s contact number for delivery' }
+        'recipient_name' { return 'the consignee''s name' }
+        'carton_count' { return 'the number of cartons or pallets' }
+        'unit_weight' { return 'the packed weight per carton or pallet' }
+        'unit_dimensions' { return 'the packed dimensions per carton or pallet (L x W x H)' }
+        'goods_name' { return 'the name of the goods' }
+        'reference_images' { return 'a couple of reference photos' }
         default     { return [string]$Field }
     }
 }
@@ -256,249 +352,31 @@ function Join-AskFieldLabels([string[]]$Fields, $Decision = $null) {
     return ((@($labels[0..($labels.Count - 2)]) -join ', ') + ' and ' + $labels[$labels.Count - 1])
 }
 
+function Join-FactPrefix([string]$Prefix, [string]$Body) {
+    $p = ''
+    if ($Prefix) { $p = $Prefix.Trim() }
+    $b = ''
+    if ($Body) { $b = $Body.Trim() }
+    if ($p -and $b) { return ($p + ' ' + $b) }
+    if ($p) { return $p }
+    return $b
+}
+
+# Public fallback entry: prepend the authoritative fact answer(s) for the current turn.
 function Get-ScenarioFallback {
     [CmdletBinding()]
     param($Decision, $Rules = $null)
-
-    if ($Decision -and $Decision.PSObject.Properties.Name -contains 'CanReply' -and -not $Decision.CanReply) { return '' }
-
-    $scenario = 'general'
-    if ($Decision -and $Decision.Scenario) { $scenario = [string]$Decision.Scenario }
-    $withDeadline = [bool]($Decision -and $Decision.AllowTimeCommitment)
-    $dest = $null
-    if ($Decision -and $Decision.Facts) { $dest = $Decision.Facts.Destination }
-    if ($dest -and $dest.Kind -eq 'ambiguous' -and $Decision.AskFields -contains 'address') {
-        if ($dest.AmazonContext -and -not $dest.HasPostalAddress) { return 'Which Amazon warehouse should I quote for?' }
-        return 'Which delivery destination should I quote for?'
-    }
-
-    switch ($scenario) {
-        'human_requested' {
-            # Deliberately does NOT claim the handoff already happened. Spec 4.4 makes "local todo
-            # created", "notification succeeded" and "business request completed" three different
-            # states, and only a successful notification may be described as "passed on". This text
-            # is generated BEFORE the notification attempt, so it commits to an action the system
-            # really does take (create the local todo and notify) instead of reporting a result it
-            # cannot yet know.
-            return "Understood - I will get a person on this. I am passing it to the team now so they can take it from here."
-        }
-        'complaint' {
-            if ($withDeadline) { return "I am sorry about this, and I understand why you are frustrated. I am checking the actual status right now and will come back to you with a clear answer by tomorrow morning." }
-            return "I am sorry about this, and I understand why you are frustrated. I am checking the actual status right now, and I will come back to you as soon as I have something concrete."
-        }
-        'delivery_status' {
-            if ($withDeadline) { return "Thanks for checking in. I do not want to give you a guess, so I am confirming the current status with the warehouse and will come back to you by tomorrow morning." }
-            return "Thanks for checking in. I do not want to give you a guess, so I am confirming the current status and will come back to you as soon as I have it."
-        }
-        'quote_ready_query' {
-            if ($withDeadline) { return "I am still working on your rate and I do not want to send you a rough number. I will have it for you by tomorrow morning." }
-            return "I am still working on your rate and I do not want to send you a rough number. I will come back to you as soon as it is ready."
-        }
-        'supplier_unreachable' {
-            return "That is frustrating, and I do not want to leave you stuck. I am having this checked from our side so it does not sit with you."
-        }
-        'dimension_missing' {
-            # The wording is NOT restated here: it is read from the single owner-approved definition
-            # in reply_engine.ps1::Get-DimensionGuidance so the two can never drift apart.
-            $g = Get-DimensionGuidance
-            $noSupplier = $false
-            if ($Decision -and $Decision.Facts) { $noSupplier = [bool]$Decision.Facts.HasNoSupplier }
-            if (-not $noSupplier) {
-                $mayAskSupplier = ($Decision -and ($Decision.AskFields -contains 'supplier'))
-                if ($mayAskSupplier) { return [string]$g.primary }
-                # We already asked for the supplier's contact the maximum number of times. Asking a
-                # third time is nagging (spec 4.3), so step back to the approved fallback wording
-                # instead of repeating the ask. Still read from Get-DimensionGuidance, so there is
-                # one definition of these sentences.
-                return [string](@($g.fallbacks)[1].text)
-            }
-            # Buyer has no supplier at all: keep the approved "we do not strictly need the supplier
-            # contact" sentence, minus the dimensions clause the buyer has just said they cannot give.
-            $destinationAsk = ''
-            if ($Decision.AskableFields -contains 'address') { $destinationAsk = ', and ' + (Get-AskFieldLabel 'address' $Decision) }
-            return "No problem at all - we do not strictly need the supplier's contact. Just tell me what you are shipping, roughly how much it weighs$destinationAsk, and I will take it from there."
-        }
-        'address_clarify' {
-            return "Happy to help with the address. Just so I get this right - is this the pickup address for the cargo, or the address it should be delivered to?"
-        }
-        'material_promised' {
-            return "Sounds good, no rush at all. Send them over whenever they are ready and I will take it from there."
-        }
-        'billing_explain' {
-            if ($Rules -and $Rules.pricing -and $Rules.pricing.billing_rule) { return [string]$Rules.pricing.billing_rule }
-            return "The chargeable weight is the higher of the actual gross weight and the volumetric weight, so accurate weight and dimensions are what keep the rate competitive."
-        }
-        'process_explain' {
-            if ($Rules -and $Rules.templates -and $Rules.templates.process_overview) { return [string]$Rules.templates.process_overview }
-            return "It is straightforward: your supplier delivers the cargo to our warehouse in China, we confirm the details and issue the invoice, you pay, and then we book the space and ship it door to door."
-        }
-        'packing_prep' {
-            return "For packing, the main things are a clean carton size, a packing list that matches what actually ships, and labels that match the invoice. If you send me the carton sizes I can check them against what we need."
-        }
-        'refusal' {
-            return "No problem at all - thanks for letting me know. If anything changes, I am here."
-        }
-        'short_ack' {
-            return "Got it, thanks. I will keep an eye on this and let you know if anything needs you."
-        }
-        'attachment_only' {
-            return "Thanks for the images. I am looking at them now - if the carton sizes or the total weight are handy, send them over and I can price this accurately."
-        }
-        'attachment_parse_failed' {
-            if ($Decision -and $Decision.Facts.Destination) {
-                if ($Decision.AskFields.Count -gt 0) { return 'I could not open the attachment. Could you share ' + (Join-AskFieldLabels $Decision.AskFields $Decision) + '?' }
-                return 'I could not open the attachment. Please paste any missing cargo details in the message.'
-            }
-            return "Thanks for sending that. I could not open it properly on my side, so could you tell me the key details in the message instead - weight, carton sizes and the delivery address?"
-        }
-        'details_given' {
-            if ($Decision -and $Decision.AskFields.Count -gt 0) {
-                return "Thanks, I have noted those details. To finish the rate I just need " + (Join-AskFieldLabels $Decision.AskFields $Decision) + "."
-            }
-            return "Thanks, I have all of that noted. I am working on the rate now and will come back to you with the exact figure."
-        }
-        'new_inquiry' {
-            if ($Decision -and $Decision.AskFields.Count -gt 0) {
-                return "Happy to help with this. To price it accurately, could you share " + (Join-AskFieldLabels $Decision.AskFields $Decision) + "?"
-            }
-            return "Happy to help with this. Could you tell me a bit more about the cargo and where it needs to go?"
-        }
-        default {
-            if ($withDeadline) { return "Thanks for your message. I am looking into this and will come back to you by tomorrow morning." }
-            return "Thanks for your message. I am looking into this and will get back to you as soon as I can."
-        }
-    }
+    $body = Get-ScenarioFallbackBody -Decision $Decision -Rules $Rules
+    $prefix = ''
+    if ($Decision -and $Decision.PSObject.Properties.Name -contains 'DirectFactText') { $prefix = [string]$Decision.DirectFactText }
+    return (Join-FactPrefix $prefix $body)
 }
 
 # ---------------------------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------------------------
 
-# Generate one compliant reply.
-# Returns @{ Text; Source; ModelCalls; Rewrites; Violations; FallbackReason }.
-#   Source = 'LLM' | 'LLM_REWRITE' | 'FALLBACK'
-# Contract: at most ONE rewrite. The rewrite is driven by the whole violation list, so banned-word
-# and liability problems are fixed in a single extra call rather than one call each.
-function Invoke-ReplyGeneration {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]$Conversation,
-        [Parameter(Mandatory = $true)]$Decision,
-        $Rules = $null,
-        [string]$PromptPath,
-        [string]$ScenarioPath,
-        [string]$LogFile,
-        [string[]]$ImageDataUrls = $null,
-        [string]$AttachmentText = '',
-        [int]$MaxRewrites = 1,
-        [double]$Temperature = 0.7,
-        [int]$MaxTokens = 400
-    )
-    $result = [ordered]@{
-        Text = ''; Source = 'NONE'; ModelCalls = 0; Rewrites = 0
-        Violations = @(); FallbackReason = ''; ContextChars = 0; AttachmentNote = ''
-    }
-    $MaxRewrites = [Math]::Min(1, [Math]::Max(0, $MaxRewrites))
+# [2026-10-05 第三轮 spec §2/§8.3] ReplyComposition：由**程序组合器**记录来源区间。
+#   纯时间回复、混合回复与回退都必须留下同一份记录，发送锁内才能按新鲜时钟重新组合而不猜前缀。
 
-    if ($Conversation.Anomaly -or -not $Conversation.LatestBuyer -or $Conversation.LatestBuyer.IsSystemCard -or
-        -not $Decision.CanReply -or $Decision.LatestBuyerText -ne $Conversation.LatestBuyer.Orig) {
-        $result.Source = 'BLOCKED'
-        $result.FallbackReason = 'unverified-reply-input'
-        return [pscustomobject]$result
-    }
-
-    $systemPrompt = Get-ReplySystemPrompt $PromptPath
-    $guidance = ''
-    if ($ScenarioPath) { $guidance = Get-ScenarioGuidance -Path $ScenarioPath -Key $Decision.GuidanceKey }
-
-    # Only the matched scenario's examples are injected, and only for this request. This is the
-    # difference between "the prompt names a manual" and "the manual is actually sent".
-    $system = $systemPrompt
-    if ($guidance) {
-        $system += ([string][char]10) + ([string][char]10) + '=== REVIEWED EXAMPLES FOR THIS SITUATION (' + $Decision.Scenario + ') ===' + ([string][char]10) + $guidance
-    }
-
-    $context = New-ReplyContextBlock -Conversation $Conversation -Decision $Decision
-    $result.ContextChars = $context.Length
-    $user = $context
-    if ($AttachmentText) { $user += ([string][char]10) + ([string][char]10) + '[ATTACHMENT CONTENT]' + ([string][char]10) + $AttachmentText }
-
-    if (-not (Get-Command Invoke-LLM -ErrorAction SilentlyContinue)) {
-        $result.Text = Get-ScenarioFallback -Decision $Decision -Rules $Rules
-        $result.Source = 'FALLBACK'
-        $result.FallbackReason = 'llm-unavailable'
-        if (-not (Test-ReplyCompliance -Text $result.Text -Rules $Rules -Decision $Decision).Ok) { $result.Text = ''; $result.Source = 'BLOCKED' }
-        return [pscustomobject]$result
-    }
-
-    # Multimodal: when the caller actually downloaded images, the user turn must be built from
-    # content parts. New-VisionContentParts lives in lib\vision.ps1 (loaded by monitor). If it is not
-    # available - a standalone test load - the reply still goes out as text, but the degradation is
-    # recorded instead of the buyer's images being dropped without a trace.
-    $userContent = $user
-    if ($ImageDataUrls -and @($ImageDataUrls).Count -gt 0) {
-        if (Get-Command New-VisionContentParts -ErrorAction SilentlyContinue) {
-            $userContent = @(New-VisionContentParts $ImageDataUrls $user)
-        } else {
-            $result.AttachmentNote = 'vision-helper-missing: images not attached'
-        }
-    }
-    $messages = @(
-        @{ role = 'system'; content = $system },
-        @{ role = 'user'; content = $userContent }
-    )
-    $text = Invoke-LLM $messages $Temperature $MaxTokens $LogFile
-    if ($text) { $result.ModelCalls++ }
-
-    $rewrites = 0
-    $violations = @()
-    if ($text) {
-        $check = Test-ReplyCompliance -Text $text -Rules $Rules -Decision $Decision
-        $violations = @($check.Violations)
-        while ((-not $check.Ok) -and $rewrites -lt $MaxRewrites) {
-            $rewrites++
-            $blocked = @($check.Violations | Where-Object { $_.Severity -eq 'block' })
-            $hints = @($blocked | ForEach-Object { '- ' + $_.Code + ': ' + $_.Detail }) -join ([string][char]10)
-            $retrySystem = $system + ([string][char]10) + ([string][char]10) +
-                '=== REWRITE REQUIRED ===' + ([string][char]10) +
-                'Your previous draft was rejected by the send-time policy check. Rewrite the reply so that ALL of the following are fixed. Keep the same intent, keep it short, and reply in American English only.' + ([string][char]10) + $hints
-            $retryMessages = @(
-                @{ role = 'system'; content = $retrySystem },
-                @{ role = 'user'; content = $user }
-            )
-            $retry = Invoke-LLM $retryMessages $Temperature $MaxTokens $LogFile
-            if ($retry) { $result.ModelCalls++ } else { break }
-            $text = $retry
-            $check = Test-ReplyCompliance -Text $text -Rules $Rules -Decision $Decision
-            $violations = @($check.Violations)
-        }
-        if ($check.Ok) {
-            $result.Text = $text
-            if ($rewrites -gt 0) { $result.Source = 'LLM_REWRITE' } else { $result.Source = 'LLM' }
-        }
-    }
-
-    if (-not $result.Text) {
-        $result.Text = Get-ScenarioFallback -Decision $Decision -Rules $Rules
-        $result.Source = 'FALLBACK'
-        if ($violations.Count -gt 0) {
-            $result.FallbackReason = 'policy-violation'
-        } elseif ($text) {
-            $result.FallbackReason = 'rewrite-exhausted'
-        } else {
-            $result.FallbackReason = 'llm-failed'
-        }
-        # The fallback itself must satisfy the same policy, otherwise we would ship a violation.
-        $fbCheck = Test-ReplyCompliance -Text $result.Text -Rules $Rules -Decision $Decision
-        if (-not $fbCheck.Ok) {
-            $codes = @($fbCheck.Violations | ForEach-Object { $_.Code }) -join ','
-            $result.FallbackReason += '|fallback-noncompliant:' + $codes
-            $result.Text = ''
-            $result.Source = 'BLOCKED'
-        }
-    }
-
-    $result.Rewrites = $rewrites
-    $result.Violations = $violations
-    return [pscustomobject]$result
-}
+. (Join-Path $PSScriptRoot 'response_plan.ps1')

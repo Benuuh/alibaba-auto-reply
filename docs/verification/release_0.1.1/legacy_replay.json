@@ -1,0 +1,1212 @@
+{
+  "GeneratedAt": "2026-10-06T03:58:55.2449421+08:00",
+  "RepoRoot": "C:\\path\\to\\alibaba-auto-reply",
+  "WorkDir": "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar_acceptance_20261006_035851_16988",
+  "StubMarker": "aar-acceptance-fake-llm-v1",
+  "Checks": 594,
+  "Failures": 82,
+  "ScenarioPass": 0,
+  "ScenarioTotal": 20,
+  "Results": [
+    {
+      "Id": "01_cargo_received_query",
+      "Title": "Buyer asks whether we received the cargo",
+      "Category": "cargo-received query",
+      "ExpectedAction": "delivery_status",
+      "Scenario": "delivery_status",
+      "Reasons": [
+        "fulfillment or tracking question without a trusted record"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1830,
+      "SystemChars": 1983,
+      "UserChars": 1830,
+      "RequestChars": 3813,
+      "GuidanceChars": 454,
+      "GuidanceKey": "delivery_status",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "carton_count"
+      ],
+      "Reply": "Could you share the number of cartons or pallets?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 261,
+      "FirstSeenAt": "2026-10-03T09:04:00Z",
+      "SentAt": "2026-10-03T09:06:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:acknowledges-and-confirms",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "02_address_ambiguous",
+      "Title": "Buyer mentions 'the address' without saying whose",
+      "Category": "ambiguous address meaning",
+      "ExpectedAction": "address_clarify",
+      "Scenario": "address_clarify",
+      "Reasons": [
+        "address mentioned without specifying whose address"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 1,
+      "ExpectedCalls": 0,
+      "StubCalls": 1,
+      "ExpectedStub": 1,
+      "Rewrites": 0,
+      "ContextChars": 1887,
+      "SystemChars": 1923,
+      "UserChars": 1887,
+      "RequestChars": 3810,
+      "GuidanceChars": 394,
+      "GuidanceKey": "address_clarify",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Could you confirm which delivery destination we should use?",
+      "FallbackReason": "llm-failed",
+      "WallMs": 75,
+      "FirstSeenAt": "2026-10-03T09:03:00Z",
+      "SentAt": "2026-10-03T09:07:00Z",
+      "LatencySeconds": 240,
+      "LatencyText": "240",
+      "Failures": [
+        "model-calls",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "03_supplier_handoff_failure",
+      "Title": "Buyer cannot reach their supplier",
+      "Category": "supplier handoff failure",
+      "ExpectedAction": "supplier_unreachable",
+      "Scenario": "supplier_unreachable",
+      "Reasons": [
+        "buyer cannot reach the supplier"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1941,
+      "SystemChars": 1989,
+      "UserChars": 1941,
+      "RequestChars": 3930,
+      "GuidanceChars": 460,
+      "GuidanceKey": "supplier_unreachable",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "weight"
+      ],
+      "Reply": "Could you share the total weight?",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 29,
+      "FirstSeenAt": "2026-10-03T09:02:00Z",
+      "SentAt": "2026-10-03T09:05:00Z",
+      "LatencySeconds": 180,
+      "LatencyText": "180",
+      "Failures": [
+        "quality:acknowledges-the-handoff-problem",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "04_human_requested",
+      "Title": "Buyer asks for a real person",
+      "Category": "buyer asks for a human",
+      "ExpectedAction": "human_requested",
+      "Scenario": "human_requested",
+      "Reasons": [
+        "explicit human or stop-bot request"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1889,
+      "SystemChars": 2060,
+      "UserChars": 1889,
+      "RequestChars": 3949,
+      "GuidanceChars": 531,
+      "GuidanceKey": "human_requested",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 24,
+      "FirstSeenAt": "2026-10-03T09:03:00Z",
+      "SentAt": "2026-10-03T09:06:00Z",
+      "LatencySeconds": 180,
+      "LatencyText": "180",
+      "Failures": [
+        "quality:commits-to-handoff",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "05_repeated_chasing",
+      "Title": "Buyer chases the same question a second time",
+      "Category": "repeated chasing",
+      "ExpectedAction": "delivery_status",
+      "Scenario": "delivery_status",
+      "Reasons": [
+        "fulfillment or tracking question without a trusted record"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 2,
+      "StubCalls": 2,
+      "ExpectedStub": 2,
+      "Rewrites": 1,
+      "ContextChars": 1886,
+      "SystemChars": 1983,
+      "UserChars": 1886,
+      "RequestChars": 3869,
+      "GuidanceChars": 454,
+      "GuidanceKey": "delivery_status",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "carton_count"
+      ],
+      "Reply": "Could you share the number of cartons or pallets?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 57,
+      "FirstSeenAt": "2026-10-03T09:10:00Z",
+      "SentAt": "2026-10-03T09:21:00Z",
+      "LatencySeconds": 660,
+      "LatencyText": "660",
+      "Failures": [
+        "quality:concrete-next-step",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "06_angry_buyer",
+      "Title": "Angry buyer, two weeks with no answer",
+      "Category": "angry buyer",
+      "ExpectedAction": "complaint",
+      "Scenario": "complaint",
+      "Reasons": [
+        "complaint or frustration signal"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 2,
+      "Rewrites": 1,
+      "ContextChars": 1918,
+      "SystemChars": 2101,
+      "UserChars": 1918,
+      "RequestChars": 4019,
+      "GuidanceChars": 572,
+      "GuidanceKey": "complaint",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "llm-failed",
+      "WallMs": 40,
+      "FirstSeenAt": "2026-10-03T09:15:00Z",
+      "SentAt": "2026-10-03T09:31:00Z",
+      "LatencySeconds": 960,
+      "LatencyText": "960",
+      "Failures": [
+        "quality:acknowledges",
+        "quality:says-what-happens-next",
+        "model-calls",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "07_unknown_quote",
+      "Title": "Buyer asks for a price while nothing is known",
+      "Category": "unknown quote",
+      "ExpectedAction": "new_inquiry",
+      "Scenario": "new_inquiry",
+      "Reasons": [
+        "price or quote request"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1720,
+      "SystemChars": 1846,
+      "UserChars": 1720,
+      "RequestChars": 3566,
+      "GuidanceChars": 317,
+      "GuidanceKey": "new_inquiry",
+      "OrderConfident": true,
+      "OrderReason": "single-message",
+      "AskFields": [
+        "weight"
+      ],
+      "Reply": "Could you share the total weight?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 22,
+      "FirstSeenAt": "2026-10-03T09:05:00Z",
+      "SentAt": "2026-10-03T09:06:00Z",
+      "LatencySeconds": 60,
+      "LatencyText": "60",
+      "Failures": [
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "08_dimensions_already_given",
+      "Title": "Dimensions were just given; they must not be asked again",
+      "Category": "dimensions already given",
+      "ExpectedAction": "details_given",
+      "Scenario": "details_given",
+      "Reasons": [
+        "buyer supplied cargo details in this conversation"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1884,
+      "SystemChars": 2586,
+      "UserChars": 1884,
+      "RequestChars": 4470,
+      "GuidanceChars": 1057,
+      "GuidanceKey": "details_given",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "weight",
+        "address"
+      ],
+      "Reply": "Could you share the total weight? Could you share the delivery address?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 47,
+      "FirstSeenAt": "2026-10-03T09:07:00Z",
+      "SentAt": "2026-10-03T09:09:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:confirms-receipt",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "09_material_promised",
+      "Title": "Buyer promises the sizes tomorrow",
+      "Category": "buyer promises details later",
+      "ExpectedAction": "material_promised",
+      "Scenario": "material_promised",
+      "Reasons": [
+        "buyer promised to provide: dimension"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 1,
+      "ExpectedCalls": 0,
+      "StubCalls": 1,
+      "ExpectedStub": 1,
+      "Rewrites": 0,
+      "ContextChars": 1987,
+      "SystemChars": 1955,
+      "UserChars": 1987,
+      "RequestChars": 3942,
+      "GuidanceChars": 426,
+      "GuidanceKey": "material_promised",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "llm-failed",
+      "WallMs": 50,
+      "FirstSeenAt": "2026-10-03T09:11:00Z",
+      "SentAt": "2026-10-03T09:13:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:accepts-the-promise",
+        "model-calls",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "10_simple_acknowledgement",
+      "Title": "Bare 'ok' with no new information",
+      "Category": "simple acknowledgement",
+      "ExpectedAction": "short_ack",
+      "Scenario": "short_ack",
+      "Reasons": [
+        "short acknowledgement without new information"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1777,
+      "SystemChars": 1948,
+      "UserChars": 1777,
+      "RequestChars": 3725,
+      "GuidanceChars": 419,
+      "GuidanceKey": "short_ack",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 33,
+      "FirstSeenAt": "2026-10-03T09:06:00Z",
+      "SentAt": "2026-10-03T09:08:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "11_image_only_message",
+      "Title": "Message is only an image",
+      "Category": "image-only message",
+      "ExpectedAction": "attachment_only",
+      "Scenario": "attachment_only",
+      "Reasons": [
+        "image-only message"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1762,
+      "SystemChars": 1930,
+      "UserChars": 1762,
+      "RequestChars": 3692,
+      "GuidanceChars": 401,
+      "GuidanceKey": "attachment_only",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "weight",
+        "dimension"
+      ],
+      "Reply": "Could you share the total weight? Could you share the carton sizes (L x W x H)?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 42,
+      "FirstSeenAt": "2026-10-03T09:05:00Z",
+      "SentAt": "2026-10-03T09:07:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:acknowledges-attachment",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "12_file_parse_failure",
+      "Title": "Buyer sent a file that could not be read",
+      "Category": "file parse failure",
+      "ExpectedAction": "details_given",
+      "Scenario": "details_given",
+      "Reasons": [
+        "buyer supplied cargo details in this conversation"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 2,
+      "StubCalls": 2,
+      "ExpectedStub": 2,
+      "Rewrites": 1,
+      "ContextChars": 1723,
+      "SystemChars": 2586,
+      "UserChars": 1723,
+      "RequestChars": 4309,
+      "GuidanceChars": 1057,
+      "GuidanceKey": "details_given",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "weight",
+        "dimension"
+      ],
+      "Reply": "Could you share the total weight? Could you share the carton sizes (L x W x H)?",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 28,
+      "FirstSeenAt": "2026-10-03T09:03:00Z",
+      "SentAt": "2026-10-03T09:06:00Z",
+      "LatencySeconds": 180,
+      "LatencyText": "180",
+      "Failures": [
+        "quality:still-useful",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "13_several_short_messages",
+      "Title": "Three short messages in a row",
+      "Category": "several short messages in a row",
+      "ExpectedAction": "short_ack",
+      "Scenario": "short_ack",
+      "Reasons": [
+        "short acknowledgement without new information"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1737,
+      "SystemChars": 1948,
+      "UserChars": 1737,
+      "RequestChars": 3685,
+      "GuidanceChars": 419,
+      "GuidanceKey": "short_ack",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 33,
+      "FirstSeenAt": "2026-10-03T09:02:00Z",
+      "SentAt": "2026-10-03T09:06:00Z",
+      "LatencySeconds": 240,
+      "LatencyText": "240",
+      "Failures": [
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "14_same_text_new_message",
+      "Title": "Identical buyer text sent again with a new timestamp",
+      "Category": "same text as a new message",
+      "ExpectedAction": "delivery_status",
+      "Scenario": "delivery_status",
+      "Reasons": [
+        "fulfillment or tracking question without a trusted record"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1858,
+      "SystemChars": 1983,
+      "UserChars": 1858,
+      "RequestChars": 3841,
+      "GuidanceChars": 454,
+      "GuidanceKey": "delivery_status",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "carton_count"
+      ],
+      "Reply": "Could you share the number of cartons or pallets?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 29,
+      "FirstSeenAt": "2026-10-03T09:20:00Z",
+      "SentAt": "2026-10-03T09:31:00Z",
+      "LatencySeconds": 660,
+      "LatencyText": "660",
+      "Failures": [
+        "quality:treats-it-as-new",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "15_human_already_answered",
+      "Title": "The owner already answered directly in the chat",
+      "Category": "human already answered",
+      "ExpectedAction": "short_ack",
+      "Scenario": "short_ack",
+      "Reasons": [
+        "short acknowledgement without new information"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1857,
+      "SystemChars": 1948,
+      "UserChars": 1857,
+      "RequestChars": 3805,
+      "GuidanceChars": 419,
+      "GuidanceKey": "short_ack",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 19,
+      "FirstSeenAt": "UNKNOWN",
+      "SentAt": "2026-10-03T09:09:00Z",
+      "LatencySeconds": null,
+      "LatencyText": "UNKNOWN",
+      "Failures": [
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "16_notification_failure",
+      "Title": "Human todo is needed but the notification channel is down",
+      "Category": "notification failure",
+      "ExpectedAction": "delivery_status",
+      "Scenario": "delivery_status",
+      "Reasons": [
+        "fulfillment or tracking question without a trusted record"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 1,
+      "ExpectedCalls": 0,
+      "StubCalls": 1,
+      "ExpectedStub": 1,
+      "Rewrites": 0,
+      "ContextChars": 1902,
+      "SystemChars": 1983,
+      "UserChars": 1902,
+      "RequestChars": 3885,
+      "GuidanceChars": 454,
+      "GuidanceKey": "delivery_status",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "carton_count"
+      ],
+      "Reply": "Could you share the number of cartons or pallets?",
+      "FallbackReason": "llm-failed",
+      "WallMs": 28,
+      "FirstSeenAt": "2026-10-03T09:09:00Z",
+      "SentAt": "2026-10-03T09:11:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:says-it-is-being-confirmed",
+        "model-calls",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "17_quote_ready_query",
+      "Title": "Buyer asks whether the quote is ready",
+      "Category": "quote-ready query",
+      "ExpectedAction": "quote_ready_query",
+      "Scenario": "quote_ready_query",
+      "Reasons": [
+        "quote completion question without a trusted record"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 2,
+      "StubCalls": 2,
+      "ExpectedStub": 2,
+      "Rewrites": 1,
+      "ContextChars": 1790,
+      "SystemChars": 1920,
+      "UserChars": 1790,
+      "RequestChars": 3710,
+      "GuidanceChars": 391,
+      "GuidanceKey": "quote_ready_query",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [
+        "weight",
+        "dimension"
+      ],
+      "Reply": "Could you share the total weight? Could you share the carton sizes (L x W x H)?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 61,
+      "FirstSeenAt": "2026-10-03T09:05:00Z",
+      "SentAt": "2026-10-03T09:07:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:still-working",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "18_reverse_dom_order",
+      "Title": "Extracted lines arrive newest-first",
+      "Category": "reverse DOM order",
+      "ExpectedAction": "delivery_status",
+      "Scenario": "delivery_status",
+      "Reasons": [
+        "fulfillment or tracking question without a trusted record"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1936,
+      "SystemChars": 1983,
+      "UserChars": 1936,
+      "RequestChars": 3919,
+      "GuidanceChars": 454,
+      "GuidanceKey": "delivery_status",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-descending",
+      "AskFields": [
+        "carton_count"
+      ],
+      "Reply": "Could you share the number of cartons or pallets?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 43,
+      "FirstSeenAt": "2026-10-03T09:51:00Z",
+      "SentAt": "2026-10-03T09:53:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "quality:answers-the-newest-line",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "19_two_char_refusal",
+      "Title": "Two-character 'no'",
+      "Category": "two-character message",
+      "ExpectedAction": "refusal",
+      "Scenario": "refusal",
+      "Reasons": [
+        "buyer declined or asked to stop"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1703,
+      "SystemChars": 1852,
+      "UserChars": 1703,
+      "RequestChars": 3555,
+      "GuidanceChars": 323,
+      "GuidanceKey": "refusal",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-ascending",
+      "AskFields": [],
+      "Reply": "Thanks for your message.",
+      "FallbackReason": "business-body-unknown",
+      "WallMs": 17,
+      "FirstSeenAt": "2026-10-03T09:03:00Z",
+      "SentAt": "2026-10-03T09:05:00Z",
+      "LatencySeconds": 120,
+      "LatencyText": "120",
+      "Failures": [
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    },
+    {
+      "Id": "20_render_clock_vs_message_time",
+      "Title": "Per-message time overrides an increasing render clock and an old system card",
+      "Category": "message ordering regression",
+      "ExpectedAction": "new_inquiry",
+      "Scenario": "new_inquiry",
+      "Reasons": [
+        "price or quote request"
+      ],
+      "Source": "FALLBACK",
+      "ModelCalls": 2,
+      "ExpectedCalls": 1,
+      "StubCalls": 2,
+      "ExpectedStub": 1,
+      "Rewrites": 1,
+      "ContextChars": 1806,
+      "SystemChars": 1846,
+      "UserChars": 1806,
+      "RequestChars": 3652,
+      "GuidanceChars": 317,
+      "GuidanceKey": "new_inquiry",
+      "OrderConfident": true,
+      "OrderReason": "timestamps-monotonic-descending",
+      "AskFields": [
+        "weight"
+      ],
+      "Reply": "Could you share the total weight?",
+      "FallbackReason": "business-body-sensitive",
+      "WallMs": 22,
+      "FirstSeenAt": "2026-10-04T06:33:39Z",
+      "SentAt": "2026-10-04T06:34:03Z",
+      "LatencySeconds": 24,
+      "LatencyText": "24",
+      "Failures": [
+        "quality:addresses-container-rate",
+        "model-calls",
+        "stub-invocations",
+        "reply-source",
+        "guidance-injected"
+      ]
+    }
+  ],
+  "FailedChecks": [
+    {
+      "Scenario": "01_cargo_received_query",
+      "Id": "quality:acknowledges-and-confirms",
+      "Detail": "no match for '(?i)(confirm|check|look into|verif)'"
+    },
+    {
+      "Scenario": "01_cargo_received_query",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "01_cargo_received_query",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "01_cargo_received_query",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "01_cargo_received_query",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=454 key=delivery_status"
+    },
+    {
+      "Scenario": "02_address_ambiguous",
+      "Id": "model-calls",
+      "Detail": "gen=1 want=0"
+    },
+    {
+      "Scenario": "02_address_ambiguous",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=394 key=address_clarify"
+    },
+    {
+      "Scenario": "03_supplier_handoff_failure",
+      "Id": "quality:acknowledges-the-handoff-problem",
+      "Detail": "no match for '(?i)(supplier|frustrating|sorry|understand|stuck|help)'"
+    },
+    {
+      "Scenario": "03_supplier_handoff_failure",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "03_supplier_handoff_failure",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "03_supplier_handoff_failure",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "03_supplier_handoff_failure",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=460 key=supplier_unreachable"
+    },
+    {
+      "Scenario": "04_human_requested",
+      "Id": "quality:commits-to-handoff",
+      "Detail": "no match for '(?i)(person|human|team|colleague)'"
+    },
+    {
+      "Scenario": "04_human_requested",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "04_human_requested",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "04_human_requested",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "04_human_requested",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=531 key=human_requested"
+    },
+    {
+      "Scenario": "05_repeated_chasing",
+      "Id": "quality:concrete-next-step",
+      "Detail": "no match for '(?i)(confirm|check|status|concrete)'"
+    },
+    {
+      "Scenario": "05_repeated_chasing",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM_REWRITE'"
+    },
+    {
+      "Scenario": "05_repeated_chasing",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=454 key=delivery_status"
+    },
+    {
+      "Scenario": "06_angry_buyer",
+      "Id": "quality:acknowledges",
+      "Detail": "no match for '(?i)(sorry|apolog)'"
+    },
+    {
+      "Scenario": "06_angry_buyer",
+      "Id": "quality:says-what-happens-next",
+      "Detail": "no match for '(?i)(check|confirm|status|looking into|come back)'"
+    },
+    {
+      "Scenario": "06_angry_buyer",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "06_angry_buyer",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=572 key=complaint"
+    },
+    {
+      "Scenario": "07_unknown_quote",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "07_unknown_quote",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "07_unknown_quote",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "07_unknown_quote",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=317 key=new_inquiry"
+    },
+    {
+      "Scenario": "08_dimensions_already_given",
+      "Id": "quality:confirms-receipt",
+      "Detail": "no match for '(?i)(noted|thanks|perfect|got it|received)'"
+    },
+    {
+      "Scenario": "08_dimensions_already_given",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "08_dimensions_already_given",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "08_dimensions_already_given",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "08_dimensions_already_given",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=1057 key=details_given"
+    },
+    {
+      "Scenario": "09_material_promised",
+      "Id": "quality:accepts-the-promise",
+      "Detail": "no match for '(?i)(no rush|whenever|sounds good|no problem|sure|take your time|ready)'"
+    },
+    {
+      "Scenario": "09_material_promised",
+      "Id": "model-calls",
+      "Detail": "gen=1 want=0"
+    },
+    {
+      "Scenario": "09_material_promised",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=426 key=material_promised"
+    },
+    {
+      "Scenario": "10_simple_acknowledgement",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "10_simple_acknowledgement",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "10_simple_acknowledgement",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "10_simple_acknowledgement",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=419 key=short_ack"
+    },
+    {
+      "Scenario": "11_image_only_message",
+      "Id": "quality:acknowledges-attachment",
+      "Detail": "no match for '(?i)(image|photo|picture)'"
+    },
+    {
+      "Scenario": "11_image_only_message",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "11_image_only_message",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "11_image_only_message",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "11_image_only_message",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=401 key=attachment_only"
+    },
+    {
+      "Scenario": "12_file_parse_failure",
+      "Id": "quality:still-useful",
+      "Detail": "no match for '(?i)(noted|thanks|need|send|tell me)'"
+    },
+    {
+      "Scenario": "12_file_parse_failure",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=1057 key=details_given"
+    },
+    {
+      "Scenario": "12_file_parse_failure",
+      "Id": "probe:forced-attachment-parse-failed-fallback:fallback-matches",
+      "Detail": "fallback 'Could you share the total weight? Thanks for your message.' does not match '(?i)could not open'"
+    },
+    {
+      "Scenario": "13_several_short_messages",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "13_several_short_messages",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "13_several_short_messages",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "13_several_short_messages",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=419 key=short_ack"
+    },
+    {
+      "Scenario": "14_same_text_new_message",
+      "Id": "quality:treats-it-as-new",
+      "Detail": "no match for '(?i)(confirm|check|status|on it)'"
+    },
+    {
+      "Scenario": "14_same_text_new_message",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "14_same_text_new_message",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "14_same_text_new_message",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "14_same_text_new_message",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=454 key=delivery_status"
+    },
+    {
+      "Scenario": "15_human_already_answered",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "15_human_already_answered",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "15_human_already_answered",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "15_human_already_answered",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=419 key=short_ack"
+    },
+    {
+      "Scenario": "16_notification_failure",
+      "Id": "quality:says-it-is-being-confirmed",
+      "Detail": "no match for '(?i)(confirm|check)'"
+    },
+    {
+      "Scenario": "16_notification_failure",
+      "Id": "model-calls",
+      "Detail": "gen=1 want=0"
+    },
+    {
+      "Scenario": "16_notification_failure",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=454 key=delivery_status"
+    },
+    {
+      "Scenario": "16_notification_failure",
+      "Id": "probe:real-action-evidence-allows-deadline:fallback-matches",
+      "Detail": "fallback 'Could you share the number of cartons or pallets? Thanks for your message.' does not match '(?i)by tomorrow morning'"
+    },
+    {
+      "Scenario": "17_quote_ready_query",
+      "Id": "quality:still-working",
+      "Detail": "no match for '(?i)(working|soon|ready|number)'"
+    },
+    {
+      "Scenario": "17_quote_ready_query",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM_REWRITE'"
+    },
+    {
+      "Scenario": "17_quote_ready_query",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=391 key=quote_ready_query"
+    },
+    {
+      "Scenario": "18_reverse_dom_order",
+      "Id": "quality:answers-the-newest-line",
+      "Detail": "no match for '(?i)(confirm|check|status|container)'"
+    },
+    {
+      "Scenario": "18_reverse_dom_order",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "18_reverse_dom_order",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "18_reverse_dom_order",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "18_reverse_dom_order",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=454 key=delivery_status"
+    },
+    {
+      "Scenario": "19_two_char_refusal",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "19_two_char_refusal",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "19_two_char_refusal",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "19_two_char_refusal",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=323 key=refusal"
+    },
+    {
+      "Scenario": "20_render_clock_vs_message_time",
+      "Id": "quality:addresses-container-rate",
+      "Detail": "no match for '(?i)(rate|container)'"
+    },
+    {
+      "Scenario": "20_render_clock_vs_message_time",
+      "Id": "model-calls",
+      "Detail": "gen=2 want=1"
+    },
+    {
+      "Scenario": "20_render_clock_vs_message_time",
+      "Id": "stub-invocations",
+      "Detail": "stub=2 want=1"
+    },
+    {
+      "Scenario": "20_render_clock_vs_message_time",
+      "Id": "reply-source",
+      "Detail": "got 'FALLBACK' want 'LLM'"
+    },
+    {
+      "Scenario": "20_render_clock_vs_message_time",
+      "Id": "guidance-injected",
+      "Detail": "marker=False guidanceChars=317 key=new_inquiry"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+RESULT pass=82 fail=0

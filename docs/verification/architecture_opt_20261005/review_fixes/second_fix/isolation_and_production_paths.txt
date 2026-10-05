@@ -1,0 +1,54 @@
+# 八项补修（F1-F8）隔离与生产路径记录
+
+日期：2026-10-05。仓库：C:\path\to\alibaba-auto-reply。运行方式：只做工作区修改 + 隔离测试。
+
+## 1. 本轮实际写入的工作区路径（源码/测试/文档）
+
+| 文件 | 本轮改动 |
+|------|----------|
+| scripts/lib/contact_rules.ps1 | F1：无冠词/复数联系方式索取、索取对象绑定、已提供角色联系人重复索取 |
+| scripts/lib/reply_policy.ps1 | F1 调用点接 Facts；F4 供应商证据逐项化；F6 时间请求/目标列表与多目标校验；F8 删除 which 免检 |
+| scripts/lib/seller_context.ps1 | F4 ActionEvidence 逐项字段；F6 多目标时间渲染 |
+| scripts/lib/reply_gen.ps1 | F4 把逐项任务证据写进模型上下文 |
+| scripts/lib/human_pause.ps1 | F3 绝对 UTC 计时 + 事件身份 + 首次观察锚点；F2 共用编排入口 Sync-ConversationInterventionState |
+| scripts/lib/human_tasks.ps1 | F5 供应商身份按实际联系人；F4 规范化类型映射与 Get-ActionEvidenceForTask |
+| scripts/lib/goods.ps1 | F7 成功分支透出 clarifications / error（仅新增键） |
+| scripts/summarize.ps1 | F7 直接消费统一 readiness |
+| scripts/monitor.ps1 | F2 读取/发送前共用同步；F4 确切任务回读与生成后复核；F7 提醒前置门改读 ready |
+| scripts/analyze_replies.ps1 | F7 文案与统一判据口径一致（非判据） |
+| scripts/reply_rules.registry.json | 登记 CONTACT_ASK_ALREADY_PROVIDED / FACT_TIME_TARGET_UNANSWERED / FACT_TIME_TARGET_UNCLAIMED→UNCLARIFIED；更新 F3/F4 规则条目 |
+| tests/review_fixes_entry.tests.ps1 | 夹具时间口径修正 + F2/F4/F6 探针转正（真实入口） |
+| tests/human_pause.tests.ps1 | F3 绝对时间验收 + 既有 P1-P10 语义保留 |
+| tests/lock_scope.tests.ps1 / message_order.tests.ps1 / new_message_cooldown.tests.ps1 / reception_facts.tests.ps1 | 增加同步入口桩（暂停/等待存储仍是边界） |
+| tests/second_fix_contact.tests.ps1（新） | F1 正式回归 |
+| tests/second_fix_policy.tests.ps1（新） | F5/F6/F8 正式回归（纯逻辑） |
+| tests/second_fix_summary.tests.ps1（新） | F7 正式回归（子进程运行实际 summarize.ps1） |
+| tests/layers.json | 登记上述三个新测试文件 |
+
+## 2. 生产路径未被写入（由 run_tests.ps1 的守卫核对）
+
+运行器 40 秒窗口内的生产指纹差异（见 offline_layer_final.txt / offline_layer.txt 尾部）：
+
+    PRODUCTION-GUARD-WARN: 3 path(s) under the live writer's own output roots changed while a production writer is running (lockHolder=34196)
+      changed: C:\path\to\alibaba-auto-reply-runtime\data
+      removed: C:\path\to\alibaba-auto-reply-runtime\data\onetalk-write.lock
+      changed: C:\path\to\alibaba-auto-reply-runtime\logs\monitor.log
+    PRODUCTION-GUARD: fatal=0 benign=3 writerRunning=True
+
+归因说明：生产 monitor（PID 34196）与 watchdog（PID 2344）在本轮之前就在运行，上述三项都落在**运行中写者自己的输出根**
+（C:\path\to\alibaba-auto-reply-runtime\data / logs）内，属于该写者的实时输出。本轮没有启动/停止/重启任何生产进程，
+没有改 scripts\config.json，没有写生产账本 / 任务 / 暂停 / 提醒状态文件，没有操作页面、没有发送消息或真实通知。
+"仅凭进程存在不能证明每项变化的来源"，因此这里只把它记为"有存活写者时的良性归因"，不作为全部变化均已解释的证据。
+
+## 3. 本轮使用的隔离根
+
+- 每个测试文件由 tests\run_tests.ps1 分配独立临时运行根 %TEMP%\aar-test-<guid>（含 .aar-isolation.json 标记）。
+- 独立复核探针使用 %TEMP%\aar-reviewfix-<guid>；摘要回归使用 %TEMP%\aar-secondfix-summary-<guid>。
+- 所有状态（暂停/等待、任务、账本、发送记录、快照、摘要输出）都写在这些根内；
+  真实 CDP / 发送 / 通知出口在隔离模式下直接抛错（isolation.tests.ps1 I08/I09）。
+- 只使用虚构身份、虚构买家与 .invalid 联系地址。
+
+## 4. 未执行的动作
+
+未启动/重启生产或计划任务；未改变任务启停；未操作真实页面；未联系供应商；未发送客户消息或真实通知；
+未改写生产配置与账本；未 git add / commit / push。

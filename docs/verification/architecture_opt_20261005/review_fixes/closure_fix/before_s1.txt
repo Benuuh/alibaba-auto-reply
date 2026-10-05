@@ -1,0 +1,17 @@
+PASS D01
+FAIL D02 old messages and task fields cannot enter new flow
+FAIL D03 one task / old trigger alone is not association
+FAIL D04 awaiting contact keeps task
+PASS D05
+FAIL D06 invalid fields unpublished
+FAIL D07 assertion failed
+FAIL D08 The term 'Test-CargoFieldValue' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+FAIL D09 assertion failed
+FAIL D10 assertion failed
+FAIL D11 unreadable evidence cannot be healthy empty
+FAIL D12 assertion failed
+PASS D13
+FAIL D14 assertion failed
+FAIL D15 only targeted old field invalidated
+FAIL D16 assertion failed
+RESULT closure_s1 pass=3 fail=13 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-484fcfa4a58b415e9e370ac7da0e2ec4

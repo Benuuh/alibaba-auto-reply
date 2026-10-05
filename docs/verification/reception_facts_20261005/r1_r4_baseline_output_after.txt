@@ -1,0 +1,18 @@
+== R1-R4 failure baseline (independent acceptance supplement) ==
+fictional identity: Harbor Freight Management Co., Ltd. / Taylor Reed
+R1 direct-fact-text : I'm Taylor Reed, Harbor Freight Management Co., Ltd.'s virtual shipping assistant.
+R1 source           : DIRECT_FACT  violations=[]
+BASELINE-OK R1-correct-display-name-blocked: source=DIRECT_FACT codes=[]
+BASELINE-OK R1-guard-still-blocks-wrong-tail: policy Ok for a same-first-word name = False
+R2 direct-fact-text : We're Harbor Freight Management Co., Ltd.
+R2 source           : DIRECT_FACT  violations=[]
+BASELINE-OK R2-correct-company-blocked: source=DIRECT_FACT codes=[]
+BASELINE-OK R2-guard-still-blocks-appended-company: policy Ok for a correct name + fake identity = False
+BASELINE-OK R3-explicit-place [What time is it now in Tokyo?]: answered [It's 3:05 PM in Japan (UTC+9).]
+BASELINE-OK R3-explicit-place [What time is it in Tokyo now?]: answered [It's 3:05 PM in Japan (UTC+9).]
+BASELINE-OK R3-explicit-place [What's the current time in Tokyo?]: answered [It's 3:05 PM in Japan (UTC+9).]
+BASELINE-OK R3-no-place-still-seller-zone: answered [It's 2:05 PM in China (UTC+8).]
+BASELINE-OK R4-multi-zone-country [What time is it in Australia?]: answered [Happy to help with the time. Which city or time zone in Australia do you mean?]
+BASELINE-OK R4-multi-zone-country [What time is it in the USA?]: answered [Happy to help with the time. Which city or time zone in the United States do you mean?]
+BASELINE-OK R4-explicit-city-new-york: answered [It's 2:05 AM in New York (UTC-4).]
+RESULT: reproduced_defects=0

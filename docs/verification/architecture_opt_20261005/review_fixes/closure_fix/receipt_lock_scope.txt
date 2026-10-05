@@ -1,0 +1,11 @@
+== lock_scope tests ==
+New-ConfirmedOutboundReceipt : The term 'New-ConfirmedOutboundReceipt' is not recognized as the name of a cmdlet, funct
+ion, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path 
+is correct and try again.
+At C:\path\to\alibaba-auto-reply\tests\lock_scope.tests.ps1:153 char:14
++     $receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text - ...
++              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (New-ConfirmedOutboundReceipt:String) [], ParentContainsErrorRecordExcep 
+   tion
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

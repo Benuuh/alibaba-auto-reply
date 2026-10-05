@@ -1,0 +1,18 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+True
+True
+True
+True
+True
+True
+  FAIL: E-A3b-status-advanced got=[awaiting_contact] want=[pending_human]
+  FAIL: E-A3b-contact-stored got=[] want=[supplier@example.invalid]
+True
+True
+NO-TRUSTED-FLOW-TRIGGER
+At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:127 char:24
++         if(-not $flow){throw 'NO-TRUSTED-FLOW-TRIGGER'}
++                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (NO-TRUSTED-FLOW-TRIGGER:String) [], RuntimeException
+    + FullyQualifiedErrorId : NO-TRUSTED-FLOW-TRIGGER
+ 

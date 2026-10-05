@@ -72,7 +72,21 @@ function Get-HumanInterjectionCount([string]$logFile, [int]$TailLines = 20000) {
     return $res
 }
 
-# 可报价买家数(重量+尺寸+报价目的地三项齐全) —— 复用 lib\goods.ps1, 注意其返回键名为**小写**
+# 安全取字段值：goods 状态是**哈希表**，PS 5.1 下哈希表的 PSObject.Properties 只暴露
+#   IsReadOnly/Keys/Values/Count 等 CLR 成员，"-contains 'ready'" 与 "$g.ready" 都会静默拿到
+#   $null（这正是"报告说 0 个可报价买家"的成因）。统一走 Contains/Properties 两条路。
+function Get-MetricValue($Object, [string]$Name) {
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
+    if ($Object.PSObject.Properties.Name -contains $Name) { return $Object.$Name }
+    return $null
+}
+
+# 可报价买家数 —— [2026-10-05 spec §4.2 第 1/2 条] 消费唯一判据 Get-QuoteReadiness
+#   （经 goods.ps1 的适配器取回 ready），不再用"重量 + 尺寸 + 地址"三个布尔值自行判定。
 function Get-QuotableBuyerCount([string]$dataDir) {
     $n = 0
     try {
@@ -83,7 +97,7 @@ function Get-QuotableBuyerCount([string]$dataDir) {
         }
         foreach ($k in $names.Keys) {
             $g = Get-GoodsDataStatus $k $dataDir
-            if ($g -and $g.weight -and $g.dims -and $g.addr) { $n++ }
+            if ([bool](Get-MetricValue $g 'ready')) { $n++ }
         }
     } catch {
         return 0

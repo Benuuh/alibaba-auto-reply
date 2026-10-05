@@ -1,0 +1,67 @@
+﻿{
+  "Date": "2026-10-06",
+  "Acceptance": "NOT_ACCEPTED",
+  "Findings": {
+    "P1": 4,
+    "P2": 6,
+    "Groups": 10
+  },
+  "Offline": {
+    "Files": 55,
+    "Pass": 2994,
+    "Fail": 0,
+    "FailedFiles": 0,
+    "VerifiedChildren": 55,
+    "IsolationIssues": 0,
+    "ProductionPathAudit": "UNRESOLVED",
+    "ProductionChanges": 7,
+    "Overall": "BLOCKED-UNRESOLVED",
+    "NativeExit": 3,
+    "OuterExit": 3
+  },
+  "SourceHashCheck": {
+    "Checked": 166,
+    "Mismatches": 0
+  },
+  "Independent": {
+    "S1": {
+      "Exit": 1,
+      "Fail": 6,
+      "Pass": 2
+    },
+    "ClarificationMonitor": {
+      "Exit": 1,
+      "Fail": 2,
+      "Pass": 2
+    },
+    "PalletMonitor": {
+      "Exit": 1,
+      "Fail": 1,
+      "Pass": 1
+    },
+    "SourceGuard": {
+      "Exit": 1,
+      "Fail": 3,
+      "Pass": 0
+    },
+    "C05": {
+      "Exit": 1,
+      "Fail": 2,
+      "Pass": 2
+    },
+    "TimeMonitor": {
+      "Exit": 0,
+      "Fail": 0,
+      "Pass": 6
+    },
+    "OriginalTime": {
+      "Exit": 0,
+      "Fail": 0,
+      "Pass": 9
+    },
+    "OriginalContact": {
+      "Exit": 0
+    }
+  },
+  "Scope": "TEMP stores and real source functions/consumers; external IO stubs; no monitor main or production operations. Probe sets overlap."
+}

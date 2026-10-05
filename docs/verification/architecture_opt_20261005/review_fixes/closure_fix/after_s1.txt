@@ -1,0 +1,17 @@
+PASS D01
+PASS D02
+PASS D03
+PASS D04
+PASS D05
+PASS D06
+PASS D07
+PASS D08
+PASS D09
+PASS D10
+PASS D11
+PASS D12
+PASS D13
+PASS D14
+PASS D15
+PASS D16
+RESULT closure_s1 pass=16 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-f11bdc8819c249a7bcfe4a6a7e2c54e8

@@ -1,0 +1,41 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+
+True
+True
+True
+True
+  FAIL: E-F4e-closed-task-discards-draft PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=clear | Latest buyer msg: My supplier's contact is supplier@example.invalid, but I don't know the dimensions. | NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=4/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=E689C838 | ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s | HUMAN-TASK-PRE Virtual Buyer kind=supplier_handoff status=pending_human id=2950dca9ed8041149514d6b02c77802b created=True storeOk=True contactLen=24 supplierKey=email:supplier@example.invalid missing=carton_count,unit_weight,unit_dimensions,delivery_address | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=dimension_missing src=FALLBACK modelCalls=2 rewrites=1 ctxChars=2174 violations=[] fallback=business-body-sensitive ask=[carton_count] todo=supplier_handoff orderConfident=True subject=supplier facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=clear | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | HUMAN-TASK-SEND-REREAD Virtual Buyer id=2950dca9ed8041149514d6b02c77802b kind=supplier_verification status=closed identity=email:supplier@example.invalid matched=True | STALE-DRAFT-DISCARD Virtual Buyer: response-plan dependencies changed
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+RESULT: pass=194 fail=1
+FAILED CASES: E-F4e-closed-task-discards-draft

@@ -1,0 +1,4 @@
+== second_fix policy tests (F5 / F6 / F8) ==
+
+RESULT: pass=94 fail=0
+ALL PASS

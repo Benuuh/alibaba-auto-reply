@@ -113,12 +113,19 @@ foreach ($pair in @(
 $d = Decide @((BuyerLine 'ok' 1759400000000))
 Assert-True "todo-not-required-for-ack" (-not [bool]$d.NeedHumanTodo)
 
-# --- 10) no deadline may be promised while the notify path is unverified --------------------
+# --- 10) no deadline may be promised without REAL execution evidence -------------------------
+# 2026-10-05 spec §6.3: a reachable notification channel and the boolean NeedHumanTodo are NOT
+# evidence. Only a Decision carrying TodoPersisted + NotificationDelivered + a real Deadline may
+# allow deadline wording. This is a deliberate contract change from "channel verified => allowed".
 $d = Decide @((BuyerLine 'did you receive my cargo?' 1759400000000))
 Assert-True "deadline-disallowed-by-default" (-not [bool]$d.AllowTimeCommitment)
 $c2 = ConvertTo-MessageList (BuyerLine 'did you receive my cargo?' 1759400000000) 'B'
 $d2 = Get-ReplyDecision -Conversation $c2 -Facts (Get-ConversationFacts $c2) -NotifyChannelAvailable $true
-Assert-True "deadline-allowed-only-with-verified-channel" ([bool]$d2.AllowTimeCommitment)
+Assert-True "deadline-not-granted-by-reachable-channel" (-not [bool]$d2.AllowTimeCommitment)
+$d3 = Get-ReplyDecision -Conversation $c2 -Facts (Get-ConversationFacts $c2) -NotifyChannelAvailable $true -ActionEvidence (New-ActionEvidence -Values @{ TodoPersisted = $true; NotificationDelivered = $true })
+Assert-True "deadline-not-granted-without-a-real-deadline" (-not [bool]$d3.AllowTimeCommitment)
+$d4 = Get-ReplyDecision -Conversation $c2 -Facts (Get-ConversationFacts $c2) -NotifyChannelAvailable $true -ActionEvidence (New-ActionEvidence -Values @{ TodoPersisted = $true; NotificationDelivered = $true; Deadline = '2026-10-06T01:00:00Z' })
+Assert-True "deadline-allowed-only-with-full-action-evidence" ([bool]$d4.AllowTimeCommitment)
 
 # --- 11) compliance ------------------------------------------------------------------------
 foreach ($bad in @(
@@ -135,13 +142,25 @@ foreach ($bad in @(
     Assert-True ("compliance-blocks: " + $bad) (-not $chk.Ok)
 }
 foreach ($good in @(
-    'Thanks for checking in. I do not want to give you a guess, so I am confirming the current status and will come back to you as soon as I have it.',
+    'Thanks for checking in. I can''t confirm the shipment status here.',
     'If you can share your supplier''s contact, I can confirm the cargo details with them directly - that way I get you an accurate quote faster.',
-    'Got it, thanks. I will keep an eye on this and let you know if anything needs you.',
+    'Got it, thanks. Let me know if anything else is needed for the shipment.',
     'Happy to help keep everything on the platform - your quotes and documents stay in one place here.'
 )) {
-    $chk = Test-ReplyCompliance -Text $good -Rules $null
+    $chk = Test-ReplyCompliance -Text $good -Rules $null -Decision ([pscustomobject]@{AskFields=@('supplier_contact')})
     Assert-True ("compliance-allows: " + $good.Substring(0, [Math]::Min(40, $good.Length))) ($chk.Ok)
+}
+# 2026-10-05 spec §6.3: follow-up promises with no execution evidence are now blocked.
+foreach ($promise in @(
+    'Let me check and get back to you.',
+    'I''m checking with the team.',
+    'I''ve passed this on.',
+    'I''ll get back to you shortly.',
+    'I will keep an eye on this and let you know.',
+    'I am having this checked from our side.'
+)) {
+    $chk = Test-ReplyCompliance -Text $promise -Rules $null
+    Assert-True ("compliance-blocks-unsupported-promise: " + $promise) (-not $chk.Ok)
 }
 $chk = Test-ReplyCompliance -Text 'Got it, we should organise the shipment and the colour is fine.' -Rules $null
 Assert-True "compliance-warns-british-spelling" (@($chk.Violations | Where-Object { $_.Code -eq 'BRITISH_SPELLING' }).Count -gt 0)
@@ -156,7 +175,7 @@ foreach ($s in $scenarios) {
     $d = Get-ReplyDecision -Conversation $conv -Facts (Get-ConversationFacts $conv) -ForceScenario $s
     $fb = Get-ScenarioFallback -Decision $d -Rules $null
     Assert-True ("fallback-nonempty: " + $s) (-not [string]::IsNullOrWhiteSpace($fb))
-    $chk = Test-ReplyCompliance -Text $fb -Rules $null
+    $chk = Test-ReplyCompliance -Text $fb -Rules $null -Decision $d
     Assert-True ("fallback-compliant: " + $s) ($chk.Ok)
     if (-not $d.AllowTimeCommitment) {
         Assert-True ("fallback-no-invented-deadline: " + $s) (-not (Test-TimeCommitment $fb))

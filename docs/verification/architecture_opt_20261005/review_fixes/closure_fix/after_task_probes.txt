@@ -1,0 +1,21 @@
+﻿ROOT {"Tasks":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-third-task-review-535bcba1ae904b8596954d22dec8b0bc\\human_tasks.json","Root":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-third-task-review-535bcba1ae904b8596954d22dec8b0bc"}
+CROSS_FLOW_SUPPLIER {"ImportedSupplier":null,"Error":"","Ready":false,"Imported":0,"NewBuyerText":"This is a new shipment, from another supplier factory-two@example.invalid."}
+WARNING: no_reply: 
+C:\Users\<local-user>\AppData\Local\Temp\aar-third-task-review-535bcba1ae904b8596954d22dec8b0bc\data\manual_override.json 
+不存在,按空名单处理
+CROSS_FLOW_ACTUAL_QUOTE_CANDIDATES {"Missing":[],"Buyer":[],"Count":0}
+INVALID_CONFIRMATION_READY {"Saved":false,"Fields":[{"Scope":"cartons","Status":"unknown","Key":"carton_count","Value":"","Unit":"cartons"},{"Scope":"unit","Status":"unknown","Key":"unit_weight","Value":"","Unit":"kg"},{"Scope":"unit","Status":"unknown","Key":"unit_dimensions","Value":"","Unit":"cm"},{"Scope":"destination","Status":"unknown","Key":"delivery_address","Value":"","Unit":""}],"Ready":false}
+INVALID_ACTUAL_QUOTE_CANDIDATES {"Count":0,"Buyer":[]}
+SOURCE_LABEL_NOT_PROOF {"GenericReplyBlocked":true,"Saved":false,"SupplierReply":false,"Action":null}
+PARTIAL_CORRECTION_LOSES_VALID_FIELDS {"Weight":null,"Before":[],"After":[]}
+BLANK_KEY_WILDCARD {"RequestedIdentity":"","PlanBlocked":true,"IdentityMatch":false,"ExactTaskMatch":false,"StoredContact":""}
+RESOLVED_HISTORY_UNUSABLE {"ConfirmedFields":0,"FutureBlocked":false,"PastSupportedBlocked":true,"TaskExists":true,"IsOpen":true,"ExactMatch":true}
+UNVERIFIED_TASK_RESOLUTION {"SetResolved":false,"Status":"pending_human","ConfirmedFieldCount":0,"ResolvedRecorded":false}
+TASK-STORE-UNHEALTHY:corrupt
+At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:21 char:53
++ ... 'valid','missing')) { throw ('TASK-STORE-UNHEALTHY:'+ $read.Status) }
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (TASK-STORE-UNHEALTHY:corrupt:String) [], RuntimeException
+    + FullyQualifiedErrorId : TASK-STORE-UNHEALTHY:corrupt
+ 
+CHILD_EXIT=1

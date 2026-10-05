@@ -30,9 +30,17 @@
 # Dependency: reply_engine.ps1 (Get-NormalizedMsgText, Get-StableHash, ConvertTo-EpochMs).
 # Dot-sourced defensively so this file can also be loaded standalone by tests.
 
+# 模块互相按需加载的一次性标记（用 $global: 而不是 $script:：dot-source 时 $script: 解析到**调用方**
+#   的脚本作用域，跨模块根本读不到）。facts_engine 见到 AarLibLoadingMsgNorm 就不再回调本文件，
+#   否则 "facts_engine -> msg_norm -> facts_engine" 会递归到调用深度溢出（实测 CallDepthOverflow）。
+$global:AarLibLoadingMsgNorm = $true
+
 if (-not (Get-Command Get-NormalizedMsgText -ErrorAction SilentlyContinue)) {
     . (Join-Path (Split-Path $PSScriptRoot -Parent) 'reply_engine.ps1')
 }
+# 加载完成后立即清除重入标记（不能等到文件末尾：本文件会被多个模块 dot-source，
+#   若在末尾才清除，任何"加载中途就被判定为已完成"的组合都会跳过事实模型）。
+$global:AarLibLoadingMsgNorm = $false
 
 # Structured message schema version. Bump on any field change to the message object.
 $script:MsgSchemaVersion = 3
@@ -40,7 +48,21 @@ $script:MsgSchemaVersion = 3
 if (-not (Get-Command Get-QuoteDestination -ErrorAction SilentlyContinue)) {
     . (Join-Path $PSScriptRoot 'destination.ps1')
 }
+# [2026-10-05 spec §4.2 第 1 条] 单一事实模型（Get-CargoFacts / Get-QuoteReadiness）在本文件里被
+#   两个入口消费：Get-ConversationFacts 与 Get-QuoteReadinessForConversationText。依赖方向是
+#   msg_norm -> facts_engine（facts_engine 会用本文件的 ConvertTo-MessageList 与目的地解析），
+#   而本文件在 reply_engine/destination 之后加载，因此这里按需加载不会形成环。
+#   只加载一次；缺失时静默跳过，由消费方按"判据不可用"显式降级（绝不退回第二套关键词判据）。
+if (-not $global:AarFactsEngineLoaded) {
+    $__factsFile = Join-Path $PSScriptRoot 'facts_engine.ps1'
+    if ((Test-Path $__factsFile) -and -not $global:AarLibLoadingMsgNorm -and -not $global:AarLibLoadingFacts) { . $__factsFile }
+}
+$global:AarLibLoadingMsgNorm = $false
+
 function Get-MsgSchemaVersion { return $script:MsgSchemaVersion }
+
+# Definitions must live in the importing scope, not vanish after a function-local dot source.
+if(-not(Get-Command Get-TaskConfirmedEvidence -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'task_facts.ps1')}
 
 # Strip time, original-text, card and attachment transport markers from a raw line, returning the
 # human-readable text. Markers are transport metadata, never message content.
@@ -49,7 +71,7 @@ function Get-MsgPlainText([string]$line) {
     $t = $line -replace '^\[(BUYER|ME)\]\s*', ''
     $t = $t -replace '@@IMG:[^\s]*', ''
     $t = $t -replace '@@FILE:[^\s]*', ''
-    $t = $t -replace '@@(?:TS|MT|CARD):[^\s]*', ''
+    $t = $t -replace '@@(?:TS|MT|MID|SRC|CARD):[^\s]*', ''
     $t = $t -replace '@@OT:[A-Za-z0-9\+/=]+', ''
     $t = $t -replace '系统自动发送|自动接待发送', ''
     return $t.Trim()
@@ -132,7 +154,10 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
     if ($idConfident) { $stableId = $role + '|' + $normHash + '|' + $messageTsRaw }
     elseif ($DomIndex -ge 0) { $stableId = $role + '|' + $normHash + '|dom' + $DomIndex }
 
+    $platformId=[regex]::Match($line,'@@MID:([^\s]+)')
+    if($platformId.Success){$stableId=$role+'|id:'+$platformId.Groups[1].Value;$idConfident=$true}
     return [pscustomobject]@{
+        PlatformMessageId=$platformId.Groups[1].Value
         Schema        = $script:MsgSchemaVersion
         DomIndex      = $DomIndex
         Seq           = 0              # assigned after ordering (1 = oldest)
@@ -251,7 +276,10 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
         foreach ($message in $group.Group) { $message.IdConfident = $false }
     }
 
+    $platformId=[regex]::Match($line,'@@MID:([^\s]+)')
+    if($platformId.Success){$stableId=$role+'|id:'+$platformId.Groups[1].Value;$idConfident=$true}
     return [pscustomobject]@{
+        PlatformMessageId=$platformId.Groups[1].Value
         Schema        = $script:MsgSchemaVersion
         ConvoName     = $ConvoName
         Messages      = $list
@@ -268,12 +296,121 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
     }
 }
 
+# ============================================================================================
+# [2026-10-05 spec §4.2 第 1 条] 单一报价判据的字符串入口。
+#   quote.ps1 的报价提醒走的是**快照文本**（data\msgs_*.txt），而就绪判据在
+#   facts_engine.ps1::Get-QuoteReadiness（消费 Get-CargoFacts）。这里是两者之间唯一的适配层：
+#   任何消费者都必须通过它拿到与回复决策完全相同的事实与 Ready/MissingFields，
+#   不得再自行用"重量 + 尺寸 + 地址"三个布尔值决定能不能报价。
+# ============================================================================================
+# 把附件识别结果（vision/doc sidecar）转成一条合成买家证据行，使其与买家原话走**同一份**
+#   事实模型与准备度判据。没有值时不生成任何行。
+function ConvertTo-SidecarBuyerLine($Sidecar) {
+    if (-not $Sidecar) { return '' }
+    $parts = New-Object System.Collections.ArrayList
+    $w = ''
+    if ($Sidecar.PSObject.Properties.Name -contains 'weight_kg') { $w = [string]$Sidecar.weight_kg }
+    $d = ''
+    if ($Sidecar.PSObject.Properties.Name -contains 'dims') { $d = [string]$Sidecar.dims }
+    $c = ''
+    if ($Sidecar.PSObject.Properties.Name -contains 'cartons') { $c = [string]$Sidecar.cartons }
+    if ($w) { [void]$parts.Add('packed weight per carton ' + $w) }
+    if ($d) { [void]$parts.Add('packed dimensions ' + $d) }
+    if ($c) { [void]$parts.Add('cartons ' + $c) }
+    if ($parts.Count -eq 0) { return '' }
+    return ('[BUYER] (from attachment: ' + (@($parts.ToArray()) -join ', ') + ')')
+}
+
+# 附件识别单独给出的重量常常没有单位（sidecar 的 weight_kg 字段本身就是"公斤"含义，
+#   历史数据里存在 '47'、'9kg' 两种写法）。单位缺失时按 kg 补上，并明确标成"整批/单件范围未明"
+#   的事实模型值；这一步只服务于附件的字段语义，不改变任何买家原话的解析口径。
+function Get-SidecarWeightText([string]$Raw) {
+    $t = ([string]$Raw).Trim()
+    if (-not $t) { return '' }
+    if ($t -match '(?i)(kg|kgs|kilo|kilos|kilograms?|ton|tons|tonnes?|lb|lbs|公斤|千克|吨)\s*$') { return $t }
+    if ($t -match '^\d+(\.\d+)?$') { return ($t + ' kg') }
+    return $t
+}
+
+function Get-QuoteReadinessForSidecarText {
+    [CmdletBinding()]
+    param([string]$Text, $Sidecar = $null, [string]$ConvoName = '', [switch]$WithTaskEvidence)
+    $combined = [string]$Text
+    if ($Sidecar -and ($Sidecar.PSObject.Properties.Name -contains 'weight_kg')) {
+        $Sidecar = [pscustomobject]@{
+            weight_kg = (Get-SidecarWeightText ([string]$Sidecar.weight_kg))
+            dims      = $(if ($Sidecar.PSObject.Properties.Name -contains 'dims') { [string]$Sidecar.dims } else { '' })
+            cartons   = $(if ($Sidecar.PSObject.Properties.Name -contains 'cartons') { [string]$Sidecar.cartons } else { '' })
+        }
+    }
+    $line = ConvertTo-SidecarBuyerLine $Sidecar
+    if ($line) {
+        if ($combined) { $combined = $combined + [string][char]10 + $line } else { $combined = ('# BUYER: ' + $ConvoName + [string][char]10 + $line) }
+    }
+    return (Get-QuoteReadinessForConversationText -Text $combined -ConvoName $ConvoName -WithTaskEvidence:$WithTaskEvidence)
+}
+
+# [spec §5.4 第 3 条] 同一证据适配契约：显式要求时才从任务存储读取已验证的确认资料。
+#   纯文本/纯逻辑调用不传开关 ⇒ 完全不访问任务存储。
+function Resolve-TaskEvidenceForFacts([string]$Buyer, $Conversation, $ExplicitEvidence, [bool]$WithTaskEvidence) {
+    if ($ExplicitEvidence -and @($ExplicitEvidence).Count -gt 0) { return @($ExplicitEvidence) }
+    if (-not $WithTaskEvidence) { return @() }
+    if (-not $Buyer) { return @() }
+    if (-not (Get-Command Get-TaskConfirmedEvidence -ErrorAction SilentlyContinue)) {
+        $tf = Join-Path $PSScriptRoot 'task_facts.ps1'
+        if (Test-Path $tf) { . $tf }
+    }
+    if (-not (Get-Command Get-TaskConfirmedEvidence -ErrorAction SilentlyContinue)) { return @() }
+    $flow=Sync-CurrentCargoFlow -Buyer $Buyer -Conversation $Conversation
+    if($flow){$Conversation | Add-Member -NotePropertyName CargoFlowRef -NotePropertyValue $flow -Force}
+    return @(Get-TaskConfirmedEvidence -Buyer $Buyer -Conversation $Conversation)
+}
+
+function Get-QuoteReadinessForConversationText {
+    [CmdletBinding()]
+    param([string]$Text, [string]$ConvoName = '', $TaskEvidence = @(), [switch]$WithTaskEvidence)
+    $out = [pscustomobject]@{
+        Available = $false; Conversation = $null; Facts = $null; CargoFacts = $null
+        Readiness = $null; Ready = $false; MissingFields = @(); OptionalMissingFields = @()
+        CollectionComplete = $false; Clarifications = @(); RuleVersion = ''; Error = ''
+    }
+    if (-not (Get-Command Get-CargoFacts -ErrorAction SilentlyContinue)) { $out.Error = 'facts-engine-unavailable'; return $out }
+    try {
+        $conv = ConvertTo-MessageList ([string]$Text) $ConvoName
+        $out.Conversation = $conv
+        # [2026-10-05 第三轮 spec §5.4] 已验证的任务确认资料与买家原话走**同一份**事实模型与准备度判据。
+        $te = @(Resolve-TaskEvidenceForFacts -Buyer $ConvoName -Conversation $conv -ExplicitEvidence $TaskEvidence -WithTaskEvidence ([bool]$WithTaskEvidence))
+        $cf = Get-CargoFacts -Conversation $conv -TaskEvidence $te
+        $out.CargoFacts = $cf
+        $r = Get-QuoteReadiness -Facts $cf
+        $out.Readiness = $r
+        $out.Ready = [bool]$r.Ready
+        $out.MissingFields = @($r.MissingFields)
+        $out.OptionalMissingFields = @($r.OptionalMissingFields)
+        $out.CollectionComplete = [bool]$r.CollectionComplete
+        $out.Clarifications = @($r.Clarifications)
+        $out.RuleVersion = [string]$r.RuleVersion
+        $out.Available = $true
+    } catch {
+        $out.Error = $_.Exception.Message
+    }
+    return $out
+}
+
 # Facts derived from the conversation, used by the policy layer. Deliberately distinguishes the
 # evidence classes required by spec 4.2: buyer statement, human confirmation, model inference,
 # unknown. This function only ever reports the first two, and labels which is which.
 function Get-ConversationFacts {
     [CmdletBinding()]
-    param([Parameter(Mandatory = $true)]$Conversation)
+    param(
+        [Parameter(Mandatory = $true)]$Conversation,
+        # [2026-10-05 第三轮 spec §5.4] 由最小共享适配层（lib\task_facts.ps1）导出的任务确认证据。
+        #   不传时行为与旧调用完全一致（不读任务存储、不改变任何既有判据）。
+        $TaskEvidence = @(),
+        # [spec §5.4] 显式要求时才从任务存储读取已验证的确认资料（默认不访问真实存储）。
+        [switch]$WithTaskEvidence,
+        [string]$Buyer = ''
+    )
 
     $msgs = @($Conversation.Messages | Where-Object { -not $_.IsSystemCard })
     $buyerText = (@($msgs | Where-Object { $_.Role -eq 'buyer' } | ForEach-Object { $_.Orig }) -join [string][char]10)
@@ -283,8 +420,24 @@ function Get-ConversationFacts {
     $bl = $buyerText.ToLowerInvariant()
     $al = $allText.ToLowerInvariant()
     $destination = Get-QuoteDestination $Conversation
+    # [2026-10-05 spec §3.1] ONE fact model: when lib\facts_engine.ps1 is available its result is
+    # attached here, so every consumer (reply strategy, quote reminder, reports) reads the same
+    # values, scopes, statuses and evidence instead of re-deriving them from keywords.
+    $cargoFacts = $null
+    $quoteReadiness = $null
+    if (Get-Command Get-CargoFacts -ErrorAction SilentlyContinue) {
+        try {
+            $teFacts = @(Resolve-TaskEvidenceForFacts -Buyer $Buyer -Conversation $Conversation -ExplicitEvidence $TaskEvidence -WithTaskEvidence ([bool]$WithTaskEvidence))
+            $cargoFacts = Get-CargoFacts -Conversation $Conversation -TaskEvidence $teFacts
+            if (Get-Command Get-QuoteReadiness -ErrorAction SilentlyContinue) { $quoteReadiness = Get-QuoteReadiness -Facts $cargoFacts }
+        } catch { $taskEvidenceError=$_.Exception.Message;$cargoFacts=Get-CargoFacts -Conversation $Conversation;$quoteReadiness=Get-QuoteReadiness $cargoFacts }
+    }
 
     return [pscustomobject]@{
+        FlowRef=$Conversation.CargoFlowRef
+        TaskEvidenceError=$taskEvidenceError
+        CargoFacts      = $cargoFacts
+        QuoteReadiness  = $quoteReadiness
         HasWeight       = [bool]($bl -match '\d+\s*(kg|kgs|kilo|kilos|ton|tons)\b|\d+\s*(公斤|千克|吨)|weight\s*[:=]?\s*\d|peso\s*[:=]?\s*\d')
         HasDimensions   = [bool]($bl -match '\d+\s*[x\u00d7*]\s*\d+|\d+(\.\d+)?\s*(cm|mm)\s*[x\u00d7*]|dimension|尺寸|medidas')
         HasAddress      = $destination.HasPostalAddress

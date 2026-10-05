@@ -1,0 +1,22 @@
+ROOT {"TaskFile":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-closure-s1-review-715988ff46864c92b92ada5ccf30dcb3\\human_tasks.json","Root":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-closure-s1-review-715988ff46864c92b92ada5ccf30dcb3"}
+PASS POS_same_event_same_flow_retains_confirmed_ready sameFlow=True ready=True
+WARNING: no_reply: 
+C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-review-715988ff46864c92b92ada5ccf30dcb3\data\manual_override.json 
+不存在,按空名单处理
+SAME_TEXT_NEW_BATCH {"OldMessage":"buyer|635DBEB4058A0267119F91EEB998331C|1791172800000","Error":"","NewMessage":"buyer|635DBEB4058A0267119F91EEB998331C|1791259200000","QuoteCandidates":1,"OldFlow":"3c9b11abf71d4fc0a4129aae2ee39145","Ready":true,"NewFlow":"3c9b11abf71d4fc0a4129aae2ee39145"}
+FAIL NEG_distinct_new_batch_cannot_reuse_prior_flow_or_quote sameFlow=True ready=True quote=1
+BUYER_CONFLICT_RESOLVED {"CompletionRefs":["10","12","50x40x30","Amazon FTW1"],"CargoCountStatus":"conflict","ResolvedSucceeded":true,"Ready":false,"ResolvedRecorded":true}
+FAIL NEG_current_buyer_conflict_prevents_verified_completion conflict=conflict resolved=True evidence=True
+NEW_REQUIRED_ITEM_IGNORED {"ConfirmedFields":["unit_weight"],"ResolvedSucceeded":true,"SameTask":true,"PendingFields":["unit_weight","unit_dimensions"],"OriginalItems":["unit_weight"]}
+FAIL NEG_explicit_added_verification_item_is_preserved_and_gates_completion items=unit_weight resolved=True
+PRODUCT_WEIGHT_AS_PACKED_WEIGHT {"Error":"","QuoteCandidates":1,"WeightScope":"unit","Ready":true,"WeightValue":"1","WeightStatus":"provided"}
+FAIL NEG_product_each_item_weight_cannot_satisfy_packed_weight ready=True scope=unit quote=1
+PASS POS_explicit_outer_carton_weight_remains_ready ready=True quote=1
+PALLET_CONFIRMATION_RENDER {"CountFieldUnit":"pallets","Rendered":"Your supplier confirmed 12 kg per carton. Your supplier confirmed dimensions per carton of 50x40x30 cm. Your supplier confirmed 2 cartons.","Allowed":false,"Codes":["UNSUPPORTED_PROMISE"]}
+PALLET_ACTUAL_GENERATION {"Calls":1,"FallbackReason":"|controlled-plan-noncompliant","Source":"BLOCKED","Text":"","Codes":["UNSUPPORTED_PROMISE"]}
+FAIL NEG_valid_pallet_confirmation_keeps_unit_and_generates_legal_reply allowed=False generated=BLOCKED text=
+ATTRIBUTED_WAITING_NOTE {"ReplyRecorded":true,"Saved":true,"RecordContent":"Operator note: Waiting for supplier reply."}
+ATTRIBUTED_WAITING_CONSUMERS {"FullComplianceAllowed":true,"ActualGenerated":"Our team will check the packing information with your supplier.","FullComplianceCodes":[],"ModelClaimAdmission":false,"GeneratedSource":"FALLBACK","WordingBlocked":false,"PlanRender":"Our team will check the packing information with your supplier."}
+FAIL NEG_waiting_note_does_not_authorize_supplier_reply_claim replyEvidence=True wordingBlocked=False fullAllowed=True
+END
+RESULT pass=2 fail=6

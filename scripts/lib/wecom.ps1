@@ -59,6 +59,8 @@ function Test-WecomService {
 # 返回: SENT_OK / SERVICE_DOWN / NO_RECEIVER / SEND_ERROR: ...
 # $to 参数保留仅为兼容旧调用点签名；dsh-im 的目标由 targetId 决定，此处不再使用。
 function Send-WecomMessage([string]$text, [string]$to = "") {
+    if(-not(Get-Command Assert-AarSendAllowed -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'paths.ps1')}
+    Assert-AarSendAllowed 'real notification'
     $c = Get-DshImConfig
     if (-not $c.Url -or -not $c.BotId -or -not $c.TargetId) { return "SERVICE_DOWN" }
     # ⚠️ 必须挡**纯空白**：实测空白 text 会被接口拒为 400 bad-request（"Invalid delivery request."），

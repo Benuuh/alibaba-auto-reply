@@ -1,0 +1,10 @@
+New-ConfirmedOutboundReceipt : The term 'New-ConfirmedOutboundReceipt' is not recognized as the name of a cmdlet, funct
+ion, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path 
+is correct and try again.
+At C:\path\to\alibaba-auto-reply\tests\new_message_cooldown.tests.ps1:83 char:14
++     $receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text - ...
++              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (New-ConfirmedOutboundReceipt:String) [], ParentContainsErrorRecordExcep 
+   tion
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

@@ -1,0 +1,65 @@
+== unified result (Get-GoodsDataStatus, same fixtures) ==
+{"clar":"","ready":false,"collection":false,"rule":"2026-10-05.1","error":"","optional":"reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"carton_count","buyer":"Virtual Buyer F1"}
+{"clar":"","ready":true,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"","buyer":"Virtual Buyer F2"}
+{"clar":"","ready":false,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"carton_count,unit_weight,unit_dimensions,delivery_address","buyer":"Virtual Buyer F3"}
+{"clar":"","ready":false,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"unit_weight","buyer":"Virtual Buyer F4"}
+{"clar":"","ready":true,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"","buyer":"Virtual Buyer F5"}
+== actual summarize.ps1 run ==
+summarize exit=0
+summarize stdout: summary written: C:\Users\<local-user>\AppData\Local\Temp\aar-f7-repro-6b8db8e178e2478c953052cede58ad82\reports\reply_summary_20261005_1200-1200.md (5 replies)
+report path: C:\Users\<local-user>\AppData\Local\Temp\aar-f7-repro-6b8db8e178e2478c953052cede58ad82\reports\reply_summary_20261005_1200-1200.md
+== report content ==
+# 阿里国际站自动回复总结
+
+- **统计时段**: 2026-10-05 12:00:00 ~ 2026-10-05 12:00:00
+- **生成时间**: 2026-10-05 08:51:17
+- **回复总数**: 5 条
+- **涉及买家**: 5 位
+
+## Virtual Buyer F1
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F2
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F3
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F4
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F5
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+---
+## 货物数据齐全度（供报价判断）
+
+| 买家 | 货物名称 | 总重量 | 尺寸L\*W\*H | 报价目的地 | 图片(参考) | 供应商(参考) | 状态 |
+|------|---------|--------|-----------|---------|----------|----------|------|
+| Virtual Buyer F1 | Cargo name: cable | ✅ | ✅ | Amazon FTW1 | ❌ | ❌ | ✅ 齐全，可报价 |
+| Virtual Buyer F2 | 未知 | ✅ | ✅ | Amazon FTW1 | ❌ | ❌ | 缺: 货物名称 |
+| Virtual Buyer F3 | 未知 | ❌ | ❌ | 未知报价目的地 | ❌ | ❌ | 缺: 总重量、尺寸、报价目的地、货物名称 |
+| Virtual Buyer F4 | 未知 | ❌ | ✅ | Amazon FTW1 | ❌ | ❌ | 缺: 总重量、货物名称 |
+| Virtual Buyer F5 | 未知 | ✅ | ✅ | Amazon TEST2 | ❌ | ❌ | 缺: 货物名称 |
+
+> 注：齐全度由规则从买家消息自动判断（重量=数字+kg/吨，尺寸=三维数字或 dimensions，报价目的地=买家原文中的收货地址或明确 Amazon/FBA 收货仓代码；仓库代码不代表街道地址已提供，货物名称=产品链接或品名词）。图片与供应商联系列为参考，不计入齐全判定；结论仅供报价参考，请以实际聊天内容为准。
+
+---
+由 alibaba-auto-reply 监控自动生成
+
+ROOT=C:\Users\<local-user>\AppData\Local\Temp\aar-f7-repro-6b8db8e178e2478c953052cede58ad82

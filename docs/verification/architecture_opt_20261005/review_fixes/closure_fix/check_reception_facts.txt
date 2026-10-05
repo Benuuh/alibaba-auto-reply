@@ -1,0 +1,12 @@
+== reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+  FAIL: C11-single-clarify [what time is it here?] | got:[] want:[Happy to help with the time. Which country or time zone are you in?]
+  FAIL: C11-one-question-mark [what time is it here?] | got:[0] want:[1]
+  FAIL: C11-single-clarify [what is my local time] | got:[] want:[Happy to help with the time. Which country or time zone are you in?]
+  FAIL: C11-one-question-mark [what is my local time] | got:[0] want:[1]
+  FAIL: C11-single-clarify [what time is it where i am] | got:[] want:[Happy to help with the time. Which country or time zone are you in?]
+  FAIL: C11-one-question-mark [what time is it where i am] | got:[0] want:[1]
+  FAIL: C11-unknown-place-asks-once | text:[]
+  FAIL: C12-cross-day-text | got:[] want:[It's 2:05 AM on 2026-10-06 in China (UTC+8).]
+  FAIL: R4-explicit-place-precise [What time is it in London?] | got:[It's 7:05 AM in London (UTC+1).] want:[It's 7:05 AM in the UK (UTC+1).]
+  FAIL: R3-mixed-correct-zone-clock-allowed
+RESULT pass=496 fail=10

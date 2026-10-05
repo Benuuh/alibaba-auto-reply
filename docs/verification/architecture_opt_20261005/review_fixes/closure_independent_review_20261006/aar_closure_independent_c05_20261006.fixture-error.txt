@@ -1,0 +1,9 @@
+Test-ReplyCompliance : The term 'Test-ReplyCompliance' is not recognized as the name of a cmdlet, function, script file
+, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and t
+ry again.
+At C:\Users\<local-user>\AppData\Local\Temp\aar_closure_independent_c05_20261006.ps1:9 char:5
++  $r=Test-ReplyCompliance -Text $text -Decision $d
++     ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Test-ReplyCompliance:String) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

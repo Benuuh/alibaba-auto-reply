@@ -18,7 +18,7 @@
   },
   "fakeModel": {
     "mode": "compliant",
-    "compliantReply": "Thanks for checking in. I am confirming the current status with the warehouse and will come back to you as soon as I have it."
+    "compliantReply": "Thanks for checking in. I can't confirm the current status with the warehouse from here."
   },
   "expectedDecision": {
     "needHumanTodo": true,

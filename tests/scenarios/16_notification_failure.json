@@ -18,7 +18,7 @@
   },
   "fakeModel": {
     "mode": "null",
-    "compliantReply": "Thanks for checking in. I do not want to give you a guess, so I am confirming the current status and will come back to you as soon as I have it."
+    "compliantReply": "Thanks for checking in. I can't confirm the shipment status here."
   },
   "expectedDecision": {
     "needHumanTodo": true,
@@ -95,9 +95,21 @@
   "expectOrderConfident": true,
   "extraProbes": [
     {
-      "name": "notify-channel-verified-allows-deadline",
+      "name": "reachable-channel-is-not-action-evidence",
       "notifyChannelAvailable": true,
       "informational": true,
+      "expectDecision": {
+        "allowTimeCommitment": false
+      }
+    },
+    {
+      "name": "real-action-evidence-allows-deadline",
+      "notifyChannelAvailable": true,
+      "actionEvidence": {
+        "todoPersisted": true,
+        "notificationDelivered": true,
+        "deadline": "2026-10-04T01:00:00Z"
+      },
       "expectDecision": {
         "allowTimeCommitment": true
       },

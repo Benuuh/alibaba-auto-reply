@@ -1,0 +1,974 @@
+﻿TEST-LAYER=Offline files=53 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=True lockHolder= processes=2344,34196
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== alert_dedup.tests.ps1 ===
+CHILD-CONTEXT test=alert_dedup.tests.ps1 pid=39848 nonce=e73433c7ceac49089152319ae37fe9a2 verified=True contexts=2 exit=0
+  == alert_dedup tests (table-driven) ==
+    dedup source = C:\path\to\alibaba-auto-reply\scripts\lib\alert_dedup.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== cargo_facts.tests.ps1 ===
+CHILD-CONTEXT test=cargo_facts.tests.ps1 pid=38752 nonce=6ddf8a36fc9146709cb5ec7fb1404fc7 verified=True contexts=2 exit=0
+  == cargo_facts tests ==
+  
+  RESULT: pass=159 fail=0
+  ALL PASS
+  
+  
+=== contact_redline.tests.ps1 ===
+CHILD-CONTEXT test=contact_redline.tests.ps1 pid=17360 nonce=e722c1599fc54365bad04a91d1c9b90a verified=True contexts=2 exit=0
+  == contact_redline tests ==
+    FAIL: allow: Could you share the consignee's name, contact number and delivery address? CONTACT_ROLE_UNCLEAR,CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Could you share your supplier's contact details so we can confirm the packing information? CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Please share the recipient's phone number for delivery. CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Could you send the consignee's contact so the carrier can reach them? CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Could you share your supplier's contact so we can check the carton count and packed weight with them? CONTACT_ROLE_UNCLEAR
+    FAIL: buyer-is-consignee-allowed 
+  
+  RESULT: pass=51 fail=6
+  FAILED CASES: allow: Could you share the consignee's name, contact number and delivery address?, allow: Could you share your supplier's contact details so we can confirm the packing information?, allow: Please share the recipient's phone number for delivery., allow: Could you send the consignee's contact so the carrier can reach them?, allow: Could you share your supplier's contact so we can check the carton count and packed weight with them?, buyer-is-consignee-allowed
+  
+  
+=== dedup_order.tests.ps1 ===
+CHILD-CONTEXT test=dedup_order.tests.ps1 pid=30124 nonce=407b81cb1d694bbb98d529f613b1e9af verified=True contexts=2 exit=0
+  == dedup_order tests ==
+    锚点已退出判定: 2 种顺序 × 3 种账本 key = 6 种组合, 结论全部 = True|IN_PENDING_LIST
+    防哑巴: 会话在待回复列表里(连续 2 轮) ⇒ 必回, 与账本条数是否增长无关
+  RESULT: pass=50 fail=0
+  ALL PASS
+  
+  
+=== dimension_guidance.tests.ps1 ===
+CHILD-CONTEXT test=dimension_guidance.tests.ps1 pid=7788 nonce=9e52f2fcb4c7419abd40b95ad92147f8 verified=True contexts=2 exit=0
+  == dimension_guidance tests ==
+    FAIL: fallback-equals-approved-primary | got:[Could you share your supplier's contact details so we can confirm the packing information? Could you share the number of cartons or pallets? Thanks for your message.] want:[If you can share your supplier's contact, I can confirm the cargo details with them directly - that way I get you an accurate quote faster, and you don't have to go back and forth.]
+    FAIL: stepback-is-the-approved-second-fallback | got:[Could you share the number of cartons or pallets? Thanks for your message.] want:[Understood, no pressure. A rough size is fine to start - we can adjust it once the cargo reaches our warehouse.]
+  RESULT: pass=42 fail=2
+  FAILED
+  
+  
+=== docs_consistency.tests.ps1 ===
+CHILD-CONTEXT test=docs_consistency.tests.ps1 pid=12756 nonce=9604768f7da84da19e913766c811d142 verified=True contexts=2 exit=0
+  == docs_consistency tests ==
+    ok   health_check.ps1 能派生出检查项
+    ok   README_部署说明.md 有检查项声明行
+    ok   检查项【数量】一致
+    ok   检查项【名单】无遗漏
+    ok   检查项【名单】无多余
+    ok   config.json.example 存在
+    ok   config.json.example 是合法 JSON
+    ok   模板键集 ⊇ 现役键集
+    ok   config.json.example 含 reply_min_gap_min = 5
+    ok   config.json 含 reply_min_gap_min = 5
+    ok   config.json.example 含 reply_post_send_cooldown_min = 5
+    ok   config.json 含 reply_post_send_cooldown_min = 5
+    ok   发送后冷却 ≥ 最小间隔（§0.1 硬要求）
+    ok   README.md 未写死测试数字
+    ok   README_部署说明.md 未写死测试数字
+    ok   docs\KNOWN_EXCEPTIONS.md 未写死测试数字
+    ok   SKILL.md 未写死测试数字
+  RESULT: pass=17 fail=0
+  ALL PASS
+  
+  
+=== gonghai_chrome_isolation.tests.ps1 ===
+CHILD-CONTEXT test=gonghai_chrome_isolation.tests.ps1 pid=20108 nonce=f0c3cb7a942741b8be8674b3316eda42 verified=True contexts=2 exit=0
+  == gonghai_chrome_isolation tests ==
+  
+  RESULT: pass=124 fail=0
+  ALL PASS
+  
+  
+=== goods_engine.tests.ps1 ===
+CHILD-CONTEXT test=goods_engine.tests.ps1 pid=37216 nonce=8839cfa9cfb4411a8a2047f6d368d7b6 verified=True contexts=2 exit=0
+  == goods_engine tests ==
+  
+  RESULT: pass=27 fail=0
+  ALL PASS
+  
+  
+=== heartbeat.tests.ps1 ===
+CHILD-CONTEXT test=heartbeat.tests.ps1 pid=25044 nonce=b3b2f6859ce34fc8ac00e88181b0a490 verified=True contexts=2 exit=0
+  == heartbeat tests (table-driven) ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== log_maintenance.tests.ps1 ===
+CHILD-CONTEXT test=log_maintenance.tests.ps1 pid=14412 nonce=581339016fba4edca3c647c20617af1a verified=True contexts=2 exit=0
+  == log_maintenance tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== message_order.tests.ps1 ===
+CHILD-CONTEXT test=message_order.tests.ps1 pid=34636 nonce=232f2cd47a9c453685fd3db3ec659077 verified=True contexts=2 exit=0
+  FAIL: monitor-adapter-model-sees-question
+  FAIL: adapter-cannot-recreate-confident-order-from-stripped-lines
+  FAIL: generator-rejects-decision-about-an-older-message
+  FAIL: unsafe-handler-did-not-model-or-mutate-ledger
+  RESULT: pass=31 fail=4
+  
+  
+=== msg_source.tests.ps1 ===
+CHILD-CONTEXT test=msg_source.tests.ps1 pid=36784 nonce=13fe194628a841a4ba435f983c8abd9d verified=True contexts=2 exit=0
+  == msg_source tests ==
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== no_reply_write.tests.ps1 ===
+CHILD-CONTEXT test=no_reply_write.tests.ps1 pid=38484 nonce=e76bf0874ee4404c9f7e6ed54d70834a verified=True contexts=2 exit=0
+  == no_reply_write tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_write_709b506a04454998b273f4bf5890efb5\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== no_reply.tests.ps1 ===
+CHILD-CONTEXT test=no_reply.tests.ps1 pid=22264 nonce=ad6de194ad7f4636a41e389705489236 verified=True contexts=2 exit=0
+  == no_reply tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_tests_373a21f7c018432f9d090df2c1d7df44\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=29 fail=0
+  ALL PASS
+  
+  
+=== review_fixes.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes.tests.ps1 pid=10732 nonce=03497466aa374d8898060100c4d8e453 verified=True contexts=2 exit=1
+  == review_fixes tests (pure layer) ==
+    FAIL: A1-role-purpose-allowed [Could you share the consignee's contact number for delivery?] CONTACT_ROLE_UNCLEAR
+    FAIL: A1-role-purpose-allowed [Could you share your supplier's contact details so we can confirm the packing information?] CONTACT_ROLE_UNCLEAR
+    FAIL: A1-role-purpose-allowed [Please share the recipient's phone number for delivery.] CONTACT_ROLE_UNCLEAR
+    FAIL: A1-role-purpose-allowed [Could you send the consignee's contact so the carrier can reach them?] CONTACT_ROLE_UNCLEAR
+    A1 done
+    A4 done
+    FAIL: A6 [Could you share the packed dimensions per carton or pallet (L x W x H)?] want=True got=False ASK_OUT_OF_SCOPE
+    A6 done
+    FAIL: T-correct-clock-allowed FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED
+    T1/T2 done
+  
+  ISOLATION-VIOLATION: runtime root 'C:\Users\<local-user>\AppData\Local\Temp\aar-test-6a12332889cf4feb937ddf5decdbc1cc' is outs
+  ide the deploy root but has no  marker; refusing to write state file 'C:\Users\<local-user>\AppData\Local\Temp\aar-ledger-c598
+  efa2f63d412b84ccf53728097d87\state.json' (call Initialize-AarIsolation / New-AarIsolationRoot first)
+  At C:\path\to\alibaba-auto-reply\scripts\lib\paths.ps1:153 char:9
+  +         throw ("ISOLATION-VIOLATION: runtime root '" + (Get-AarRuntim ...
+  +         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : OperationStopped: (ISOLATION-VIOLA...tionRoot first):String) [], RuntimeException
+      + FullyQualifiedErrorId : ISOLATION-VIOLATION: runtime root 'C:\Users\<local-user>\AppData\Local\Temp\aar-test-6a12332889 
+     cf4feb937ddf5decdbc1cc' is outside the deploy root but has no  marker; refusing to write state file 'C:\Users\2212  
+    9\AppData\Local\Temp\aar-ledger-c598efa2f63d412b84ccf53728097d87\state.json' (call Initialize-AarIsolation / New-A   
+   arIsolationRoot first)
+   
+  
+=== second_fix_contact.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_contact.tests.ps1 pid=38172 nonce=6993493caa0c4028bc6e75caec08c6ce verified=True contexts=3 exit=0
+  == second_fix contact tests (F1) ==
+    FAIL: F1-authorized-recipient-redline-passes CONTACT_ASK_UNAUTHORIZED_FIELD
+    FAIL: F1-role-purpose-still-allowed [Could you share the consignee's name, contact number and delivery address?] CONTACT_ROLE_UNCLEAR,CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Could you share your supplier's contact details so we can confirm the packing information?] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Please share the recipient's phone number for delivery.] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Could you send the consignee's contact so the carrier can reach them?] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Could you share your supplier's contact so we can check the carton count and packed weight with them?] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-gen-rewrite-source got=[FALLBACK] want=[LLM_REWRITE]
+    FAIL: F1-gen-double-violation-reason business-body-sensitive
+  
+  RESULT: pass=52 fail=8
+  FAILED CASES: F1-authorized-recipient-redline-passes, F1-role-purpose-still-allowed [Could you share the consignee's name, contact number and delivery address?], F1-role-purpose-still-allowed [Could you share your supplier's contact details so we can confirm the packing information?], F1-role-purpose-still-allowed [Please share the recipient's phone number for delivery.], F1-role-purpose-still-allowed [Could you send the consignee's contact so the carrier can reach them?], F1-role-purpose-still-allowed [Could you share your supplier's contact so we can check the carton count and packed weight with them?], F1-gen-rewrite-source, F1-gen-double-violation-reason
+  
+  
+=== second_fix_policy.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_policy.tests.ps1 pid=17732 nonce=25ecef71aa134140b9e074e2bf6b1e48 verified=True contexts=2 exit=0
+  == second_fix policy tests (F5 / F6 / F8) ==
+    FAIL: F6-two-questions-passes-own-check 
+    FAIL: F8-real-clarification-allowed CLARIFY_CANDIDATE_UNSUPPORTED
+    FAIL: F8-clarify-plus-unauthorized-ask-blocked 
+    FAIL: F8-unit-modifier-not-count ASK_OUT_OF_SCOPE
+  
+  RESULT: pass=90 fail=4
+  FAILED CASES: F6-two-questions-passes-own-check, F8-real-clarification-allowed, F8-clarify-plus-unauthorized-ask-blocked, F8-unit-modifier-not-count
+  
+  
+=== page_heal_throttle.tests.ps1 ===
+CHILD-CONTEXT test=page_heal_throttle.tests.ps1 pid=27732 nonce=d83164bb6ccb4881817eb998defa695d verified=True contexts=2 exit=0
+  == page_heal_throttle tests ==
+  RESULT: pass=15 fail=0
+  ALL PASS
+  
+  
+=== page_health_verdict.tests.ps1 ===
+CHILD-CONTEXT test=page_health_verdict.tests.ps1 pid=35716 nonce=6d95e4fcdafb430a8bf166d3695a922d verified=True contexts=2 exit=0
+  == page_health_verdict tests (table-driven) ==
+    verdict source = C:\path\to\alibaba-auto-reply\scripts\lib\cdp.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== reply_chain.tests.ps1 ===
+CHILD-CONTEXT test=reply_chain.tests.ps1 pid=23068 nonce=8f4fcefac270413c9e18699ded9d84a5 verified=True contexts=2 exit=0
+  == reply_chain tests ==
+    FAIL: compliance-allows: If you can share your supplier's contact
+    FAIL: fallback-compliant: dimension_missing
+  RESULT: pass=154 fail=2
+  FAILED
+  
+  
+=== reply_engine.tests.ps1 ===
+CHILD-CONTEXT test=reply_engine.tests.ps1 pid=24152 nonce=2c0521073f054dff8cec98a056dda3de verified=True contexts=2 exit=0
+  == reply_engine tests ==
+  RESULT: pass=75 fail=0
+  ALL PASS
+  
+  
+=== reply_gate_dupskip.tests.ps1 ===
+CHILD-CONTEXT test=reply_gate_dupskip.tests.ps1 pid=33588 nonce=5dcde6a82c0f402690000fb6c195159b verified=True contexts=2 exit=0
+  == reply_gate_dupskip tests ==
+  
+  RESULT: pass=42 fail=0
+  ALL PASS
+  
+  
+=== report_push.tests.ps1 ===
+CHILD-CONTEXT test=report_push.tests.ps1 pid=33692 nonce=562398045dd94037a186cb82e32c0170 verified=True contexts=2 exit=1
+  
+  ISOLATION-VIOLATION: offline context refuses real notification
+  At C:\path\to\alibaba-auto-reply\scripts\lib\test_context.ps1:10 char:33
+  + ... neRequired){throw ('ISOLATION-VIOLATION: offline context refuses '+$O ...
+  +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : OperationStopped: (ISOLATION-VIOLA...al notification:String) [], RuntimeException
+      + FullyQualifiedErrorId : ISOLATION-VIOLATION: offline context refuses real notification
+   
+  
+=== rule_registry.tests.ps1 ===
+CHILD-CONTEXT test=rule_registry.tests.ps1 pid=26988 nonce=b47a51a46cb74cff91ecf0f35ebc88d0 verified=True contexts=2 exit=0
+  == rule_registry tests ==
+    FAIL: wired-consumers-exist R-CONFIG-PROCESS-TEMPLATE:Get-ScenarioFallbackBody ; R-CONFIG-BILLING-RULE:Get-ScenarioFallbackBody
+    FAIL: every-violation-code-is-registered unregistered: UNSUPPORTED_RECEIVED_FACT
+    FAIL: wired-codes-exist-in-code R-TIME-TARGET-ANSWERED:FACT_TIME_TARGET_UNANSWERED ; R-TIME-TARGET-CLARIFIED:FACT_TIME_TARGET_UNCLARIFIED ; R-CLOCK-MATCH:FACT_TIME_MISMATCH
+  
+  RESULT: pass=11 fail=3
+  FAILED CASES: wired-consumers-exist, every-violation-code-is-registered, wired-codes-exist-in-code
+  
+  
+=== send_result.tests.ps1 ===
+CHILD-CONTEXT test=send_result.tests.ps1 pid=13520 nonce=34a83a48317d4d6488d172a48d84acc7 verified=True contexts=2 exit=0
+  == send_result tests ==
+    FAIL: P-confirmed-status got=[unverified] want=[confirmed]
+    FAIL: P-confirmed-evidence 
+    FAIL: P-buyer-last-is-absent got=[unverified] want=[absent]
+    FAIL: P-other-ours-is-absent got=[unverified] want=[absent]
+    FAIL: X-confirmed-is-sent-ok got=[UNKNOWN] want=[SENT_OK]
+    FAIL: X-confirmed-flag got=[False] want=[True]
+  
+  RESULT: pass=19 fail=6
+  FAILED CASES: P-confirmed-status, P-confirmed-evidence, P-buyer-last-is-absent, P-other-ours-is-absent, X-confirmed-is-sent-ok, X-confirmed-flag
+  
+  
+=== should_reply_v2.tests.ps1 ===
+CHILD-CONTEXT test=should_reply_v2.tests.ps1 pid=39548 nonce=c13ee638f5964a3aa4f3ba4df623cafe verified=True contexts=2 exit=0
+  == should_reply_v2 tests ==
+    §2 判定表: 5 行(行 2 两种形态)逐行断言, Reason 逐字
+    §4.1 裁决: 方案甲(保守) —— 账本不可读 ⇒ 判据行 1 fail-closed, 且整轮门禁 P6 保持
+  
+  RESULT: pass=90 fail=0
+  ALL PASS
+  
+  
+=== suggestions.tests.ps1 ===
+CHILD-CONTEXT test=suggestions.tests.ps1 pid=6176 nonce=eff2311669ac4efab30109daa7fbe02f verified=True contexts=2 exit=0
+  == suggestions tests ==
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== third_fix_clarify.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_clarify.tests.ps1 pid=23300 nonce=20e3773fb53d41b6ab9653174bb3f05e verified=True contexts=2 exit=0
+  == third_fix clarification tests (R7) ==
+    FAIL: Q08-unit-modifier-not-a-count-ask 
+  
+  RESULT: pass=23 fail=1
+  FAILED CASES: Q08-unit-modifier-not-a-count-ask
+  
+  
+=== third_fix_contact_fields.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_contact_fields.tests.ps1 pid=30632 nonce=62b6773630f64d12b24a52f1d44a8dd8 verified=True contexts=2 exit=0
+  == third_fix contact/field tests (R1 / R4) ==
+  
+  RESULT: pass=37 fail=0
+  ALL PASS
+  
+  
+=== third_fix_g1_guard.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_g1_guard.tests.ps1 pid=29468 nonce=28709f2db6514e97b392f9df9d885596 verified=True contexts=2 exit=0
+  == third_fix G1 production-path guard tests ==
+    FAIL: G1-outside-writer-roots-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-outside-writer-roots-is-not-benign got=[1] want=[0]
+    FAIL: G1-chrome-profile-without-running-chrome-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-writer-owned-without-writer-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-no-writer-any-change-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-injected-proof-is-pass got=[UNRESOLVED] want=[PASS]
+  
+  RESULT: pass=28 fail=6
+  FAILED CASES: G1-outside-writer-roots-is-fatal, G1-outside-writer-roots-is-not-benign, G1-chrome-profile-without-running-chrome-is-fatal, G1-writer-owned-without-writer-is-fatal, G1-no-writer-any-change-is-fatal, G1-injected-proof-is-pass
+  
+  
+=== third_fix_time_binding.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_time_binding.tests.ps1 pid=22708 nonce=e256e2318021463da4764eea8f6cb525 verified=True contexts=2 exit=0
+  == third_fix time binding tests (R6) ==
+    FAIL: T01-correct-answer-passes 
+    FAIL: T02-final-text-passes-own-check EMPTY
+    FAIL: T10-scope-stable [What time is it in hamburg?] FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED
+    FAIL: T10-scope-stable [What time is it now? My company is in Tokyo.] FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED
+  
+  RESULT: pass=35 fail=4
+  FAILED CASES: T01-correct-answer-passes, T02-final-text-passes-own-check, T10-scope-stable [What time is it in hamburg?], T10-scope-stable [What time is it now? My company is in Tokyo.]
+  
+  
+=== vision.tests.ps1 ===
+CHILD-CONTEXT test=vision.tests.ps1 pid=26468 nonce=7bbd454abff7456a8eaf33786688ff89 verified=True contexts=2 exit=0
+  == vision tests ==
+    FAIL: goods-sidecar-weight
+    FAIL: goods-sidecar-dims
+    FAIL: goods-nosnap-sidecar
+  
+    RESULT: pass=40 fail=3
+    FAILED: goods-sidecar-weight, goods-sidecar-dims, goods-nosnap-sidecar
+  
+  
+=== amazon_destination.tests.ps1 ===
+CHILD-CONTEXT test=amazon_destination.tests.ps1 pid=17972 nonce=d030679fd54e493b966abfeb3bc80c88 verified=True contexts=2 exit=1
+  PASS B1 quote destination fact
+  PASS B1 no address ask
+  FAIL B1 goods to quote candidate
+  PASS B1 warehouse is not postal address
+  PASS B1 model context distinguishes warehouse and street
+  PASS B1 source evidence is buyer original
+  FAIL B3 unavailable model real generation fallback
+  FAIL B2 real model chain bounded rewrite then compliant fallback
+  PASS B2 deterministic address request [Please send the delivery address.]
+  PASS B2 deterministic address request [What is the zip code?]
+  PASS B2 deterministic address request [Could you confirm the warehouse code?]
+  PASS B2 deterministic address request [I need the destination city and state.]
+  PASS B2 deterministic address request [Delivery address is required.]
+  PASS B2 deterministic address request [Please confirm Amazon FTW1.]
+  PASS B2 deterministic address request [Should I quote to FTW1?]
+  PASS B2 acknowledgment allowed
+  PASS B2 excessive caller rewrite budget still bounded to one
+  PASS B2 price prohibition retained
+  PASS B4 positive expression [DDP to amazon: ftw1.]
+  PASS B4 positive expression [deliver to FBA warehouse FTW1]
+  PASS B4 positive expression [亚马逊 FTW1 仓]
+  PASS B4 positive expression [送到亚马逊：ftw1]
+  PASS B4 positive expression [Amazon LGB8]
+  PASS B4 decoded original over translation
+  PASS B5 buyer Amazon context bare answer
+  PASS B5 bot question provides context only
+  PASS B6 unsupported source [Our model is FTW1]
+  PASS B6 unsupported source [SKU FTW1]
+  PASS B6 unsupported source [order number FTW1]
+  PASS B6 unsupported source [https://example.invalid/Amazon/FTW1]
+  PASS B6 unsupported source [Amazon FTW1.pdf]
+  PASS B6 unsupported source [FTW1]
+  PASS B6 robot repetition not buyer evidence
+  PASS B6 goods also ignores bot destination
+  PASS B6 explicit owner confirmation has human source
+  PASS B6 bot cannot forge owner confirmation
+  FAIL B7 exact code question [Deliver to Amazon warehouse]
+  FAIL B7 exact code question [FBA]
+  FAIL B7 exact code question [DDP to Amazon X123456]
+  PASS B8 non receiving location [not FTW1]
+  PASS B8 non receiving location [we used FTW1 before]
+  PASS B8 non receiving location [pickup from Amazon FTW1]
+  PASS B8 non receiving location [Our model is FTW1]
+  PASS B8 trusted explicit revocation drops warehouse
+  PASS B8 trusted negation drops selected warehouse
+  PASS B8 unrelated text retains destination
+  PASS B9 trusted switch updates current warehouse
+  PASS B9 context current quote destination updated
+  PASS B9 goods current destination updated
+  FAIL B10 ambiguous Amazon FTW1 or TEST2
+  PASS B10 ambiguous goods not complete
+  FAIL B10 ambiguous Amazon FTW1/Amazon TEST2
+  PASS B10 ambiguous goods not complete
+  FAIL B10 ambiguous Amazon FTW1/Delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  FAIL B10 ambiguous Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  PASS B10 associated same message address retained
+  PASS B10 known plus unsupported alternative remains ambiguous
+  PASS B11 required cargo missing [53 x 41 x 32 cm, Amazon FTW1]
+  PASS B11 required cargo missing [216 kg, Amazon FTW1]
+  PASS B12 ordinary postal address usable
+  PASS B12 ordinary missing destination still asks address
+  PASS B12 address ownership clarification retained
+  PASS B12 explicit switch to private address
+  FAIL B13 actual goods quote reminder success
+  
+  Exception calling "ReadAllText" with "1" argument(s): "Could not find file 'C:\Users\<local-user>\AppData\Local\Temp\amazon_de
+  stination_test_1418e62e66af40e69845753f9fb0a220\reminders.json'."
+  At C:\path\to\alibaba-auto-reply\tests\amazon_destination.tests.ps1:122 char:5
+  +     $beforeState = [IO.File]::ReadAllText($stateFile)
+  +     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+      + FullyQualifiedErrorId : FileNotFoundException
+   
+  
+=== atomic_state.tests.ps1 ===
+CHILD-CONTEXT test=atomic_state.tests.ps1 pid=20764 nonce=6c57c78db9714e0fb4817c55cbdad536 verified=False contexts=2 exit=0
+  == atomic_state tests ==
+  
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== daemon_launch.tests.ps1 ===
+CHILD-CONTEXT test=daemon_launch.tests.ps1 pid=21404 nonce=8d602869a0f74836b4018d52daf4eb06 verified=True contexts=2 exit=0
+  == daemon_launch tests ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== env_block.tests.ps1 ===
+CHILD-CONTEXT test=env_block.tests.ps1 pid=24520 nonce=ea4dc9ac3fdb4b5888c77de58914bc6f verified=True contexts=2 exit=0
+  == env_block tests ==
+    NOTE: parent process has no case-insensitive duplicate env keys, skipping the folding assertions (environment-dependent, not a regression)
+  RESULT: pass=11 fail=0
+  ALL PASS
+  
+  
+=== human_pause.tests.ps1 ===
+CHILD-CONTEXT test=human_pause.tests.ps1 pid=25788 nonce=358354d42ea2403697a4fc0273db4861 verified=False contexts=2 exit=0
+  == human_pause tests ==
+    FAIL: P8-record-match-exact 
+    FAIL: P8-record-match-normalised 
+    FAIL: P8-index-map-marks-record-line 
+    FAIL: P8-record-line-is-bot got=[unknown] want=[bot]
+    FAIL: P8-record-line-evidence got=[timer-marker-only] want=[confirmed-send-record]
+    FAIL: P8-gate-sends-when-our-message-proven got=[SKIP] want=[SEND]
+    FAIL: P8-gate-reason-bot got=[unknown-me-tail] want=[bot-last]
+    FAIL: P8-store-persisted 
+    FAIL: P8-bot-line-is-a-confirmed-send got=[unknown] want=[bot]
+  
+  RESULT: pass=65 fail=9
+  FAILED CASES: P8-record-match-exact, P8-record-match-normalised, P8-index-map-marks-record-line, P8-record-line-is-bot, P8-record-line-evidence, P8-gate-sends-when-our-message-proven, P8-gate-reason-bot, P8-store-persisted, P8-bot-line-is-a-confirmed-send
+  
+  
+=== human_tasks.tests.ps1 ===
+CHILD-CONTEXT test=human_tasks.tests.ps1 pid=33404 nonce=ab588cc7c9db4cd8a54f69ea1725ef49 verified=False contexts=2 exit=1
+  == human_tasks tests ==
+  
+  ConvertTo-EpochMs : The term 'ConvertTo-EpochMs' is not recognized as the name of a cmdlet, function, script file, or o
+  perable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try aga
+  in.
+  At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:68 char:51
+  + ...   $refs=@($current.CurrentContextRefs);$cut=ConvertTo-EpochMs $curren ...
+  +                                                 ~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : ObjectNotFound: (ConvertTo-EpochMs:String) [], ParentContainsErrorRecordException
+      + FullyQualifiedErrorId : CommandNotFoundException
+   
+  
+=== isolation.tests.ps1 ===
+CHILD-CONTEXT test=isolation.tests.ps1 pid=25932 nonce=a643a99426f14e508158d8de9485741f verified=True contexts=2 exit=0
+  == isolation tests (spec §6.3) ==
+    ok   I01a explicit ConfigPath is honoured
+    ok   I01b code root follows the explicit config
+    ok   I01c runtime root defaults to the code root
+    ok   I01d not isolated without an explicit runtime root
+    ok   I02a runtime paths resolve inside the explicit RuntimeRoot
+    ok   I02b code paths still come from the config
+    ok   I02c isolated flag is on
+    ok   I03 unmarked isolated runtime fails closed
+    ok   I04a marker exists after New-AarIsolationRoot
+    ok   I04b Test-AarIsolatedRuntime is true with marker
+    ok   I04c production path list is non-empty
+    ok   I04d writing a production path is refused
+    ok   I05a writing inside the isolated root is allowed
+    ok   I05b -WithinRuntimeRoot refuses an outside path
+    ok   I10 isolation root inside a production path is refused
+    ok   I08 Invoke-CdpEval is refused while isolated
+    ok   I09 Send-OneTalkMessage is refused while isolated
+    ok   I11a isolated writes create no production file
+    ok   I11b the isolated files really were written
+    ok   I12a importing the modules has no runtime error
+    ok   I12b import does not create the runtime root
+    ok   I07 unmarked runtime root is not "isolated"
+    ok   I07b a marker with isolated=false does not count
+    ok   I06a default resolution is production (not isolated)
+    ok   I06b the guard is a no-op in production mode
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock_scope.tests.ps1 ===
+CHILD-CONTEXT test=lock_scope.tests.ps1 pid=37016 nonce=f5c5c65c50fa4ba2bcb086b71d2b60e8 verified=False contexts=2 exit=0
+  == lock_scope tests ==
+  
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock.tests.ps1 ===
+CHILD-CONTEXT test=lock.tests.ps1 pid=15432 nonce=610f20380de34b5b90d4105abdec776c verified=False contexts=2 exit=0
+  == lock tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== new_message_cooldown.tests.ps1 ===
+CHILD-CONTEXT test=new_message_cooldown.tests.ps1 pid=27856 nonce=aac6528cbec84fc7938b0f5722023cce verified=True contexts=2 exit=0
+  FAIL B2 actual send-time gate rejects a bypassed dirty adapter result
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: 18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True trusted=True alreadyAnswered=False secSinceLastSend=60 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=1 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=6CC3D195
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  Reply source: FALLBACK
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=24 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Thanks for your message.
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=320 budget=180s
+  FAIL release final holding line cannot bypass destination policy or advance state
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: 18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True trusted=True alreadyAnswered=False secSinceLastSend=60 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=1 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=6CC3D195
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  Reply source: FALLBACK
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=24 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Thanks for your message.
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=320 budget=180s
+  RESULT pass=80 fail=2
+  
+  
+=== reception_facts.tests.ps1 ===
+CHILD-CONTEXT test=reception_facts.tests.ps1 pid=24772 nonce=554a3277f5e74a2db08d3f0fe4bdf01a verified=True contexts=2 exit=0
+  == reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+    FAIL: C01-text | got:[] want:[It's 2:05 PM in China (UTC+8).]
+    FAIL: C01-source | got:[BLOCKED] want:[DIRECT_FACT]
+    FAIL: C01-explicit-place-text | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: C06-order-and-completeness | got:[] want:[We're Example Freight. I'm Taylor, Example Freight's virtual shipping assistant. It's 2:05 PM in China (UTC+8).]
+    FAIL: C06-partial-known-company-unknown | text:[]
+    FAIL: C06-partial-time-still-answered | text:[]
+    FAIL: C12-cross-day-text | got:[] want:[It's 2:05 AM on Oct 6 in China (UTC+8).]
+    FAIL: C12-other-seller-zone-text | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: C17-model-unavailable-reason | got:[] want:[llm-failed]
+    FAIL: C17-model-unavailable-calls | got:[1] want:[0]
+    FAIL: C17-dirty-fallback-blocks | got:[FALLBACK] want:[BLOCKED]
+    FAIL: C17-dirty-fallback-empty-text | got:[Could you share the number of cartons or pallets?] want:[]
+    FAIL: C17-dirty-fallback-reason | text:[]
+    FAIL: C19-merged-answer-has-time | text:[]
+    FAIL: C19-merged-answer-has-name | text:[]
+    FAIL: C21-correct-clock-allowed
+    FAIL: R3-explicit-place [What time is it now in Tokyo?] | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [What time is it in Tokyo now?] | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [What's the current time in Tokyo?] | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [what time is it in Tokyo] | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [What time is it in Tokyo, please?] | got:[] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-no-place-seller-zone | got:[] want:[It's 2:05 PM in China (UTC+8).]
+    FAIL: R3-mixed-company-answered | text:[]
+    FAIL: R3-mixed-place-answered | text:[]
+    FAIL: R4-ambiguous-country-clarifies [What time is it in the USA?] | got:[] want:[Happy to help with the time. Which city or time zone in the United States do you mean?]
+    FAIL: R4-ambiguous-country-one-question [What time is it in the USA?] | got:[0] want:[1]
+    FAIL: R4-ambiguous-country-clarifies [What time is it in the US?] | got:[] want:[Happy to help with the time. Which city or time zone in the United States do you mean?]
+    FAIL: R4-ambiguous-country-one-question [What time is it in the US?] | got:[0] want:[1]
+    FAIL: R4-explicit-place-precise [What time is it in London?] | got:[] want:[It's 7:05 AM in the UK (UTC+1).]
+    FAIL: R3-mixed-correct-zone-clock-allowed
+    FAIL: C18-r1-sent-once | got:[0] want:[1]
+    FAIL: C18-r1-sent-text | got:[] want:[It's 2:05 PM in China (UTC+8).]
+    FAIL: C18-r1-no-send-gate-block | got:[2] want:[0]
+    FAIL: C18-r2-sent | got:[0] want:[2]
+    FAIL: C18-r2-sent-text | got:[] want:[We're Example Freight.]
+    FAIL: C18-r2-decision-facts | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What time is it now
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=7D0D2D69
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:05 PM in China (UTC+8).
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=1 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What's the name of ur company
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=3/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=2 alreadyAnswered=False ledgerKey= lastBuyerHash=9E9B33C6
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time,seller_company] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:05 PM in China (UTC+8). We're Example Freight.
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement]
+    FAIL: C18-r2-no-send-gate-block | got:[4] want:[0]
+    FAIL: C18-r3-sent | got:[0] want:[3]
+    FAIL: C18-r3-sent-text | got:[] want:[I'm Taylor, Example Freight's virtual shipping assistant.]
+    FAIL: C18-r3-decision-facts | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What time is it now
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=7D0D2D69
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:05 PM in China (UTC+8).
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=1 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What's the name of ur company
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=3/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=2 alreadyAnswered=False ledgerKey= lastBuyerHash=9E9B33C6
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time,seller_company] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:05 PM in China (UTC+8). We're Example Freight.
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=3 order=timestamps-monotonic-ascending confident=True skipped=2 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What's ur name
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=4/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=3 alreadyAnswered=False ledgerKey= lastBuyerHash=FD454F0B
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=3 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time,seller_company,seller_name] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:06 PM in China (UTC+8). We're Example Freight. I'm Ta...
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement]
+    FAIL: C18-r3-no-send-gate-block | got:[6] want:[0]
+    FAIL: C18-ledger-recorded-three-sends | got:[0] want:[3]
+    FAIL: C22-dirty-final-fallback-terminates-send | got:[1] want:[0]
+    FAIL: C22-dirty-final-fallback-does-not-advance-ledger | got:[1] want:[0]
+    FAIL: C22-final-block-logged | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What's the name of your company
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=98E55EE2
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  Reply source: DIRECT_FACT
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=22 elapsed=0s status=SENT_OK evidence=[stub:confirmed]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] newest-outbound-message-matches
+  Reply text: We're Example Freight.
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=236 budget=180s]
+    FAIL: C22-clean-holding-line-is-sent | got:[We're Example Freight.] want:[I can't confirm that from here.]
+    FAIL: C12-entry-refresh-sent-once | got:[0] want:[1]
+    FAIL: C12-entry-refresh-uses-fresh-minute | got:[] want:[It's 2:06 PM in China (UTC+8).]
+    FAIL: C12-entry-refresh-logged | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What time is it now
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=7D0D2D69
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:06 PM in China (UTC+8).
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement]
+    FAIL: C20-failed-send-requeued | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What time is it now
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=7D0D2D69
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=BLOCKED modelCalls=0 rewrites=0 ctxChars=0 violations=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] fallback=|controlled-plan-noncompliant ask=[] todo= orderConfident=True subject=seller facts=[current_time] unresolved=[] clock=injected-utc
+  Reply source: SCENARIO_FALLBACK(current_time)
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] detail=[FACT_TIME_MISMATCH:explicit unrequested place: china | FACT_TIME_TARGET_UNANSWERED:] action=SCENARIO_FALLBACK summary=It's 2:05 PM in China (UTC+8).
+  SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[FACT_TIME_MISMATCH,FACT_TIME_TARGET_UNANSWERED] action=NEUTRAL_HOLD
+  SEND-GATE-FINAL-BLOCK Virtual Buyer: no compliant fallback; no send or state advancement]
+    FAIL: C21-entry-wrong-clock-send-happened
+    FAIL: C21-entry-send-stub-has-program-clock | text:[]
+    FAIL: R3-entry-tokyo-sent | got:[2] want:[3]
+    FAIL: R3-entry-tokyo-reaches-stub | got:[We're Harbor Freight Management Co., Ltd.] want:[It's 3:07 PM in Japan (UTC+9).]
+    FAIL: R4-entry-ambiguous-country-sent | got:[3] want:[4]
+    FAIL: R3-entry-wrong-zone-send-happened
+    FAIL: R3-entry-correct-zone-retained | text:[]
+    FAIL: C23-reconcile-absent | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: Can you quote 10 cartons to Hamburg?
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=92D1DDEE
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : The term 'Get-SupplierContactFromConversation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=1 rewrites=0 ctxChars=1538 violations=[] fallback= ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=79 elapsed=0s status=UNKNOWN evidence=[stub:absent]
+  REPLIED to Virtual Buyer: SENT_OK [UNKNOWN] receipt-unclear: absent
+  Reply text: Could you share the total weight? Could you share the carton sizes (L x W x H)?
+  SEND-RECONCILE Virtual Buyer: unverified - before-snapshot-required
+  RETRY-QUEUE Virtual Buyer: send failed (SENT_OK | RECONCILE_UNVERIFIED), will retry after cooldown
+  ROUND-DONE Virtual Buyer ms=374 budget=180s]
+  RESULT pass=448 fail=58
+  
+  
+=== review_fixes_entry.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes_entry.tests.ps1 pid=20440 nonce=956d8ac534744bcd8fb88722d7bb4898 verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  
+  NO-TRUSTED-FLOW-TRIGGER
+  At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:117 char:24
+  +         if(-not $flow){throw 'NO-TRUSTED-FLOW-TRIGGER'}
+  +                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : OperationStopped: (NO-TRUSTED-FLOW-TRIGGER:String) [], RuntimeException
+      + FullyQualifiedErrorId : NO-TRUSTED-FLOW-TRIGGER
+   
+  
+=== second_fix_summary.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_summary.tests.ps1 pid=24992 nonce=ac385184eee4424b8fb8418daa9cd687 verified=True contexts=3 exit=0
+  == second_fix summary tests (actual summarize.ps1 subprocess, isolated runtime root) ==
+  ISOLATED-ROOT: C:\Users\<local-user>\AppData\Local\Temp\aar-secondfix-summary-fa171b5edfea4a679a7ba166b749bd41
+    FAIL: S6-unified-rule-version-is-single got=[0] want=[1]
+    FAIL: SC-carton-cell-matches-unified [Virtual Buyer F1] cell=⚠️
+    FAIL: SC-carton-cell-matches-unified [Virtual Buyer F2] cell=⚠️
+    FAIL: SC-carton-cell-matches-unified [Virtual Buyer F3] cell=⚠️
+    FAIL: SC-carton-cell-matches-unified [Virtual Buyer F4] cell=⚠️
+    FAIL: SC-carton-cell-matches-unified [Virtual Buyer F5] cell=⚠️
+    FAIL: SC-carton-cell-matches-unified [Virtual Buyer F6] cell=⚠️
+    FAIL: S1-unified-missing-is-carton-count missing=
+    FAIL: S1-report-not-ready status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S1-report-names-missing-carton-count necessary=[—]
+    FAIL: S1-report-status-names-carton-count status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S2-unified-ready fixture must be ready under the one fact model
+    FAIL: S2-unified-aux-gap [goods_name] optional=
+    FAIL: S2-unified-aux-gap [reference_images] optional=
+    FAIL: S2-unified-aux-gap [supplier_contact] optional=
+    FAIL: S2-unified-aux-gap [recipient_name] optional=
+    FAIL: S2-unified-aux-gap [recipient_contact] optional=
+    FAIL: S2-report-ready status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S2-report-aux-gaps-separate-column aux=[—]
+    FAIL: S2-report-aux-does-not-change-verdict status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S3a-report-not-ready status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S3a-report-names-missing-carton-count necessary=[—]
+    FAIL: S3b-report-not-ready status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S5-unified-ready-after-destination-correction explicit correction keeps the conversation ready
+    FAIL: S5-report-ready status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+    FAIL: S5-unified-ready-after-count-correction missing=
+    FAIL: S5-report-ready-after-count-correction corrected carton count keeps it ready
+    FAIL: S5-quote-candidates-are-exactly-f2-f5-f6 ready=
+    FAIL: S5-conversation-entry-agrees-on-ready conv=True goods=False
+    FAIL: S5-conversation-entry-agrees-on-rule-version got=[2026-10-05.1] want=[]
+    FAIL: S4-injection-actually-changed-the-verdict F2 status=❌ 资料判定失败，需核对（one-fact-model-unavailable: The term 'Get-HumanTaskStableHash' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the ）
+  
+  TEMP-KEPT-FOR-DIAGNOSIS: C:\Users\<local-user>\AppData\Local\Temp\aar-secondfix-summary-fa171b5edfea4a679a7ba166b749bd41
+  RESULT pass=64 fail=31
+  FAILED CASES: S6-unified-rule-version-is-single, SC-carton-cell-matches-unified [Virtual Buyer F1], SC-carton-cell-matches-unified [Virtual Buyer F2], SC-carton-cell-matches-unified [Virtual Buyer F3], SC-carton-cell-matches-unified [Virtual Buyer F4], SC-carton-cell-matches-unified [Virtual Buyer F5], SC-carton-cell-matches-unified [Virtual Buyer F6], S1-unified-missing-is-carton-count, S1-report-not-ready, S1-report-names-missing-carton-count, S1-report-status-names-carton-count, S2-unified-ready, S2-unified-aux-gap [goods_name], S2-unified-aux-gap [reference_images], S2-unified-aux-gap [supplier_contact], S2-unified-aux-gap [recipient_name], S2-unified-aux-gap [recipient_contact], S2-report-ready, S2-report-aux-gaps-separate-column, S2-report-aux-does-not-change-verdict, S3a-report-not-ready, S3a-report-names-missing-carton-count, S3b-report-not-ready, S5-unified-ready-after-destination-correction, S5-report-ready, S5-unified-ready-after-count-correction, S5-report-ready-after-count-correction, S5-quote-candidates-are-exactly-f2-f5-f6, S5-conversation-entry-agrees-on-ready, S5-conversation-entry-agrees-on-rule-version, S4-injection-actually-changed-the-verdict
+  
+  
+=== send_page_param.tests.ps1 ===
+CHILD-CONTEXT test=send_page_param.tests.ps1 pid=4720 nonce=2561b1c013664056930a5caaa6bb7314 verified=True contexts=2 exit=0
+  == send_page_param tests ==
+    child output lines = 16
+    child2 output lines = 15
+  
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== third_fix_pause_source.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_pause_source.tests.ps1 pid=7552 nonce=9da09c9f459b4aecbc2dfbb15eef6943 verified=True contexts=3 exit=0
+  == third_fix pause source tests (R5) ==
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== third_fix_tasks_evidence.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_tasks_evidence.tests.ps1 pid=34588 nonce=896a2c2dd92e45b4a1619cbc98b494c2 verified=True contexts=3 exit=1
+  == third_fix task/evidence tests (R2 / R3) ==
+  
+  NO-TRUSTED-FLOW-TRIGGER
+  At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:117 char:24
+  +         if(-not $flow){throw 'NO-TRUSTED-FLOW-TRIGGER'}
+  +                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : OperationStopped: (NO-TRUSTED-FLOW-TRIGGER:String) [], RuntimeException
+      + FullyQualifiedErrorId : NO-TRUSTED-FLOW-TRIGGER
+   
+  
+=== closure_s1.tests.ps1 ===
+CHILD-CONTEXT test=closure_s1.tests.ps1 pid=7316 nonce=0af5377d7da545379d94536a6f554cf5 verified=True contexts=3 exit=0
+  PASS D01
+  PASS D02
+  PASS D03
+  PASS D04
+  PASS D05
+  PASS D06
+  PASS D07
+  PASS D08
+  PASS D09
+  PASS D10
+  PASS D11
+  PASS D12
+  PASS D13
+  PASS D14
+  PASS D15
+  PASS D16
+  RESULT closure_s1 pass=16 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-75d4c04bebd64d3eb7ecd7077d26418d
+  
+  
+=== closure_s2.tests.ps1 ===
+CHILD-CONTEXT test=closure_s2.tests.ps1 pid=33896 nonce=1d25c3dd666840e0ab45c49a582484e0 verified=True contexts=2 exit=0
+  PASS P01
+  PASS P02
+  PASS P03
+  PASS P04
+  PASS P05
+  PASS P06
+  PASS P07
+  PASS P08
+  PASS P09
+  PASS P10
+  PASS P11
+  RESULT closure_s2 pass=11 fail=0
+  
+  
+=== closure_s3.tests.ps1 ===
+CHILD-CONTEXT test=closure_s3.tests.ps1 pid=22052 nonce=8bed7d7bde6a40b28f5ea7711be90af8 verified=True contexts=3 exit=0
+  PASS H01
+  PASS H02
+  PASS H03
+  PASS H04
+  PASS H05
+  PASS H06
+  PASS H07
+  PASS H08
+  RESULT closure_s3 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-c7e1e9a368d0485790f4bfc000bba70b
+  
+  
+=== closure_s4.tests.ps1 ===
+CHILD-CONTEXT test=closure_s4.tests.ps1 pid=34708 nonce=7e3dc4a4fddb4cdb89ef30bf0131777f verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  PASS T01
+  PASS T02
+  PASS T03
+  PASS T04
+  PASS T05
+  PASS T06
+  True
+  PASS T07
+  True
+  True
+  True
+  PASS T08
+  RESULT closure_s4 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-01446837928745e081d6568f46188a8d
+  
+  
+=== closure_g1.tests.ps1 ===
+CHILD-CONTEXT test=closure_g1.tests.ps1 pid=15012 nonce=f85c9bf7f0d544cab461fe0e611cfde1 verified=True contexts=3 exit=0
+  PASS G01
+  FAIL G02 ISOLATION-VIOLATION: offline context refuses real notification
+  PASS G03
+  RESULT closure_g1 pass=2 fail=1 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-c8bd7e2b42124248af8480baddd6519c
+  
+  
+
+TEST-SUMMARY: layer=Offline files=53 failedFiles=6 pass=2286 fail=150
+LogicTests=FAIL files=53 failedFiles=6 pass=2286 fail=150
+  failed files: review_fixes.tests.ps1, report_push.tests.ps1, amazon_destination.tests.ps1, human_tasks.tests.ps1, review_fixes_entry.tests.ps1, third_fix_tasks_evidence.tests.ps1
+IsolationChecks=FAIL checked=53 issues=5
+  isolation issue: atomic_state.tests.ps1: identity-or-context-missing
+  isolation issue: human_pause.tests.ps1: identity-or-context-missing
+  isolation issue: human_tasks.tests.ps1: identity-or-context-missing
+  isolation issue: lock_scope.tests.ps1: identity-or-context-missing
+  isolation issue: lock.tests.ps1: identity-or-context-missing
+ProductionPathAudit=UNRESOLVED changes=3 writerRunning=True reason=concurrent change inside the live writer's output roots; the source is NOT proven (process existence is not write attribution)
+  attribution-clues(before): {"capturedAtUtc":"2026-10-05T11:37:54.7935153Z","lockHolderPid":"","monitorWatchdog":["2344","34196"],"chromeProcesses":["3248","6588","6760","7968","8264","8856","10220","11716","13004","16512","17572","19608","20428","22712","22968","26632","27796","28244","29772","30724","31776","33752","34728","35344","37872","38024","38684"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-05T11:41:41.8716487Z","lockHolderPid":"34196","monitorWatchdog":["2344","34196"],"chromeProcesses":["3248","6588","6760","7968","8264","8856","10220","11716","13004","16512","17572","19608","20428","22712","22968","26632","27796","28244","29772","30724","31776","33752","34728","35344","37872","38024","38684"],"chromeProfilePath":""}
+  PRODUCTION-CHANGE-DETAILS (path | change | kind | before -> after):
+    C:\path\to\alibaba-auto-reply-runtime\data | changed | dir-metadata | DIR|2026-10-05T11:37:47.1319470Z|metadata-only -> DIR|2026-10-05T11:41:39.0826858Z|metadata-only
+    C:\path\to\alibaba-auto-reply-runtime\logs\monitor.log | changed | file-time | FILE|3302599|2026-10-05T11:37:47.7379162Z|sha256:no-hash -> FILE|3303682|2026-10-05T11:41:33.6033261Z|sha256:no-hash
+    C:\path\to\alibaba-auto-reply-runtime\data\onetalk-write.lock | created | created |  -> FILE|27|2026-10-05T11:41:39.0826858Z|sha256:b270b375a69c03a2409868dc09f25083d7fa8d7879286c3ca3890a9e45a6aebf
+  NOTE: concurrent changes with no independent write-provenance evidence are UNRESOLVED; a running writer is a clue, not proof.
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\data","Change":"changed","Kind":"dir-metadata","Before":"DIR|2026-10-05T11:37:47.1319470Z|metadata-only","After":"DIR|2026-10-05T11:41:39.0826858Z|metadata-only"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log","Change":"changed","Kind":"file-time","Before":"FILE|3302599|2026-10-05T11:37:47.7379162Z|sha256:no-hash","After":"FILE|3303682|2026-10-05T11:41:33.6033261Z|sha256:no-hash"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock","Change":"created","Kind":"created","Before":"","After":"FILE|27|2026-10-05T11:41:39.0826858Z|sha256:b270b375a69c03a2409868dc09f25083d7fa8d7879286c3ca3890a9e45a6aebf"}
+Overall=FAIL exitCode=1

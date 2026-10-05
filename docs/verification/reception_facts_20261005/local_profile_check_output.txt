@@ -1,0 +1,20 @@
+== local seller_profile read-only check (booleans only) ==
+company_field_configured=True
+company_field_verified=True
+company_is_multi_word=True
+company_has_internal_period=True
+name_field_configured=True
+name_field_verified=True
+name_is_multi_word=True
+timezone_valid=True
+name_reply_source=DIRECT_FACT
+name_reply_rendered=True
+name_reply_contains_full_display_name=True
+name_final_content_check_ok=True
+company_reply_source=DIRECT_FACT
+company_reply_contains_full_company=True
+company_final_content_check_ok=True
+time_reply_has_clock=True
+time_final_content_check_ok=True
+time_reply_has_no_placeholder=True
+RESULT: local_profile_usable=True

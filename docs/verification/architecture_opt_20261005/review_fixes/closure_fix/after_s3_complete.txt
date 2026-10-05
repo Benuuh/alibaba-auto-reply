@@ -1,0 +1,14 @@
+﻿Extracted from offline_closed.txt; original log retained.
+=== closure_s3.tests.ps1 ===
+CHILD-CONTEXT test=closure_s3.tests.ps1 pid=13652 nonce=f383d6e7b706495f95c429d4177673f0 verified=True contexts=3 exit=0
+  PASS H01
+  PASS H02
+  PASS H03
+  PASS H04
+  PASS H05
+  PASS H06
+  PASS H07
+  PASS H08
+  RESULT closure_s3 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-ff4d18181ef74ed2ad2e2271cc2c5390
+  
+  

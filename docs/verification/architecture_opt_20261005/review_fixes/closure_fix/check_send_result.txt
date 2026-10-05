@@ -1,0 +1,4 @@
+== send_result tests ==
+
+RESULT: pass=25 fail=0
+ALL PASS

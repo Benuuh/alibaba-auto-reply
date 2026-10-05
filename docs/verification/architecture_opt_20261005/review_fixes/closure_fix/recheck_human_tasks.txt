@@ -1,0 +1,9 @@
+== human_tasks tests ==
+  FAIL: T4-evidence-status got=[] want=[awaiting_supplier_reply]
+TASK-STORE-UNHEALTHY:corrupt
+At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:21 char:53
++ ... 'valid','missing')) { throw ('TASK-STORE-UNHEALTHY:'+ $read.Status) }
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (TASK-STORE-UNHEALTHY:corrupt:String) [], RuntimeException
+    + FullyQualifiedErrorId : TASK-STORE-UNHEALTHY:corrupt
+ 

@@ -1,0 +1,74 @@
+PASS B1 quote destination fact
+PASS B1 no address ask
+FAIL B1 goods to quote candidate
+PASS B1 warehouse is not postal address
+PASS B1 model context distinguishes warehouse and street
+PASS B1 source evidence is buyer original
+FAIL B3 unavailable model real generation fallback
+FAIL B2 real model chain bounded rewrite then compliant fallback
+PASS B2 deterministic address request [Please send the delivery address.]
+PASS B2 deterministic address request [What is the zip code?]
+PASS B2 deterministic address request [Could you confirm the warehouse code?]
+PASS B2 deterministic address request [I need the destination city and state.]
+PASS B2 deterministic address request [Delivery address is required.]
+PASS B2 deterministic address request [Please confirm Amazon FTW1.]
+PASS B2 deterministic address request [Should I quote to FTW1?]
+PASS B2 acknowledgment allowed
+PASS B2 excessive caller rewrite budget still bounded to one
+PASS B2 price prohibition retained
+PASS B4 positive expression [DDP to amazon: ftw1.]
+PASS B4 positive expression [deliver to FBA warehouse FTW1]
+PASS B4 positive expression [亚马逊 FTW1 仓]
+PASS B4 positive expression [送到亚马逊：ftw1]
+PASS B4 positive expression [Amazon LGB8]
+PASS B4 decoded original over translation
+PASS B5 buyer Amazon context bare answer
+PASS B5 bot question provides context only
+PASS B6 unsupported source [Our model is FTW1]
+PASS B6 unsupported source [SKU FTW1]
+PASS B6 unsupported source [order number FTW1]
+PASS B6 unsupported source [https://example.invalid/Amazon/FTW1]
+PASS B6 unsupported source [Amazon FTW1.pdf]
+PASS B6 unsupported source [FTW1]
+PASS B6 robot repetition not buyer evidence
+PASS B6 goods also ignores bot destination
+PASS B6 explicit owner confirmation has human source
+PASS B6 bot cannot forge owner confirmation
+FAIL B7 exact code question [Deliver to Amazon warehouse]
+FAIL B7 exact code question [FBA]
+FAIL B7 exact code question [DDP to Amazon X123456]
+PASS B8 non receiving location [not FTW1]
+PASS B8 non receiving location [we used FTW1 before]
+PASS B8 non receiving location [pickup from Amazon FTW1]
+PASS B8 non receiving location [Our model is FTW1]
+PASS B8 trusted explicit revocation drops warehouse
+PASS B8 trusted negation drops selected warehouse
+PASS B8 unrelated text retains destination
+PASS B9 trusted switch updates current warehouse
+PASS B9 context current quote destination updated
+PASS B9 goods current destination updated
+FAIL B10 ambiguous Amazon FTW1 or TEST2
+PASS B10 ambiguous goods not complete
+FAIL B10 ambiguous Amazon FTW1/Amazon TEST2
+PASS B10 ambiguous goods not complete
+FAIL B10 ambiguous Amazon FTW1/Delivery address: 246 Fiction Road, Sample City 99999
+PASS B10 ambiguous goods not complete
+FAIL B10 ambiguous Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999
+PASS B10 ambiguous goods not complete
+PASS B10 associated same message address retained
+PASS B10 known plus unsupported alternative remains ambiguous
+PASS B11 required cargo missing [53 x 41 x 32 cm, Amazon FTW1]
+PASS B11 required cargo missing [216 kg, Amazon FTW1]
+PASS B12 ordinary postal address usable
+PASS B12 ordinary missing destination still asks address
+PASS B12 address ownership clarification retained
+PASS B12 explicit switch to private address
+FAIL B13 actual goods quote reminder success
+Exception calling "ReadAllText" with "1" argument(s): "Could not find file 'C:\Users\<local-user>\AppData\Local\Temp\amazon_de
+stination_test_36a1c62d41744b5ba4804b4588d2696d\reminders.json'."
+At C:\path\to\alibaba-auto-reply\tests\amazon_destination.tests.ps1:122 char:5
++     $beforeState = [IO.File]::ReadAllText($stateFile)
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : FileNotFoundException
+ 

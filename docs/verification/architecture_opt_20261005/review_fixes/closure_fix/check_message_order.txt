@@ -1,0 +1,2 @@
+RESULT: pass=35 fail=0
+ALL PASS

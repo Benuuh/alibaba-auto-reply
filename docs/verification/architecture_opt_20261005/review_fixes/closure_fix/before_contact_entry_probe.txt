@@ -1,0 +1,5 @@
+﻿== review_fixes entry tests (real monitor entry, isolated) ==
+True
+{"Probe":"contact-redline-real-entry","Sends":1,"ModelCalls":1,"Text":"Please provide the supplier\u0027s contact details together with contact details so we can reach you.","TaskRef":{"TaskId":"095b19478dad","TaskKind":"supplier_handoff","SupplierIdentity":"supplier-identity-unknown","TaskStatus":"awaiting_contact"},"Logs":["REPLY-GEN Virtual Buyer scenario=dimension_missing src=LLM modelCalls=1 rewrites=0 ctxChars=2028 violations=[] fallback= ask=[supplier,carton_count] todo=supplier_handoff orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc"],"IsolationRoot":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-36d3bec3e9e94753bc2a0788bcc6ee71"}
+INDEPENDENT-FAIL: generic buyer contact request reached send
+CHILD_EXIT=1

@@ -1,0 +1,11 @@
+﻿BASELINE-ALREADY-OK B1-template-allowed: policy Ok for placeholder text '[current time]' = False
+BASELINE-ALREADY-OK B1-template-allowed: policy Ok for placeholder text 'It is [current time] now.' = False
+BASELINE-ALREADY-OK B1-template-allowed: policy Ok for placeholder text '[company name]' = False
+BASELINE-ALREADY-OK B1-template-allowed: policy Ok for placeholder text '{{company_name}}' = False
+BASELINE-ALREADY-OK B2-own-name-misclassified: scenario for 'What's ur name' is 'seller_name' (no own-identity scenario exists)
+BASELINE-ALREADY-OK B3-unsupported-promise-allowed: policy Ok for promise 'Let me check and get back to you.' = False
+BASELINE-ALREADY-OK B3-unsupported-promise-allowed: policy Ok for promise 'I'm checking with the team.' = False
+BASELINE-ALREADY-OK B3-unsupported-promise-allowed: policy Ok for promise 'I've passed this on.' = False
+BASELINE-ALREADY-OK B3-unsupported-promise-allowed: policy Ok for promise 'I'll get back to you shortly.' = False
+BASELINE-ALREADY-OK B3-unsupported-promise-allowed: policy Ok for promise 'I will keep an eye on this and let you know if anything needs you.' = False
+RESULT: reproduced_defects=0

@@ -135,6 +135,8 @@ function ConvertTo-AccioCliArg([string]$a) {
 
 # 调用 Node CLI;返回解析后的 JSON 对象(ok=false 或异常 → $null + 日志)
 function Invoke-AccioCli([string[]]$CliArgs, [int]$TimeoutMs = 120000) {
+    if(-not(Get-Command Assert-AarSendAllowed -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'paths.ps1')}
+    Assert-AarSendAllowed 'real Accio gateway'
     if (-not (Test-Path $script:AccioCliPath)) { Write-AccioLog "ACCIO-CLI-MISSING: $($script:AccioCliPath)"; return $null }
     $node = Get-AccioNodeExe
     $argLine = (@($script:AccioCliPath) + $CliArgs) | ForEach-Object { ConvertTo-AccioCliArg $_ }

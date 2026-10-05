@@ -1,0 +1,9 @@
+PASS H01
+PASS H02
+PASS H03
+PASS H04
+PASS H05
+PASS H06
+PASS H07
+PASS H08
+RESULT closure_s3 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-6e8cbd7923274f66944c0052d742be1c

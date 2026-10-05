@@ -1,0 +1,57 @@
+﻿RUNTIME-MODE: runtime-mode=isolated root=C:\Users\<local-user>\AppData\Local\Temp\aar-baseprobe-6a8b4304b2f14d9d8e9c3bef3562026d
+ISOLATED: True
+ISOROOT: C:\Users\<local-user>\AppData\Local\Temp\aar-baseprobe-6a8b4304b2f14d9d8e9c3bef3562026d
+
+=== A1 最高优先级联系方式红线漏拦 ===
+  [PASS] A1-block[You can email me if that is easier.] must be blocked expected=False actual=False codes=OUR_CONTACT_OFFER
+  [PASS] A1-block[You can email us if that is easier.] must be blocked expected=False actual=False codes=OUR_CONTACT_OFFER
+  [PASS] A1-block[Please leave a phone number for delivery] must be blocked expected=False actual=False codes=CONTACT_ASK_NO_ROLE
+  [PASS] A1-block[Please leave a contact number for delive] must be blocked expected=False actual=False codes=CONTACT_ASK_NO_ROLE
+  [PASS] A1-block[We'll contact your supplier directly and] must be blocked expected=False actual=False codes=OUR_CONTACT_OFFER,UNSUPPORTED_PROMISE
+  [PASS] A1-allow[Could you share the consignee'] must be allowed expected=True actual=True codes=
+  [PASS] A1-allow[Could you share your supplier'] must be allowed expected=True actual=True codes=
+  [PASS] A1-allow-role-purpose-no-askfields role+purpose allowed by the red line expected=True actual=True codes=
+  [PASS] A1-supplier-contact-already-provided-recognised the one fact model reports the supplier contact as supplied expected=True actual=True askFields=carton_count
+  [PASS] A1-no-false-out-of-scope-for-provided-supplier-contact a supplied field is not reported as an unauthorised ask expected=True actual=True codes=ASK_ALREADY_PROVIDED
+  [PASS] A1-provided-supplier-field-reported-as-reask re-asking a supplied field is ASK_ALREADY_PROVIDED expected=True actual=True codes=ASK_ALREADY_PROVIDED
+  [PASS] A1-role-purpose-allowed-when-not-supplied-yet role + purpose allowed by the full check expected=True actual=True codes=
+  [PASS] A1-narrative-not-offer supplier narrative must not be misread expected=True actual=True codes=
+
+=== A4 报价提醒仍用旧的三字段规则 ===
+  ready buyers: Virtual Count Buyer
+  [PASS] A4-nocount-excluded buyer without carton count must not be a reminder candidate expected=False actual=False 
+  [PASS] A4-count-included buyer with carton count is a candidate expected=True actual=True 
+
+=== A5 不足 100 字节的损坏账本被当作不存在 ===
+  15-byte sample: bytes=15 readStatus=corrupt
+  Test-RepliedStateUsable => Ok=False Reason=ledger-corrupt-or-unreadable Bytes=15
+  [PASS] A5-small-corrupt-detected corrupt 15-byte ledger must not be treated as no-ledger expected=False actual=False 
+
+=== A6 每箱重量/尺寸被误判为额外询问箱数 ===
+  [PASS] A6-allow-weight-per-unit[Could you share the packed wei] per-unit weight is inside a weight authorization expected=True actual=True codes=
+  [PASS] A6-allow-weight-per-unit[Could you share the weight of ] per-unit weight is inside a weight authorization expected=True actual=True codes=
+  [PASS] A6-allow-dims-per-carton per-carton dimensions are inside a dimension authorization expected=True actual=True codes=
+  [PASS] A6-block-real-count-ask a real carton-count question still needs count authorization expected=False actual=False codes=ASK_OUT_OF_SCOPE
+  [PASS] A6-block-mixed-count-ask the count half of a mixed request is still unauthorised expected=False actual=False codes=ASK_OUT_OF_SCOPE
+
+=== T1/T2 时间问答地点绑定 ===
+  [PASS] T1-lowercase-hamburg-place requested place want=[hamburg] got=[hamburg]
+  [PASS] T1-lowercase-hamburg-kind requested place kind want=[explicit] got=[explicit]
+  [PASS] T1-uppercase-hamburg-place requested place want=[Hamburg] got=[Hamburg]
+  [PASS] T1-uppercase-hamburg-kind requested place kind want=[explicit] got=[explicit]
+  T1 lower-case direct=[It's 8:05 AM in Germany (UTC+2).]
+  [PASS] T1-no-seller-clock-for-lowercase-hamburg T1 must not answer the seller clock expected=False actual=False 
+  T1 upper-case direct=[It's 8:05 AM in Germany (UTC+2).]
+  T2a place=[China] direct=[It's 2:05 PM in China (UTC+8).]
+  [PASS] T2a-china-not-overridden the later company sentence must not override the time target expected=True actual=True 
+  T2b place=[] direct=[It's 2:05 PM in China (UTC+8).]
+  [PASS] T2b-no-place-defaults-seller an unspecified time question defaults to the seller zone expected=True actual=True 
+
+  [PASS] A2-pause-anchored-on-scanned-human-reply pause window opens on the trusted human reply expected=True actual=True reason=started until=10/05/2026 12:05:00
+  [PASS] A2-pause-active-one-minute-later buyer supplement one minute later is inside the window expected=True actual=True reason=active
+  [PASS] A2-fresh-ctx-has-no-marks a fresh scan context has no unknown marks yet expected=False actual=False 
+  [PASS] A3-real-contact-not-placeholder the task stores the real contact, not a literal placeholder expected=True actual=True contact=supplier@example.invalid
+  [PASS] A3-supplier-key-from-contact the dedup key is derived from the real contact expected=True actual=True key=email-domain:example.invalid
+  [PASS] A3-two-suppliers-separate-tasks a different supplier gets its own task expected=True actual=True ids=cc0a4940f728/341ce395d59a
+BASELINE-RESULT: fail=0 cases=0
+BASELINE-ALL-PASS

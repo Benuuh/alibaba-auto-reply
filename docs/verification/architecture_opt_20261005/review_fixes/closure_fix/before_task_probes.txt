@@ -1,0 +1,16 @@
+﻿ROOT {"Tasks":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-third-task-review-65636c14e7694d91a07b526c984d740a\\human_tasks.json","Root":"C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-third-task-review-65636c14e7694d91a07b526c984d740a"}
+CROSS_FLOW_SUPPLIER {"ImportedSupplier":"email:factory-one@example.invalid","Error":"","Ready":true,"Imported":4,"NewBuyerText":"This is a new shipment, from another supplier factory-two@example.invalid."}
+WARNING: no_reply: 
+C:\Users\<local-user>\AppData\Local\Temp\aar-third-task-review-65636c14e7694d91a07b526c984d740a\data\manual_override.json 
+不存在,按空名单处理
+CROSS_FLOW_ACTUAL_QUOTE_CANDIDATES {"Missing":[],"Buyer":["Independent Fictional Task Buyer"],"Count":1}
+INVALID_CONFIRMATION_READY {"Saved":true,"Fields":[{"Scope":"goods","Status":"provided","Key":"carton_count","Value":"0","Unit":"pieces"},{"Scope":"goods","Status":"provided","Key":"unit_weight","Value":"-5","Unit":"bananas"},{"Scope":"goods","Status":"provided","Key":"unit_dimensions","Value":"50x40","Unit":"cm"},{"Scope":"destination","Status":"provided","Key":"delivery_address","Value":"unknown","Unit":""}],"Ready":true}
+INVALID_ACTUAL_QUOTE_CANDIDATES {"Count":1,"Buyer":["Independent Fictional Task Buyer"]}
+SOURCE_LABEL_NOT_PROOF {"GenericReplyBlocked":false,"Saved":true,"SupplierReply":true,"Action":{"recordId":"4a916a263242","version":1,"taskId":"c755312449d5","buyerKey":"independent fictional task buyer","supplierKey":"email:factory-one@example.invalid","actionKind":"supplier_reply","atUtc":"2026-10-05T11:05:10.3152023Z","recordedAtUtc":"2026-10-05T11:05:10.3152023Z","source":"manual-entry","recordedBy":"","sourceRef":"","rawContent":"Waiting for supplier reply.","batchRef":"","confirmedFields":[],"status":"active","supersededBy":"","supersededAtUtc":""}}
+PARTIAL_CORRECTION_LOSES_VALID_FIELDS {"Weight":"15","Before":["carton_count","unit_weight","unit_dimensions","delivery_address"],"After":["unit_weight"]}
+BLANK_KEY_WILDCARD {"RequestedIdentity":"email:factory-two@example.invalid","PlanBlocked":false,"IdentityMatch":true,"ExactTaskMatch":true,"StoredContact":"factory-one@example.invalid"}
+RESOLVED_HISTORY_UNUSABLE {"ConfirmedFields":4,"FutureBlocked":true,"PastSupportedBlocked":true,"TaskExists":true,"IsOpen":false,"ExactMatch":true}
+UNVERIFIED_TASK_RESOLUTION {"SetResolved":true,"Status":"resolved","ConfirmedFieldCount":0,"ResolvedRecorded":true}
+CORRUPT_STORE_OVERWRITTEN {"RemainingBuyers":["Other Fictional Buyer"],"NewStoreOk":true,"StatusBefore":"corrupt","StatusAfter":"valid"}
+END
+CHILD_EXIT=0

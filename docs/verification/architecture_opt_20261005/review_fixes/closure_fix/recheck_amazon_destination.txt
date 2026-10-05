@@ -1,0 +1,81 @@
+PASS B1 quote destination fact
+PASS B1 no address ask
+PASS B1 goods to quote candidate
+PASS B1 warehouse is not postal address
+PASS B1 model context distinguishes warehouse and street
+PASS B1 source evidence is buyer original
+PASS B3 unavailable model real generation fallback
+PASS B2 real model chain bounded rewrite then compliant fallback
+PASS B2 deterministic address request [Please send the delivery address.]
+PASS B2 deterministic address request [What is the zip code?]
+PASS B2 deterministic address request [Could you confirm the warehouse code?]
+PASS B2 deterministic address request [I need the destination city and state.]
+PASS B2 deterministic address request [Delivery address is required.]
+PASS B2 deterministic address request [Please confirm Amazon FTW1.]
+PASS B2 deterministic address request [Should I quote to FTW1?]
+PASS B2 acknowledgment allowed
+PASS B2 excessive caller rewrite budget still bounded to one
+PASS B2 price prohibition retained
+PASS B4 positive expression [DDP to amazon: ftw1.]
+PASS B4 positive expression [deliver to FBA warehouse FTW1]
+PASS B4 positive expression [亚马逊 FTW1 仓]
+PASS B4 positive expression [送到亚马逊：ftw1]
+PASS B4 positive expression [Amazon LGB8]
+PASS B4 decoded original over translation
+PASS B5 buyer Amazon context bare answer
+PASS B5 bot question provides context only
+PASS B6 unsupported source [Our model is FTW1]
+PASS B6 unsupported source [SKU FTW1]
+PASS B6 unsupported source [order number FTW1]
+PASS B6 unsupported source [https://example.invalid/Amazon/FTW1]
+PASS B6 unsupported source [Amazon FTW1.pdf]
+PASS B6 unsupported source [FTW1]
+PASS B6 robot repetition not buyer evidence
+PASS B6 goods also ignores bot destination
+PASS B6 explicit owner confirmation has human source
+PASS B6 bot cannot forge owner confirmation
+FAIL B7 exact code question [Deliver to Amazon warehouse]
+FAIL B7 exact code question [FBA]
+FAIL B7 exact code question [DDP to Amazon X123456]
+PASS B8 non receiving location [not FTW1]
+PASS B8 non receiving location [we used FTW1 before]
+PASS B8 non receiving location [pickup from Amazon FTW1]
+PASS B8 non receiving location [Our model is FTW1]
+PASS B8 trusted explicit revocation drops warehouse
+PASS B8 trusted negation drops selected warehouse
+PASS B8 unrelated text retains destination
+PASS B9 trusted switch updates current warehouse
+PASS B9 context current quote destination updated
+PASS B9 goods current destination updated
+PASS B10 ambiguous Amazon FTW1 or TEST2
+PASS B10 ambiguous goods not complete
+PASS B10 ambiguous Amazon FTW1/Amazon TEST2
+PASS B10 ambiguous goods not complete
+PASS B10 ambiguous Amazon FTW1/Delivery address: 246 Fiction Road, Sample City 99999
+PASS B10 ambiguous goods not complete
+PASS B10 ambiguous Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999
+PASS B10 ambiguous goods not complete
+PASS B10 associated same message address retained
+PASS B10 known plus unsupported alternative remains ambiguous
+PASS B11 required cargo missing [53 x 41 x 32 cm, Amazon FTW1]
+PASS B11 required cargo missing [216 kg, Amazon FTW1]
+PASS B12 ordinary postal address usable
+PASS B12 ordinary missing destination still asks address
+PASS B12 address ownership clarification retained
+PASS B12 explicit switch to private address
+PASS B13 actual goods quote reminder success
+PASS B13 same content suppressed
+PASS B13 failed changed notification not success
+PASS B13 changed destination hash permits reminder
+PASS B14 manual takeover excluded without notification
+PASS B14 system card cannot provide destination or generate
+PASS B14 legacy conflict cannot use DOM to switch
+PASS B14 legacy single declaration conservatively useful for goods
+PASS B15 split messages keep complete facts
+PASS B15 chasing quote requires human fact and no invented rate
+PASS B16 report label uses warehouse without false postal claim
+PASS B16 real quotable metric uses same destination status
+PASS B16 real report table displays current quote destination
+PASS B17 fallback [attachment_parse_failed] no repeated destination
+PASS B17 fallback [dimension_missing] no repeated destination
+RESULT pass=77 fail=3

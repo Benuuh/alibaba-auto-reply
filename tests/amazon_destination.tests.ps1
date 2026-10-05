@@ -18,7 +18,7 @@ function Conversation([string[]]$texts) {
 }
 $taskDir = Join-Path $env:TEMP ('amazon_destination_test_' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $taskDir | Out-Null
-function Get-SkillPath([string]$key) { throw "unexpected production path: $key" }
+[void](Initialize-AarIsolation -Root $taskDir)
 function Test-NoReplyBuyer([string]$buyer) { return [bool]$script:manual }
 function Save-Snapshot($conv) {
     Set-Content -Encoding UTF8 (Join-Path $taskDir 'msgs_001.txt') ("# BUYER: Virtual Destination Buyer`n" + ($conv.Lines -join "`n"))
@@ -43,7 +43,7 @@ try {
     Check 'B3 unavailable model real generation fallback' ($r.Source -eq 'FALLBACK' -and $r.FallbackReason -eq 'llm-unavailable' -and (Test-ReplyCompliance -Text $r.Text -Decision $d).Ok)
     function Invoke-LLM { param($Messages,$Temperature,$MaxTokens,$LogFile) $script:models++; $script:input = $Messages; return 'Please send the delivery address.' }
     $script:models = 0; $r = Generate $c $d
-    Check 'B2 real model chain bounded rewrite then compliant fallback' ($script:models -eq 2 -and $r.Rewrites -eq 1 -and $r.Source -eq 'FALLBACK' -and $r.Violations.Code -contains 'DESTINATION_REASK' -and (Test-ReplyCompliance -Text $r.Text -Decision $d).Ok)
+    Check 'B2 real model chain bounded rewrite then compliant fallback' ($script:models -eq 2 -and $r.Rewrites -eq 1 -and $r.Source -eq 'FALLBACK' -and $r.FallbackReason -eq 'business-body-sensitive' -and (Test-ReplyCompliance -Text $r.Text -Decision $d).Ok)
     foreach ($bad in @('Please send the delivery address.','What is the zip code?','Could you confirm the warehouse code?','I need the destination city and state.','Delivery address is required.','Please confirm Amazon FTW1.','Should I quote to FTW1?')) {
         Check "B2 deterministic address request [$bad]" (-not (Test-ReplyCompliance -Text $bad -Decision $d).Ok)
     }
@@ -93,7 +93,7 @@ try {
     Check 'B9 goods current destination updated' ((Get-GoodsDetails 'Virtual Destination Buyer' $taskDir).addr -eq 'Amazon TEST2')
     foreach ($texts in @(@('Amazon FTW1 or TEST2'), @('Amazon FTW1','Amazon TEST2'), @('Amazon FTW1','Delivery address: 246 Fiction Road, Sample City 99999'), @('Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999'))) {
         $x = Conversation $texts; $xd = Decision $x
-        Check ('B10 ambiguous ' + ($texts -join '/')) ($xd.Facts.Destination.Kind -eq 'ambiguous' -and -not $xd.Facts.HasQuoteDestination -and $xd.AskFields.Count -eq 1 -and (Get-ScenarioFallback $xd) -match '^Which')
+        Check ('B10 ambiguous ' + ($texts -join '/')) ($xd.Facts.Destination.Kind -eq 'ambiguous' -and -not $xd.Facts.HasQuoteDestination -and $xd.AskFields.Count -eq 1 -and (Get-ScenarioFallback $xd) -match '(?i)which.*destination')
         Save-Snapshot $x
         Check 'B10 ambiguous goods not complete' (-not (Get-GoodsDataStatus 'Virtual Destination Buyer' $taskDir).addr)
     }

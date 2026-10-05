@@ -1,0 +1,20 @@
+== docs_consistency tests ==
+  ok   health_check.ps1 能派生出检查项
+  ok   README_部署说明.md 有检查项声明行
+  ok   检查项【数量】一致
+  ok   检查项【名单】无遗漏
+  ok   检查项【名单】无多余
+  ok   config.json.example 存在
+  ok   config.json.example 是合法 JSON
+  ok   模板键集 ⊇ 现役键集
+  ok   config.json.example 含 reply_min_gap_min = 5
+  ok   config.json 含 reply_min_gap_min = 5
+  ok   config.json.example 含 reply_post_send_cooldown_min = 5
+  ok   config.json 含 reply_post_send_cooldown_min = 5
+  ok   发送后冷却 ≥ 最小间隔（§0.1 硬要求）
+  ok   README.md 未写死测试数字
+  ok   README_部署说明.md 未写死测试数字
+  ok   docs\KNOWN_EXCEPTIONS.md 未写死测试数字
+  ok   SKILL.md 未写死测试数字
+RESULT: pass=17 fail=0
+ALL PASS

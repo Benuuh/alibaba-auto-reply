@@ -1,0 +1,8 @@
+﻿IsolationRoot=C:\Users\<local-user>\AppData\Local\Temp\aar-review-third-pause-9e6bb6f6af55459b88ea11e0eb9ae9aa
+P1-repeat-text matches=1,0 HumanPauseActive=False NewHuman=0 SourceSecond=bot
+P2-future before=2026-10-05T04:06:00.0000000Z
+P2-future after=2026-10-05T09:05:00.0000000Z active=True corrects=1 expectedNotAfter=2026-10-05T04:06:00Z
+P3-unknown before=2026-10-05T04:06:00.0000000Z
+P3-unknown afterActive=False remainingUnknownCount=1 expectedUntil=2026-10-05T04:05:00Z
+G1-emptyProof result=PASS evidence=[]
+CHILD_EXIT=0

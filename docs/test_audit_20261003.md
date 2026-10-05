@@ -296,8 +296,8 @@ robocopy $src $dst /E /XD .git node_modules .opencode /NFL /NDL /NJH /NJS /NP | 
 # should_reply.tests.ps1:267-273 / should_reply_v2.tests.ps1:203-206 / gonghai* policy assertions go red
 $cfgPath = Join-Path $dst 'scripts\config.json'
 $cfg = Get-Content $cfgPath -Raw
-$cfg = $cfg -replace [regex]::Escape('D:\\alibaba-auto-reply-runtime'), ($rt -replace '\\','\\')
-$cfg = $cfg -replace [regex]::Escape('D:\\alibaba-auto-reply'), ($dst -replace '\\','\\')
+$cfg = $cfg -replace [regex]::Escape('C:\\path\\to\\alibaba-auto-reply-runtime'), ($rt -replace '\\','\\')
+$cfg = $cfg -replace [regex]::Escape('C:\\path\\to\\alibaba-auto-reply'), ($dst -replace '\\','\\')
 Set-Content -Path $cfgPath -Value $cfg -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $rt 'data'),(Join-Path $rt 'logs'),(Join-Path $rt 'reports'),(Join-Path $rt 'backups') -Force | Out-Null
 

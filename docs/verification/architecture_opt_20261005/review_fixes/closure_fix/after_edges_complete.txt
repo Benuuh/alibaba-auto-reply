@@ -1,0 +1,30 @@
+﻿Extracted from offline_closed.txt; original log retained.
+=== closure_edges.tests.ps1 ===
+CHILD-CONTEXT test=closure_edges.tests.ps1 pid=29208 nonce=67b8199c4f0e4d36b3a8e26769276c90 verified=True contexts=4 exit=0
+  PASS D06-buyer-negative
+  PASS P03-corresponding-source
+  PASS H08-legacy-no-anchor
+  CONCURRENT-CHILD pid=36056 nonce=c917cf666a384d018b8e6a5e626334fc verified=True exit=0
+  CONCURRENT-CHILD pid=3136 nonce=0fe3a439ce4b48dbb6f2e13a55f01043 verified=True exit=0
+  PASS D10-concurrent
+  RESULT closure_edges pass=4 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-edges-e8b31c9e12ad4dac9ec697882612667e
+  
+  
+
+TEST-SUMMARY: layer=Offline files=55 failedFiles=0 pass=2994 fail=0
+LogicTests=PASS files=55 failedFiles=0 pass=2994 fail=0
+IsolationChecks=PASS checked=55 issues=0
+ProductionPathAudit=UNRESOLVED changes=4 writerRunning=True reason=production changes have unknown provenance; source is NOT proven (process existence or absence is not write attribution)
+  attribution-clues(before): {"capturedAtUtc":"2026-10-05T13:55:02.2707046Z","lockHolderPid":"","monitorWatchdog":["2344","34196"],"chromeProcesses":["3248","6588","6760","7968","8264","8856","10220","11716","13004","16512","17572","19608","20428","22712","22968","26632","27796","28244","29772","30724","31776","33752","34728","35344","37872","38024","38684"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-05T13:59:25.7345453Z","lockHolderPid":"34196","monitorWatchdog":["2344","34196"],"chromeProcesses":["3248","6588","6760","7968","8264","8856","10220","11716","13004","16512","17572","19608","20428","22592","22712","22968","26632","27796","28244","29772","30724","31776","33752","34728","35344","37872","38024","38684"],"chromeProfilePath":""}
+  PRODUCTION-CHANGE-DETAILS (path | change | kind | before -> after):
+    C:\path\to\alibaba-auto-reply-runtime\data | changed | dir-metadata | DIR|2026-10-05T13:54:58.3879018Z|metadata-only -> DIR|2026-10-05T13:59:25.4144775Z|metadata-only
+    C:\path\to\alibaba-auto-reply-runtime\logs\watchdog.log | changed | file-content | FILE|147149|2026-10-05T13:48:03.7341273Z|sha256:91e5a40fdd77479ab5f2464292af43d8737443554f0a120e19b2a7cffa54cac5 -> FILE|147236|2026-10-05T13:58:07.5397711Z|sha256:8eee7262c8c6f63a95dba293cbb35a0d3162c393ce8bb8c49934fb715afe6cec
+    C:\path\to\alibaba-auto-reply-runtime\logs\monitor.log | changed | file-time | FILE|3351513|2026-10-05T13:54:57.9333306Z|sha256:no-hash -> FILE|3352792|2026-10-05T13:59:19.9208886Z|sha256:no-hash
+    C:\path\to\alibaba-auto-reply-runtime\data\onetalk-write.lock | created | created |  -> FILE|27|2026-10-05T13:59:25.4154229Z|sha256:db04192d06b2a0c956db5254b874ce5bef824d4a5e82fae08f3bbb0c4176d197
+  NOTE: concurrent changes with no independent write-provenance evidence are UNRESOLVED; a running writer is a clue, not proof.
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\data","Change":"changed","Kind":"dir-metadata","Before":"DIR|2026-10-05T13:54:58.3879018Z|metadata-only","After":"DIR|2026-10-05T13:59:25.4144775Z|metadata-only"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\watchdog.log","Change":"changed","Kind":"file-content","Before":"FILE|147149|2026-10-05T13:48:03.7341273Z|sha256:91e5a40fdd77479ab5f2464292af43d8737443554f0a120e19b2a7cffa54cac5","After":"FILE|147236|2026-10-05T13:58:07.5397711Z|sha256:8eee7262c8c6f63a95dba293cbb35a0d3162c393ce8bb8c49934fb715afe6cec"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log","Change":"changed","Kind":"file-time","Before":"FILE|3351513|2026-10-05T13:54:57.9333306Z|sha256:no-hash","After":"FILE|3352792|2026-10-05T13:59:19.9208886Z|sha256:no-hash"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock","Change":"created","Kind":"created","Before":"","After":"FILE|27|2026-10-05T13:59:25.4154229Z|sha256:db04192d06b2a0c956db5254b874ce5bef824d4a5e82fae08f3bbb0c4176d197"}
+Overall=BLOCKED-UNRESOLVED exitCode=3

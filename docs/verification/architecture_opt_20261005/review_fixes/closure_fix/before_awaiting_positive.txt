@@ -1,0 +1,6 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+ACTUAL-SEND count=1 text=Thanks - I can't confirm this from here.
+FAIL D04-awaiting-conditional
+REPLY-GEN Virtual Buyer scenario=dimension_missing src=BLOCKED modelCalls=1 rewrites=0 ctxChars=2058 violations=[UNSUPPORTED_PROMISE] fallback=|controlled-plan-noncompliant ask=[supplier,carton_count] todo=supplier_handoff orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+SEND-GATE-BLOCK Virtual Buyer src=COMPOSITION_REFRESH codes=[UNSUPPORTED_PROMISE] detail=[UNSUPPORTED_PROMISE:supplier contact plan without a persisted human task / owner evidence] action=SCENARIO_FALLBACK summary=Could you share your supplier's contact details so we can co...
+SEND-GATE-FALLBACK-DIRTY Virtual Buyer codes=[UNSUPPORTED_PROMISE] action=NEUTRAL_HOLD

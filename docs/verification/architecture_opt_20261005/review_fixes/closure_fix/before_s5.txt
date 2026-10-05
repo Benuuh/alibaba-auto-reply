@@ -1,0 +1,9 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+FAIL X01 goods actual persisted facts
+WARNING: no_reply: 
+C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-e9ef1dd8f93242cda239da7d42ae050e\data\manual_override.json 不存在,按空名单处理
+PASS X02
+PASS X03
+PASS X04
+PASS X05
+RESULT closure_s5 pass=4 fail=1 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-e9ef1dd8f93242cda239da7d42ae050e

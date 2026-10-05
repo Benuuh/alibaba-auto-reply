@@ -1,0 +1,43 @@
+{
+  "selectedFiles": 55,
+  "assertionPass": 2994,
+  "assertionFail": 0,
+  "failedFiles": [],
+  "logicTests": "PASS",
+  "isolationChecks": "PASS",
+  "productionPathAudit": "UNRESOLVED",
+  "overall": "BLOCKED-UNRESOLVED",
+  "exitCode": 3,
+  "productionChanges": [
+    {
+      "Path": "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+      "Change": "changed",
+      "Kind": "dir-metadata",
+      "Before": "DIR|2026-10-05T13:54:58.3879018Z|metadata-only",
+      "After": "DIR|2026-10-05T13:59:25.4144775Z|metadata-only"
+    },
+    {
+      "Path": "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\watchdog.log",
+      "Change": "changed",
+      "Kind": "file-content",
+      "Before": "FILE|147149|2026-10-05T13:48:03.7341273Z|sha256:91e5a40fdd77479ab5f2464292af43d8737443554f0a120e19b2a7cffa54cac5",
+      "After": "FILE|147236|2026-10-05T13:58:07.5397711Z|sha256:8eee7262c8c6f63a95dba293cbb35a0d3162c393ce8bb8c49934fb715afe6cec"
+    },
+    {
+      "Path": "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+      "Change": "changed",
+      "Kind": "file-time",
+      "Before": "FILE|3351513|2026-10-05T13:54:57.9333306Z|sha256:no-hash",
+      "After": "FILE|3352792|2026-10-05T13:59:19.9208886Z|sha256:no-hash"
+    },
+    {
+      "Path": "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+      "Change": "created",
+      "Kind": "created",
+      "Before": "",
+      "After": "FILE|27|2026-10-05T13:59:25.4154229Z|sha256:db04192d06b2a0c956db5254b874ce5bef824d4a5e82fae08f3bbb0c4176d197"
+    }
+  ],
+  "sourceFingerprintMismatches": 0,
+  "notes": "Attestation covers verified test children and declared roots/marker snapshots; not all arbitrary direct IO or all nested tool processes."
+}

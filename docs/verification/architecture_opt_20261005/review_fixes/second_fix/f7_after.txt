@@ -1,0 +1,70 @@
+== unified result (Get-GoodsDataStatus, same fixtures) ==
+{"clar":"","ready":false,"collection":false,"rule":"2026-10-05.1","error":"","optional":"reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"carton_count","buyer":"Virtual Buyer F1"}
+{"clar":"","ready":true,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"","buyer":"Virtual Buyer F2"}
+{"clar":"Conflicting 件数（箱/托盘） values (20, 24) - please confirm which one is correct.","ready":false,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"carton_count,unit_weight,unit_dimensions,delivery_address","buyer":"Virtual Buyer F3"}
+{"clar":"Weight scope is unclear: is 20 kg the weight per carton/pallet or the total weight?","ready":false,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"unit_weight","buyer":"Virtual Buyer F4"}
+{"clar":"","ready":true,"collection":false,"rule":"2026-10-05.1","error":"","optional":"goods_name,reference_images,supplier_address,supplier_contact,recipient_name,recipient_contact","missing":"","buyer":"Virtual Buyer F5"}
+== actual summarize.ps1 run ==
+summarize exit=0
+summarize stdout: summary written: C:\Users\<local-user>\AppData\Local\Temp\aar-f7-repro-16c3129932a94c8fbf9c79a89c1a7e3d\reports\reply_summary_20261005_1200-1200.md (5 replies)
+report path: C:\Users\<local-user>\AppData\Local\Temp\aar-f7-repro-16c3129932a94c8fbf9c79a89c1a7e3d\reports\reply_summary_20261005_1200-1200.md
+== report content ==
+# 阿里国际站自动回复总结
+
+- **统计时段**: 2026-10-05 12:00:00 ~ 2026-10-05 12:00:00
+- **生成时间**: 2026-10-05 08:52:36
+- **回复总数**: 5 条
+- **涉及买家**: 5 位
+
+## Virtual Buyer F1
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F2
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F3
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F4
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+## Virtual Buyer F5
+
+| 时间 | 发送状态 | 回复内容 |
+|------|----------|----------|
+| 12:00:00 | ✅ 成功 | Thanks for the details. |
+
+---
+## 货物数据齐全度（供报价判断）
+
+| 买家 | 货物名称 | 外包装件数 | 总重量 | 尺寸L\*W\*H | 报价目的地 | 图片(参考) | 供应商(参考) | 必要缺口 | 辅助缺口(不阻挡报价) | 状态 |
+|------|---------|-----------|--------|-----------|---------|----------|----------|---------|------------------|------|
+| Virtual Buyer F1 | Cargo name: cable | ❌ | ✅ | ✅ | Amazon FTW1 | ❌ | ❌ | 外包装件数 | 参考图片、供应商地址、供应商联系方式、收货人名称、收货人联系方式 | ❌ 不可进入报价准备（缺: 外包装件数） |
+| Virtual Buyer F2 | 未知 | ✅ | ✅ | ✅ | Amazon FTW1 | ❌ | ❌ | — | 货物名称、参考图片、供应商地址、供应商联系方式、收货人名称、收货人联系方式 | ✅ 可进入人工报价准备（辅助资料未齐，见「辅助缺口」列；不阻挡报价准备） |
+| Virtual Buyer F3 | 未知 | ❌ | ❌ | ❌ | 未知报价目的地 | ❌ | ❌ | 外包装件数、包装重量（单件或总重）、包装尺寸（单件或整批）、可用报价目的地 | 货物名称、参考图片、供应商地址、供应商联系方式、收货人名称、收货人联系方式 | ❌ 不可进入报价准备（缺: 外包装件数、包装重量（单件或总重）、包装尺寸（单件或整批）、可用报价目的地）；待澄清: Conflicting 件数（箱/托盘） values (20, 24) - please confirm which one is correct. |
+| Virtual Buyer F4 | 未知 | ✅ | ❌ | ✅ | Amazon FTW1 | ❌ | ❌ | 包装重量（单件或总重） | 货物名称、参考图片、供应商地址、供应商联系方式、收货人名称、收货人联系方式 | ❌ 不可进入报价准备（缺: 包装重量（单件或总重））；待澄清: Weight scope is unclear: is 20 kg the weight per carton/pallet or the total weight? |
+| Virtual Buyer F5 | 未知 | ✅ | ✅ | ✅ | Amazon TEST2 | ❌ | ❌ | — | 货物名称、参考图片、供应商地址、供应商联系方式、收货人名称、收货人联系方式 | ✅ 可进入人工报价准备（辅助资料未齐，见「辅助缺口」列；不阻挡报价准备） |
+
+> 规则版本（统一事实模型 RuleVersion）: 2026-10-05.1
+> 注：本表**结论直接取自统一事实模型**（lib\facts_engine.ps1::Get-QuoteReadiness，经 lib\goods.ps1::Get-GoodsDataStatus 适配），不再由本报表自行组合重量/尺寸/地址/货名判据，也不因某一列缺失而另立结论。
+> 基本报价条件 = 外包装件数（箱/托盘）+ 包装重量（单件或已明确总重）+ 包装尺寸（单件或整批）+ 可用报价目的地（买家原文中的收货地址，或明确给出的 Amazon/FBA 收货仓代码；仓库代码即可满足目的地，不代表街道地址已提供）。
+> 货名、图片、供应商资料、收货人姓名/联系方式是辅助项：缺它们只列进「辅助缺口(不阻挡报价)」列，不改判「可进入人工报价准备」。
+> 「必要缺口」列按统一模型的字段键给出人话（如 carton_count→外包装件数）；件数/单位/尺寸范围不明或存在冲突时，状态列给出统一模型实际产生的待澄清问题。
+> 状态只表示「资料是否具备报价准备条件」，不代表已通知、已联系或已报价；本报表不输出任何价格。
+
+---
+由 alibaba-auto-reply 监控自动生成
+
+ROOT=C:\Users\<local-user>\AppData\Local\Temp\aar-f7-repro-16c3129932a94c8fbf9c79a89c1a7e3d

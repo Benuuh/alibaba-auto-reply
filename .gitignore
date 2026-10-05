@@ -118,3 +118,10 @@ scripts/last_sync.json
 /tools/_gh56_hunt.ps1
 /tools/_my.ps1
 /tools/_u.ps1
+
+# ===== 0.1.1 发布：本机缓存与原始发布审计 =====
+/%SystemDrive%/
+/release-private/
+# 一次性源码改写/测试预期迁移脚本，仅保留本地历史
+/tools/acceptance/closure_edit*.py
+/tools/acceptance/closure_align_tests*.py

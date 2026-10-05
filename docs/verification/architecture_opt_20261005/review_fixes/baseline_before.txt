@@ -1,0 +1,49 @@
+﻿RUNTIME-MODE: runtime-mode=isolated root=C:\Users\<local-user>\AppData\Local\Temp\aar-baseprobe-5bd64cd1da21404f9a1d86bb51a7addb
+ISOLATED: True
+ISOROOT: C:\Users\<local-user>\AppData\Local\Temp\aar-baseprobe-5bd64cd1da21404f9a1d86bb51a7addb
+
+=== A1 最高优先级联系方式红线漏拦 ===
+  [PASS] A1-block[You can email me if that is easier.] must be blocked expected=False actual=False codes=OUR_CONTACT_OFFER
+  [PASS] A1-block[You can email us if that is easier.] must be blocked expected=False actual=False codes=OUR_CONTACT_OFFER
+  [PASS] A1-block[Please leave a phone number for delivery] must be blocked expected=False actual=False codes=CONTACT_ASK_NO_ROLE
+  [PASS] A1-block[Please leave a contact number for delive] must be blocked expected=False actual=False codes=CONTACT_ASK_NO_ROLE
+  [PASS] A1-block[We'll contact your supplier directly and] must be blocked expected=False actual=False codes=OUR_CONTACT_OFFER,UNSUPPORTED_PROMISE
+  [PASS] A1-allow[Could you share the consignee'] must be allowed expected=True actual=True codes=
+  [PASS] A1-allow[Could you share your supplier'] must be allowed expected=True actual=True codes=
+  [PASS] A1-allow-role-purpose-no-askfields role+purpose allowed by the red line expected=True actual=True codes=
+  [PASS] A1-supplier-contact-already-provided-recognised the one fact model reports the supplier contact as supplied expected=True actual=True askFields=carton_count
+  [FAIL] A1-no-false-out-of-scope-for-provided-supplier-contact a supplied field is not reported as an unauthorised ask expected=True actual=False codes=ASK_ALREADY_PROVIDED
+  [PASS] A1-narrative-not-offer supplier narrative must not be misread expected=True actual=True codes=
+
+=== A4 报价提醒仍用旧的三字段规则 ===
+  ready buyers: Virtual Count Buyer
+  [PASS] A4-nocount-excluded buyer without carton count must not be a reminder candidate expected=False actual=False 
+  [PASS] A4-count-included buyer with carton count is a candidate expected=True actual=True 
+
+=== A5 不足 100 字节的损坏账本被当作不存在 ===
+  15-byte sample: bytes=15 readStatus=corrupt
+  Test-RepliedStateUsable => Ok=False Reason=ledger-corrupt-or-unreadable Bytes=15
+  [PASS] A5-small-corrupt-detected corrupt 15-byte ledger must not be treated as no-ledger expected=False actual=False 
+
+=== A6 每箱重量/尺寸被误判为额外询问箱数 ===
+  [PASS] A6-allow-weight-per-unit[Could you share the packed wei] per-unit weight is inside a weight authorization expected=True actual=True codes=
+  [PASS] A6-allow-weight-per-unit[Could you share the weight of ] per-unit weight is inside a weight authorization expected=True actual=True codes=
+  [PASS] A6-allow-dims-per-carton per-carton dimensions are inside a dimension authorization expected=True actual=True codes=
+  [PASS] A6-block-real-count-ask a real carton-count question still needs count authorization expected=False actual=False codes=ASK_OUT_OF_SCOPE
+  [PASS] A6-block-mixed-count-ask the count half of a mixed request is still unauthorised expected=False actual=False codes=ASK_OUT_OF_SCOPE
+
+=== T1/T2 时间问答地点绑定 ===
+  [FAIL] T1-lowercase-hamburg-place requested place want=[hamburg] got=[]
+  [FAIL] T1-lowercase-hamburg-kind requested place kind want=[explicit] got=[seller]
+  [PASS] T1-uppercase-hamburg-place requested place want=[Hamburg] got=[Hamburg]
+  [PASS] T1-uppercase-hamburg-kind requested place kind want=[explicit] got=[explicit]
+  T1 lower-case direct=[It's 2:05 PM in China (UTC+8).]
+  [FAIL] T1-no-seller-clock-for-lowercase-hamburg T1 must not answer the seller clock expected=False actual=True 
+  T1 upper-case direct=[I can't confirm the time in Hamburg here. Which country or time zone do you mean?]
+  T2a place=[Tokyo] direct=[It's 3:05 PM in Japan (UTC+9).]
+  [FAIL] T2a-china-not-overridden the later company sentence must not override the time target expected=True actual=False 
+  T2b place=[Tokyo] direct=[It's 3:05 PM in Japan (UTC+9).]
+  [FAIL] T2b-no-place-defaults-seller an unspecified time question defaults to the seller zone expected=True actual=False 
+
+BASELINE-RESULT: fail=6 cases=6
+BASELINE-FAILED: A1-no-false-out-of-scope-for-provided-supplier-contact, T1-lowercase-hamburg-place, T1-lowercase-hamburg-kind, T1-no-seller-clock-for-lowercase-hamburg, T2a-china-not-overridden, T2b-no-place-defaults-seller

@@ -1,0 +1,11 @@
+﻿Initialize-AarIsolation : The term 'Get-FileHash' is not recognized as the name of a cmdlet, function, script file, or 
+operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try ag
+ain.
+At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:8 char:8
++ [void](Initialize-AarIsolation -Root $Root)
++        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Get-FileHash:String) [Initialize-AarIsolation], CommandNotFoundExceptio 
+   n
+    + FullyQualifiedErrorId : CommandNotFoundException,Initialize-AarIsolation
+ 
+CHILD_EXIT=1 PID=19404 NONCE=68eeef1890994f5ea08156d6e7ca9699 ATTESTED=False ROOT=C:\Users\<local-user>\AppData\Local\Temp\aar-original-final-5fc2b3da95314aa7951146b8fadb6495

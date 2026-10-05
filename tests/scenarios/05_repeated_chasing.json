@@ -19,7 +19,7 @@
   "fakeModel": {
     "mode": "violation_then_compliant",
     "violationReply": "Thanks for your patience. I will check with my manager and get back to you shortly.",
-    "compliantReply": "I am confirming the actual status right now and I will come back to you as soon as I have something concrete."
+    "compliantReply": "I can't confirm the actual status from here. I do not want to give you a guess."
   },
   "expectedDecision": {
     "needHumanTodo": true,

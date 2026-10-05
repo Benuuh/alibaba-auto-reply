@@ -1,0 +1,9 @@
+FAIL H01 The term 'New-ConfirmedOutboundReceipt' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+FAIL H02 The term 'New-ConfirmedOutboundReceipt' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+FAIL H03 The term 'New-ConfirmedOutboundReceipt' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+FAIL H04 The term 'New-ConfirmedOutboundReceipt' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+FAIL H05 assertion failed
+FAIL H06 do not recalculate from anomalous raw atUtc
+PASS H07
+FAIL H08 assertion failed
+RESULT closure_s3 pass=1 fail=7 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-185bfa0f514f4806b4705df88a423b99

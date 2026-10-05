@@ -1,6 +1,6 @@
-﻿# 部署与运维
+# 部署与运维
 
-更新：2026-10-05。本文对应 0.0.2 版本的 PowerShell、Chrome CDP、回复决策/生成模块和 dsh-im 通知出口。总体功能见 [README](README.md)，现场运行状态与待解决问题见 [当前状态](docs/当前状态.md)。
+更新：2026-10-06。本文对应 **0.1.1** 版本的 PowerShell、Chrome CDP、程序回复计划、统一事实与任务存储和 dsh-im 通知出口。总体功能见 [README](README.md)，更新与验证见 [发布记录](docs/verification/release_0.1.1.md)，现场运行状态见 [当前状态](docs/当前状态.md)。
 
 0.0.2 统一可信新消息的冷却门禁，并支持将明确的 Amazon/FBA 收货仓代码用于报价准备。代码推送与打标签不自动重新加载运行进程；上线时按既有授权协调任务和进程，保留配置、账本及人工接管名单。真实模型、页面发送和通知投递须单独验收。
 
@@ -63,6 +63,30 @@ Get-SkillPath "profile"
 | `credentials_file` / `llm_config_file` | 凭据与模型非敏感配置 |
 
 本机已将日志等外迁到 `<代码根>-runtime`。路径外迁没有消除 `scripts_dir` 下的全部状态文件，迁移、备份和回滚时需同时考虑两处。
+
+### 卖家身份与业务时区（`seller_profile`）
+
+回复链需要"我方是谁"和"现在几点"两个可核实来源。二者都只来自集中配置的 `seller_profile` 块，不来自对话、附件、页面店名或项目名：
+
+| 字段 | 含义 |
+|---|---|
+| `company_name_en` | 经营者确认的客户可见英文公司名 |
+| `assistant_display_name_en` | 经营者批准的接待显示名（是服务显示名，不代表真人此刻在回复） |
+| `company_name_verified` / `assistant_display_name_verified` | 逐字段确认标记；只有 true 才允许对外陈述 |
+| `timezone` | 卖家业务时区，默认 `Asia/Shanghai`（Windows 侧映射 `China Standard Time`） |
+
+字段为空、标记为 false、值里仍有 `[company name]` 一类模板标记，或时区无法解析时，该字段单独降级：对客只说明当前无法确认，不编造、不借用另一字段的确认状态、也不承诺"核实后再回复"。模板文件保持空值，真实值只写本机不入库的 `scripts/config.json`。
+
+修改该块或回复库后需重启 monitor 才会生效。
+
+
+### 人工任务、收据与运行根（0.1.1）
+
+通过 Get-SkillPath 'tasks' / 'pause' / 'sent_records' / 'state' 核对实际位置。显式 RuntimeRoot、AAR_RUNTIME_ROOT 或配置 runtime_root 可覆盖运行态；离线根必须有隔离标记。本机生产配置与运行态不得用模板覆盖。任务、暂停、收据和账本需一起备份，损坏存储不得通过删除或清空来绕过发送保护。
+
+人工任务 API 在 lib/human_tasks.ps1 与 task_contracts.ps1：Get-HumanTaskList 读取；Set-HumanTaskOwnerAccepted 记录认领；Add-HumanTaskActionRecord 记录实际行动与供应商原始回复、ConfirmedFields（字段值/单位/范围/来源）；Set-HumanTaskStatus 请求完成。填写真实执行记录后再修改状态，resolved 会核验原始核实项、当前同流事实及冲突；不能用状态标签代替行动证据，也不能跨货物流引用旧确认。
+
+发送确认使用前后快照中唯一新增事件和完整正文；人工与 unknown 等待按可信事件锚点重算。迁移和排障先只读核对来源、FlowRef 与依赖，不伪造收据、确认值或通知结果。真实联系供应商与通知到达仍需要人工执行和单独验收。
 
 ### 凭据与模型
 
@@ -235,12 +259,32 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\apply_suggestion.ps1
 ~~~powershell
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\docs_consistency.tests.ps1
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\reply_chain.tests.ps1
+powershell -ExecutionPolicy Bypass -NoProfile -File tests\reception_facts.tests.ps1
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\suggestions.tests.ps1
 powershell -ExecutionPolicy Bypass -NoProfile -File tests\gonghai_chrome_isolation.tests.ps1
 powershell -ExecutionPolicy Bypass -NoProfile -File tools\acceptance\replay.ps1
 ~~~
 
-这些入口使用源码、夹具、桩模型或临时目录，不启动主监控、不发真实买家消息。完整测试运行器 `tests/run_tests.ps1` 没有隔离；`gonghai.tests.ps1` 会改写本机配置/运行数据，页面测试会访问当前 CDP。全套测试前先读 [测试副作用审计](docs/test_audit_20261003.md)，并核对实际最新代码。
+这些入口使用源码、夹具、桩模型或临时目录，不启动主监控、不发真实买家消息。
+
+0.1.1 发布检查中，历史 `tools/acceptance/replay.ps1` 的 20 场景仍有失败；新回复计划的正式回归通过不代表旧回放已经通过。生成契约预期与回复质量需逐项复核，见 [发布记录](docs/verification/release_0.1.1.md)。
+
+2026-10-05 起默认入口是**分层**的：
+
+~~~powershell
+# 默认：纯逻辑 + 隔离集成（每个子测试进程独立临时运行根 + 隔离标记 + 生产指纹比对）
+powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1
+# 只跑某一层
+powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1 -Layer Pure
+# 只跑隔离集成
+powershell -ExecutionPolicy Bypass -NoProfile -File tests\run_tests.ps1 -Layer Isolated
+~~~
+
+分层清单见 `tests\layers.json`：`pure`（纯逻辑）/ `isolated`（临时存储、竞争进程、模拟适配器）/ `live`（真实模型、页面、通知）。
+未登记在清单里的 `*.tests.ps1` 会让运行器直接失败；`gonghai.tests.ps1`、页面探针等历史测试属于 `live` 层。
+当前运行器拒绝 `-Layer Live|All`。真实验收需按 [测试副作用审计](docs/test_audit_20261003.md) 和最新代码另行组织。
+
+结果分为 `LogicTests / IsolationChecks / ProductionPathAudit / Overall`：退出码 0 为全部通过，1 为测试或生产路径审计失败，2 为分层清单错误，3 为生产变化来源未证实（`UNRESOLVED / BLOCKED-UNRESOLVED`）。Chrome、monitor 或 watchdog 正在运行只能作为线索，不能证明某条路径变化由它们造成；不要把业务断言全绿写成完整验收通过。
 
 真实模型质量、端到端耗时、真实页面发送和通知到达需另行验证。回放中的模拟时间不能作为实测回复延迟。
 

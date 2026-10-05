@@ -1,0 +1,670 @@
+﻿{
+    "generatedAtUtc":  "2026-10-05T10:14:23.9302160Z",
+    "layer":  "Offline",
+    "selectedFiles":  [
+                          "alert_dedup.tests.ps1",
+                          "cargo_facts.tests.ps1",
+                          "contact_redline.tests.ps1",
+                          "dedup_order.tests.ps1",
+                          "dimension_guidance.tests.ps1",
+                          "docs_consistency.tests.ps1",
+                          "gonghai_chrome_isolation.tests.ps1",
+                          "goods_engine.tests.ps1",
+                          "heartbeat.tests.ps1",
+                          "log_maintenance.tests.ps1",
+                          "message_order.tests.ps1",
+                          "msg_source.tests.ps1",
+                          "no_reply_write.tests.ps1",
+                          "no_reply.tests.ps1",
+                          "review_fixes.tests.ps1",
+                          "second_fix_contact.tests.ps1",
+                          "second_fix_policy.tests.ps1",
+                          "page_heal_throttle.tests.ps1",
+                          "page_health_verdict.tests.ps1",
+                          "reply_chain.tests.ps1",
+                          "reply_engine.tests.ps1",
+                          "reply_gate_dupskip.tests.ps1",
+                          "report_push.tests.ps1",
+                          "rule_registry.tests.ps1",
+                          "send_result.tests.ps1",
+                          "should_reply_v2.tests.ps1",
+                          "suggestions.tests.ps1",
+                          "third_fix_clarify.tests.ps1",
+                          "third_fix_contact_fields.tests.ps1",
+                          "third_fix_g1_guard.tests.ps1",
+                          "third_fix_time_binding.tests.ps1",
+                          "vision.tests.ps1",
+                          "amazon_destination.tests.ps1",
+                          "atomic_state.tests.ps1",
+                          "daemon_launch.tests.ps1",
+                          "env_block.tests.ps1",
+                          "human_pause.tests.ps1",
+                          "human_tasks.tests.ps1",
+                          "isolation.tests.ps1",
+                          "lock_scope.tests.ps1",
+                          "lock.tests.ps1",
+                          "new_message_cooldown.tests.ps1",
+                          "reception_facts.tests.ps1",
+                          "review_fixes_entry.tests.ps1",
+                          "second_fix_summary.tests.ps1",
+                          "send_page_param.tests.ps1",
+                          "third_fix_pause_source.tests.ps1",
+                          "third_fix_tasks_evidence.tests.ps1"
+                      ],
+    "logicTests":  "PASS",
+    "isolationChecks":  "PASS",
+    "productionPathAudit":  "UNRESOLVED",
+    "overall":  "BLOCKED-UNRESOLVED",
+    "exitCode":  3,
+    "writerOutputRoots":  [
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\logs",
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\reports",
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\backups"
+                          ],
+    "writer":  {
+                   "Running":  true,
+                   "LockHolder":  "",
+                   "Processes":  [
+                                     "2344",
+                                     "34196"
+                                 ]
+               },
+    "attributionCluesBefore":  {
+                                   "capturedAtUtc":  "2026-10-05T10:10:54.2578017Z",
+                                   "lockHolderPid":  "",
+                                   "monitorWatchdog":  [
+                                                           "2344",
+                                                           "34196"
+                                                       ],
+                                   "chromeProcesses":  [
+                                                           "3248",
+                                                           "6588",
+                                                           "6760",
+                                                           "7968",
+                                                           "8264",
+                                                           "8856",
+                                                           "10220",
+                                                           "11716",
+                                                           "13004",
+                                                           "16512",
+                                                           "17572",
+                                                           "19608",
+                                                           "20428",
+                                                           "20744",
+                                                           "22712",
+                                                           "22968",
+                                                           "26632",
+                                                           "27796",
+                                                           "28244",
+                                                           "29772",
+                                                           "30724",
+                                                           "31776",
+                                                           "33752",
+                                                           "34728",
+                                                           "35344",
+                                                           "38024",
+                                                           "38684"
+                                                       ],
+                                   "chromeProfilePath":  ""
+                               },
+    "attributionCluesAfter":  {
+                                  "capturedAtUtc":  "2026-10-05T10:14:23.7463070Z",
+                                  "lockHolderPid":  "34196",
+                                  "monitorWatchdog":  [
+                                                          "2344",
+                                                          "34196"
+                                                      ],
+                                  "chromeProcesses":  [
+                                                          "468",
+                                                          "3248",
+                                                          "6588",
+                                                          "6760",
+                                                          "7968",
+                                                          "8264",
+                                                          "8856",
+                                                          "10220",
+                                                          "11716",
+                                                          "13004",
+                                                          "16512",
+                                                          "17572",
+                                                          "19608",
+                                                          "20428",
+                                                          "20744",
+                                                          "22712",
+                                                          "22968",
+                                                          "26632",
+                                                          "27796",
+                                                          "28244",
+                                                          "29772",
+                                                          "30724",
+                                                          "31776",
+                                                          "33752",
+                                                          "34728",
+                                                          "35344",
+                                                          "38024",
+                                                          "38684"
+                                                      ],
+                                  "chromeProfilePath":  ""
+                              },
+    "changes":  [
+                    {
+                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                        "Change":  "changed",
+                        "Kind":  "dir-metadata",
+                        "Before":  "DIR|2026-10-05T10:10:53.6243613Z|metadata-only",
+                        "After":  "DIR|2026-10-05T10:14:20.8966381Z|metadata-only"
+                    },
+                    {
+                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                        "Change":  "changed",
+                        "Kind":  "file-time",
+                        "Before":  "FILE|3261937|2026-10-05T10:10:53.0996774Z|sha256:no-hash",
+                        "After":  "FILE|3263011|2026-10-05T10:14:15.3934891Z|sha256:no-hash"
+                    },
+                    {
+                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                        "Change":  "created",
+                        "Kind":  "created",
+                        "Before":  "",
+                        "After":  "FILE|27|2026-10-05T10:14:20.8966381Z|sha256:875a1d7c030e8c9c0695b0b0ea1e39932d184dd117c41197d61aaa1d517688b5"
+                    }
+                ],
+    "perFileDiffs":  {
+                         "amazon_destination.tests.ps1":  [
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "dir-metadata",
+                                                                  "Before":  "DIR|2026-10-05T10:11:52.6807704Z|metadata-only",
+                                                                  "After":  "DIR|2026-10-05T10:12:01.1229708Z|metadata-only"
+                                                              },
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "file-time",
+                                                                  "Before":  "FILE|3262279|2026-10-05T10:11:52.0938760Z|sha256:no-hash",
+                                                                  "After":  "FILE|3262318|2026-10-05T10:12:00.6564009Z|sha256:no-hash"
+                                                              }
+                                                          ],
+                         "third_fix_clarify.tests.ps1":  [
+
+                                                         ],
+                         "should_reply_v2.tests.ps1":  [
+
+                                                       ],
+                         "msg_source.tests.ps1":  [
+
+                                                  ],
+                         "reception_facts.tests.ps1":  [
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                               "Change":  "changed",
+                                                               "Kind":  "dir-metadata",
+                                                               "Before":  "DIR|2026-10-05T10:12:51.9708051Z|metadata-only",
+                                                               "After":  "DIR|2026-10-05T10:13:14.0136200Z|metadata-only"
+                                                           },
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                               "Change":  "changed",
+                                                               "Kind":  "file-time",
+                                                               "Before":  "FILE|3262552|2026-10-05T10:12:51.5020962Z|sha256:no-hash",
+                                                               "After":  "FILE|3262630|2026-10-05T10:13:08.5298813Z|sha256:no-hash"
+                                                           },
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                               "Change":  "created",
+                                                               "Kind":  "created",
+                                                               "Before":  "",
+                                                               "After":  "FILE|27|2026-10-05T10:13:14.0136200Z|sha256:0d784a781d10c20ee941bc9152e5a6e99d9abf817ffe7eccb2b7910814e3133d"
+                                                           }
+                                                       ],
+                         "vision.tests.ps1":  [
+
+                                              ],
+                         "second_fix_summary.tests.ps1":  [
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "dir-metadata",
+                                                                  "Before":  "DIR|2026-10-05T10:13:42.9217599Z|metadata-only",
+                                                                  "After":  "DIR|2026-10-05T10:13:47.9319071Z|metadata-only"
+                                                              },
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                                  "Change":  "created",
+                                                                  "Kind":  "created",
+                                                                  "Before":  "",
+                                                                  "After":  "FILE|27|2026-10-05T10:13:47.9319071Z|sha256:13a7c8d975b4ae73bdd7c2fbbfb55c3324e32936f74eb17d3c903c996686aff0"
+                                                              }
+                                                          ],
+                         "goods_engine.tests.ps1":  [
+
+                                                    ],
+                         "isolation.tests.ps1":  [
+
+                                                 ],
+                         "atomic_state.tests.ps1":  [
+                                                        {
+                                                            "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                            "Change":  "changed",
+                                                            "Kind":  "dir-metadata",
+                                                            "Before":  "DIR|2026-10-05T10:12:01.1229708Z|metadata-only",
+                                                            "After":  "DIR|2026-10-05T10:12:06.1388009Z|metadata-only"
+                                                        },
+                                                        {
+                                                            "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                            "Change":  "changed",
+                                                            "Kind":  "file-time",
+                                                            "Before":  "FILE|3262318|2026-10-05T10:12:00.6564009Z|sha256:no-hash",
+                                                            "After":  "FILE|3262357|2026-10-05T10:12:09.0992835Z|sha256:no-hash"
+                                                        },
+                                                        {
+                                                            "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                            "Change":  "created",
+                                                            "Kind":  "created",
+                                                            "Before":  "",
+                                                            "After":  "FILE|27|2026-10-05T10:12:06.1388009Z|sha256:03db2ce9a7872418868bae1198ad409af3c7a55e799a960efb36ada521497a58"
+                                                        }
+                                                    ],
+                         "send_result.tests.ps1":  [
+
+                                                   ],
+                         "dimension_guidance.tests.ps1":  [
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "file-time",
+                                                                  "Before":  "FILE|3261976|2026-10-05T10:11:01.6181768Z|sha256:no-hash",
+                                                                  "After":  "FILE|3262084|2026-10-05T10:11:02.7600571Z|sha256:no-hash"
+                                                              }
+                                                          ],
+                         "third_fix_tasks_evidence.tests.ps1":  [
+                                                                    {
+                                                                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                        "Change":  "changed",
+                                                                        "Kind":  "dir-metadata",
+                                                                        "Before":  "DIR|2026-10-05T10:14:15.8871506Z|metadata-only",
+                                                                        "After":  "DIR|2026-10-05T10:14:20.8966381Z|metadata-only"
+                                                                    },
+                                                                    {
+                                                                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                                        "Change":  "created",
+                                                                        "Kind":  "created",
+                                                                        "Before":  "",
+                                                                        "After":  "FILE|27|2026-10-05T10:14:20.8966381Z|sha256:875a1d7c030e8c9c0695b0b0ea1e39932d184dd117c41197d61aaa1d517688b5"
+                                                                    }
+                                                                ],
+                         "daemon_launch.tests.ps1":  [
+                                                         {
+                                                             "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                             "Change":  "changed",
+                                                             "Kind":  "dir-metadata",
+                                                             "Before":  "DIR|2026-10-05T10:12:06.1388009Z|metadata-only",
+                                                             "After":  "DIR|2026-10-05T10:12:14.5658742Z|metadata-only"
+                                                         },
+                                                         {
+                                                             "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                             "Change":  "changed",
+                                                             "Kind":  "file-content",
+                                                             "Before":  "FILE|27|2026-10-05T10:12:06.1388009Z|sha256:03db2ce9a7872418868bae1198ad409af3c7a55e799a960efb36ada521497a58",
+                                                             "After":  "FILE|27|2026-10-05T10:12:14.5658742Z|sha256:cc7df06510e983613188258370285e81bbc338a6f68fc40ee7889cb579e1d5ad"
+                                                         }
+                                                     ],
+                         "third_fix_pause_source.tests.ps1":  [
+
+                                                              ],
+                         "review_fixes.tests.ps1":  [
+
+                                                    ],
+                         "no_reply_write.tests.ps1":  [
+
+                                                      ],
+                         "dedup_order.tests.ps1":  [
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                           "Change":  "changed",
+                                                           "Kind":  "file-time",
+                                                           "Before":  "FILE|3261937|2026-10-05T10:10:53.0996774Z|sha256:no-hash",
+                                                           "After":  "FILE|3261976|2026-10-05T10:11:01.6181768Z|sha256:no-hash"
+                                                       }
+                                                   ],
+                         "rule_registry.tests.ps1":  [
+                                                         {
+                                                             "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                             "Change":  "changed",
+                                                             "Kind":  "dir-metadata",
+                                                             "Before":  "DIR|2026-10-05T10:11:35.5102614Z|metadata-only",
+                                                             "After":  "DIR|2026-10-05T10:11:40.5322183Z|metadata-only"
+                                                         },
+                                                         {
+                                                             "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                             "Change":  "created",
+                                                             "Kind":  "created",
+                                                             "Before":  "",
+                                                             "After":  "FILE|27|2026-10-05T10:11:40.5322183Z|sha256:51cb034ca4ec4e6c21c77d1aa69bcbf286d4c6d7311170aa4d2e3bff794d4ac9"
+                                                         }
+                                                     ],
+                         "alert_dedup.tests.ps1":  [
+
+                                                   ],
+                         "human_pause.tests.ps1":  [
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                           "Change":  "changed",
+                                                           "Kind":  "dir-metadata",
+                                                           "Before":  "DIR|2026-10-05T10:12:14.5658742Z|metadata-only",
+                                                           "After":  "DIR|2026-10-05T10:12:18.1173862Z|metadata-only"
+                                                       },
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                           "Change":  "removed",
+                                                           "Kind":  "removed",
+                                                           "Before":  "FILE|27|2026-10-05T10:12:14.5658742Z|sha256:cc7df06510e983613188258370285e81bbc338a6f68fc40ee7889cb579e1d5ad",
+                                                           "After":  ""
+                                                       },
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                           "Change":  "changed",
+                                                           "Kind":  "file-time",
+                                                           "Before":  "FILE|3262357|2026-10-05T10:12:09.0992835Z|sha256:no-hash",
+                                                           "After":  "FILE|3262396|2026-10-05T10:12:17.5631506Z|sha256:no-hash"
+                                                       }
+                                                   ],
+                         "second_fix_contact.tests.ps1":  [
+
+                                                          ],
+                         "lock_scope.tests.ps1":  [
+                                                      {
+                                                          "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                          "Change":  "changed",
+                                                          "Kind":  "dir-metadata",
+                                                          "Before":  "DIR|2026-10-05T10:12:23.1210510Z|metadata-only",
+                                                          "After":  "DIR|2026-10-05T10:12:26.6088937Z|metadata-only"
+                                                      },
+                                                      {
+                                                          "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                          "Change":  "removed",
+                                                          "Kind":  "removed",
+                                                          "Before":  "FILE|27|2026-10-05T10:12:23.1210510Z|sha256:4095e38e5717da3d30d9876941a0d63917ef7dc44f1dba1952cc698a1025f90a",
+                                                          "After":  ""
+                                                      },
+                                                      {
+                                                          "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                          "Change":  "changed",
+                                                          "Kind":  "file-time",
+                                                          "Before":  "FILE|3262396|2026-10-05T10:12:17.5631506Z|sha256:no-hash",
+                                                          "After":  "FILE|3262435|2026-10-05T10:12:26.1463770Z|sha256:no-hash"
+                                                      }
+                                                  ],
+                         "env_block.tests.ps1":  [
+
+                                                 ],
+                         "log_maintenance.tests.ps1":  [
+
+                                                       ],
+                         "send_page_param.tests.ps1":  [
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                               "Change":  "changed",
+                                                               "Kind":  "dir-metadata",
+                                                               "Before":  "DIR|2026-10-05T10:13:47.9319071Z|metadata-only",
+                                                               "After":  "DIR|2026-10-05T10:14:15.8871506Z|metadata-only"
+                                                           },
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                               "Change":  "removed",
+                                                               "Kind":  "removed",
+                                                               "Before":  "FILE|27|2026-10-05T10:13:47.9319071Z|sha256:13a7c8d975b4ae73bdd7c2fbbfb55c3324e32936f74eb17d3c903c996686aff0",
+                                                               "After":  ""
+                                                           },
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                               "Change":  "changed",
+                                                               "Kind":  "file-time",
+                                                               "Before":  "FILE|3262786|2026-10-05T10:13:42.4551095Z|sha256:no-hash",
+                                                               "After":  "FILE|3263011|2026-10-05T10:14:15.3934891Z|sha256:no-hash"
+                                                           }
+                                                       ],
+                         "third_fix_g1_guard.tests.ps1":  [
+
+                                                          ],
+                         "gonghai_chrome_isolation.tests.ps1":  [
+
+                                                                ],
+                         "third_fix_contact_fields.tests.ps1":  [
+                                                                    {
+                                                                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                        "Change":  "changed",
+                                                                        "Kind":  "dir-metadata",
+                                                                        "Before":  "DIR|2026-10-05T10:11:44.0167291Z|metadata-only",
+                                                                        "After":  "DIR|2026-10-05T10:11:49.0279657Z|metadata-only"
+                                                                    },
+                                                                    {
+                                                                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                                        "Change":  "created",
+                                                                        "Kind":  "created",
+                                                                        "Before":  "",
+                                                                        "After":  "FILE|27|2026-10-05T10:11:49.0279657Z|sha256:31534369183bef25bcc9c2e05e66b7a1d58bdc6c5942950812799b491618d607"
+                                                                    }
+                                                                ],
+                         "message_order.tests.ps1":  [
+
+                                                     ],
+                         "no_reply.tests.ps1":  [
+                                                    {
+                                                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                        "Change":  "changed",
+                                                        "Kind":  "dir-metadata",
+                                                        "Before":  "DIR|2026-10-05T10:11:14.7681046Z|metadata-only",
+                                                        "After":  "DIR|2026-10-05T10:11:18.3864428Z|metadata-only"
+                                                    },
+                                                    {
+                                                        "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                        "Change":  "removed",
+                                                        "Kind":  "removed",
+                                                        "Before":  "FILE|27|2026-10-05T10:11:14.7681046Z|sha256:5fa8d6f4ee8a3b825e3b703968b82c147eab81bf57aa69551c7a270ff73d6ed1",
+                                                        "After":  ""
+                                                    }
+                                                ],
+                         "cargo_facts.tests.ps1":  [
+
+                                                   ],
+                         "report_push.tests.ps1":  [
+
+                                                   ],
+                         "review_fixes_entry.tests.ps1":  [
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "dir-metadata",
+                                                                  "Before":  "DIR|2026-10-05T10:13:14.0136200Z|metadata-only",
+                                                                  "After":  "DIR|2026-10-05T10:13:39.4788516Z|metadata-only"
+                                                              },
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "file-content",
+                                                                  "Before":  "FILE|27|2026-10-05T10:13:14.0136200Z|sha256:0d784a781d10c20ee941bc9152e5a6e99d9abf817ffe7eccb2b7910814e3133d",
+                                                                  "After":  "FILE|27|2026-10-05T10:13:39.4798517Z|sha256:afcdfb64205b2e3dc4c2096075ce9757bec368f376c7ae7c7a86bd8fe444eaba"
+                                                              },
+                                                              {
+                                                                  "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                                  "Change":  "changed",
+                                                                  "Kind":  "file-time",
+                                                                  "Before":  "FILE|3262630|2026-10-05T10:13:08.5298813Z|sha256:no-hash",
+                                                                  "After":  "FILE|3262786|2026-10-05T10:13:42.4551095Z|sha256:no-hash"
+                                                              }
+                                                          ],
+                         "third_fix_time_binding.tests.ps1":  [
+                                                                  {
+                                                                      "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                      "Change":  "changed",
+                                                                      "Kind":  "dir-metadata",
+                                                                      "Before":  "DIR|2026-10-05T10:11:49.0279657Z|metadata-only",
+                                                                      "After":  "DIR|2026-10-05T10:11:52.6807704Z|metadata-only"
+                                                                  },
+                                                                  {
+                                                                      "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                                      "Change":  "removed",
+                                                                      "Kind":  "removed",
+                                                                      "Before":  "FILE|27|2026-10-05T10:11:49.0279657Z|sha256:31534369183bef25bcc9c2e05e66b7a1d58bdc6c5942950812799b491618d607",
+                                                                      "After":  ""
+                                                                  },
+                                                                  {
+                                                                      "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                                      "Change":  "changed",
+                                                                      "Kind":  "file-time",
+                                                                      "Before":  "FILE|3262240|2026-10-05T10:11:43.4972907Z|sha256:no-hash",
+                                                                      "After":  "FILE|3262279|2026-10-05T10:11:52.0938760Z|sha256:no-hash"
+                                                                  }
+                                                              ],
+                         "docs_consistency.tests.ps1":  [
+
+                                                        ],
+                         "reply_chain.tests.ps1":  [
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                           "Change":  "changed",
+                                                           "Kind":  "dir-metadata",
+                                                           "Before":  "DIR|2026-10-05T10:11:26.8242796Z|metadata-only",
+                                                           "After":  "DIR|2026-10-05T10:11:35.5102614Z|metadata-only"
+                                                       },
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                           "Change":  "changed",
+                                                           "Kind":  "file-time",
+                                                           "Before":  "FILE|3262162|2026-10-05T10:11:26.3642175Z|sha256:no-hash",
+                                                           "After":  "FILE|3262201|2026-10-05T10:11:34.9540266Z|sha256:no-hash"
+                                                       }
+                                                   ],
+                         "reply_engine.tests.ps1":  [
+
+                                                    ],
+                         "page_health_verdict.tests.ps1":  [
+
+                                                           ],
+                         "suggestions.tests.ps1":  [
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                           "Change":  "changed",
+                                                           "Kind":  "dir-metadata",
+                                                           "Before":  "DIR|2026-10-05T10:11:40.5322183Z|metadata-only",
+                                                           "After":  "DIR|2026-10-05T10:11:44.0167291Z|metadata-only"
+                                                       },
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                           "Change":  "removed",
+                                                           "Kind":  "removed",
+                                                           "Before":  "FILE|27|2026-10-05T10:11:40.5322183Z|sha256:51cb034ca4ec4e6c21c77d1aa69bcbf286d4c6d7311170aa4d2e3bff794d4ac9",
+                                                           "After":  ""
+                                                       }
+                                                   ],
+                         "human_tasks.tests.ps1":  [
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                           "Change":  "changed",
+                                                           "Kind":  "dir-metadata",
+                                                           "Before":  "DIR|2026-10-05T10:12:18.1173862Z|metadata-only",
+                                                           "After":  "DIR|2026-10-05T10:12:23.1210510Z|metadata-only"
+                                                       },
+                                                       {
+                                                           "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                           "Change":  "created",
+                                                           "Kind":  "created",
+                                                           "Before":  "",
+                                                           "After":  "FILE|27|2026-10-05T10:12:23.1210510Z|sha256:4095e38e5717da3d30d9876941a0d63917ef7dc44f1dba1952cc698a1025f90a"
+                                                       }
+                                                   ],
+                         "second_fix_policy.tests.ps1":  [
+                                                             {
+                                                                 "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                 "Change":  "changed",
+                                                                 "Kind":  "dir-metadata",
+                                                                 "Before":  "DIR|2026-10-05T10:11:23.3921258Z|metadata-only",
+                                                                 "After":  "DIR|2026-10-05T10:11:26.8242796Z|metadata-only"
+                                                             },
+                                                             {
+                                                                 "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                                 "Change":  "removed",
+                                                                 "Kind":  "removed",
+                                                                 "Before":  "FILE|27|2026-10-05T10:11:23.3921258Z|sha256:3a91438d45d8ff45e3af2861e7a855ba70c461c6106cd3498e43886010d64803",
+                                                                 "After":  ""
+                                                             },
+                                                             {
+                                                                 "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                                 "Change":  "changed",
+                                                                 "Kind":  "file-time",
+                                                                 "Before":  "FILE|3262123|2026-10-05T10:11:17.8689426Z|sha256:no-hash",
+                                                                 "After":  "FILE|3262162|2026-10-05T10:11:26.3642175Z|sha256:no-hash"
+                                                             }
+                                                         ],
+                         "page_heal_throttle.tests.ps1":  [
+
+                                                          ],
+                         "contact_redline.tests.ps1":  [
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                               "Change":  "changed",
+                                                               "Kind":  "dir-metadata",
+                                                               "Before":  "DIR|2026-10-05T10:10:53.6243613Z|metadata-only",
+                                                               "After":  "DIR|2026-10-05T10:10:58.6342981Z|metadata-only"
+                                                           },
+                                                           {
+                                                               "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                               "Change":  "created",
+                                                               "Kind":  "created",
+                                                               "Before":  "",
+                                                               "After":  "FILE|27|2026-10-05T10:10:58.6342981Z|sha256:ccd2ddbb0e57f3c99c819a07a441aad14f4ec616ac39d00bc4b690d6309ed50e"
+                                                           }
+                                                       ],
+                         "heartbeat.tests.ps1":  [
+
+                                                 ],
+                         "reply_gate_dupskip.tests.ps1":  [
+
+                                                          ],
+                         "new_message_cooldown.tests.ps1":  [
+                                                                {
+                                                                    "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                                    "Change":  "changed",
+                                                                    "Kind":  "dir-metadata",
+                                                                    "Before":  "DIR|2026-10-05T10:12:35.0614172Z|metadata-only",
+                                                                    "After":  "DIR|2026-10-05T10:12:51.9708051Z|metadata-only"
+                                                                },
+                                                                {
+                                                                    "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                                    "Change":  "changed",
+                                                                    "Kind":  "file-time",
+                                                                    "Before":  "FILE|3262474|2026-10-05T10:12:34.5925375Z|sha256:no-hash",
+                                                                    "After":  "FILE|3262552|2026-10-05T10:12:51.5020962Z|sha256:no-hash"
+                                                                }
+                                                            ],
+                         "lock.tests.ps1":  [
+                                                {
+                                                    "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                                                    "Change":  "changed",
+                                                    "Kind":  "dir-metadata",
+                                                    "Before":  "DIR|2026-10-05T10:12:31.6174808Z|metadata-only",
+                                                    "After":  "DIR|2026-10-05T10:12:35.0614172Z|metadata-only"
+                                                },
+                                                {
+                                                    "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\data\\onetalk-write.lock",
+                                                    "Change":  "removed",
+                                                    "Kind":  "removed",
+                                                    "Before":  "FILE|27|2026-10-05T10:12:31.6179113Z|sha256:fa65646cc28d88b453f34b5aea9342418cb733a922437d68ed54da1512ac8ce2",
+                                                    "After":  ""
+                                                },
+                                                {
+                                                    "Path":  "C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log",
+                                                    "Change":  "changed",
+                                                    "Kind":  "file-time",
+                                                    "Before":  "FILE|3262435|2026-10-05T10:12:26.1463770Z|sha256:no-hash",
+                                                    "After":  "FILE|3262474|2026-10-05T10:12:34.5925375Z|sha256:no-hash"
+                                                }
+                                            ]
+                     },
+    "failedFiles":  [
+
+                    ]
+}

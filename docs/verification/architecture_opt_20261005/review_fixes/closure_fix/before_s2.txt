@@ -1,0 +1,12 @@
+FAIL P01 as well as
+PASS P02
+FAIL P03 assertion failed
+PASS P04
+FAIL P05 assertion failed
+FAIL P06 assertion failed
+FAIL P07 assertion failed
+FAIL P08 Which carton count is correct - nine hundred ninety-nine or one thousand?
+FAIL P09 assertion failed
+FAIL P10 assertion failed
+FAIL P11 unknown model text discarded; controlled positive survives
+RESULT closure_s2 pass=2 fail=9

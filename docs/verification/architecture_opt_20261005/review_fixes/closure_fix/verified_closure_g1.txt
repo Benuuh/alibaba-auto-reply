@@ -1,0 +1,8 @@
+PASS G01
+PASS G02
+PASS G03
+PASS G01-root-tamper
+FAIL G02-config-marker-root bad-marker
+EXIT-PROPAGATION pid=12076 exit=3 verified=True LogicTests=PASS ProductionPathAudit=UNRESOLVED Overall=BLOCKED-UNRESOLVED
+PASS G03-child-exit3
+RESULT closure_g1 pass=5 fail=1 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-98ba7b5ce8554c919d0957dd5f2497dd

@@ -1,0 +1,4 @@
+== third_fix time binding tests (R6) ==
+
+RESULT: pass=39 fail=0
+ALL PASS

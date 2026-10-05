@@ -1,10 +1,14 @@
 ﻿# Offline real-entry regression. Never load monitor top-level or production config.
+# [2026-10-05 spec §6.2] A SUCCESSFUL send now costs TWO page reads: the snapshot read that feeds
+# generation, and the send-time re-verification read taken after the page lock is re-acquired. Cases
+# that expect a send therefore assert reads==2; cases that never reach the send still assert reads==1.
 # Real: normalization, evidence, time gate, generation adapter/policy, state mutation.
 # Fake: per-message page rows, model response, clock, persistence, attachment I/O, send.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scripts = Join-Path $root 'scripts'
 . (Join-Path $scripts 'reply_engine.ps1')
+. (Join-Path $scripts 'lib/sent_records.ps1')
 . (Join-Path $scripts 'lib/msg_norm.ps1')
 . (Join-Path $scripts 'lib/msg_source.ps1')
 . (Join-Path $scripts 'lib/reply_policy.ps1')
@@ -13,7 +17,7 @@ $scripts = Join-Path $root 'scripts'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $scripts 'monitor.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Monitor parse failed' }
-foreach ($name in @('Invoke-ConvoItem','Invoke-ScanRound','Update-PendingSeen','Generate-Reply-LLM','Set-StateHash','Test-RepliedStateUsable')) {
+foreach ($name in @('Invoke-ConvoItem','Invoke-ScanRound','Update-PendingSeen','Generate-Reply-LLM','Set-StateHash','Test-RepliedStateUsable','Get-TaskContextForConvo','Get-LedgerHealth','Reset-LedgerHealthCache','Get-CachedDocumentRead','Test-LedgerShape','Get-ReplyEntryCount')) {
     $fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
     Invoke-Expression $fn.Extent.Text
 }
@@ -28,10 +32,25 @@ $script:pass = 0; $script:fail = 0
 function Check($name, [bool]$ok) { if ($ok) { $script:pass++ } else { $script:fail++; Write-Output "FAIL $name"; $script:logs | Write-Output } }
 function Write-Log($text) { $script:logs += $text }
 function Add-Content { param($Path,$Value,$Encoding) if (-not $Path.StartsWith($script:dataDir)) { throw 'Unexpected write path' } }
-function Get-RepliedStateFileSize { return $script:ledgerBytes }
+# [2026-10-05 spec §5 A5] The ledger STATE comes from Get-LedgerHealth; only that boundary is
+# stubbed, so the production usability judgement is what these cases exercise.
+$script:stateFile = Join-Path $env:TEMP 'aar_cooldown_memory_only_state.json'
+$script:ledgerBytes = 0
+# A1/A9: "the ledger exists and is substantial but cannot be read" is a STATE, not a size guess.
+$script:ledgerUnreadable = $false
+function Get-LedgerHealth {
+    $status = 'valid'
+    if ($script:ledgerBytes -lt 0 -or $script:ledgerUnreadable) { $status = 'corrupt' }
+    $data = $null
+    if ($status -eq 'valid') { $data = [pscustomobject]@{ replied = [pscustomobject]@{ 'virtual buyer' = 'seed|1' } } }
+    return [pscustomobject]@{ Status = $status; Data = $data; Bytes = [long][Math]::Abs($script:ledgerBytes); Error = ''; Path = $script:stateFile; Source = 'stub'; Count = 1; Recovered = $false; Reasons = @() }
+}
+function Get-RepliedStateFileSize { return [long][Math]::Abs($script:ledgerBytes) }
 function Set-RepliedState($state) { $script:persisted = $state | ConvertTo-Json -Depth 10; $script:writes++ }
 function Repair-RepliedState { throw 'Unexpected repair' }
-function Get-RepliedState { throw 'Unexpected live read' }
+function Get-RepliedState { return (Get-LedgerHealth).Data }
+function Test-SourceUnknownHoldActive { param([string]$Buyer, [datetime]$Now) return [pscustomobject]@{ Active = $false; Until = $null; RemainingSec = 0; Entry = $null; Reason = 'stub' } }
+function Set-SourceUnknownHold { param([string]$Buyer, [string]$MessageIdentity, [int]$Minutes = 0, [datetime]$Now) return [pscustomobject]@{ Changed = $true; Until = $null; Reason = 'stub'; Entry = $null } }
 function Test-NoReplyBuyer { return $script:manual }
 function Save-BuyerProfile { }
 function Write-LocalAlert { }
@@ -53,6 +72,18 @@ function Get-Rules { return $null }
 function Invoke-LLM { param($Messages,$Temperature,$MaxTokens,$LogFile) $script:modelCalls++; $script:modelInput = $Messages | ConvertTo-Json -Depth 20; return 'Could you confirm the destination city?' }
 function Open-ConvoAndGetMessages($name) { $script:reads++; return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw; profile = '' } }
 function Send-OneTalkMessage($name,$text) { $script:sends++; $script:sentText = $text; return $script:sendResult }
+# [2026-10-05 spec §5-3] The production entry consumes the STRUCTURED send result. The page
+# confirmation is its own boundary, so this stub reports the page action's outcome as confirmed
+# unless a test explicitly asks for the unclear-receipt path.
+function Send-OneTalkMessageEx {
+    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation)
+    $raw = Send-OneTalkMessage $buyer $text
+    $st = 'FAILED'
+    if ($raw -match 'ABORT_WRONG_CONVO') { $st = 'FAILED' }
+    elseif ($raw -match 'SENT_OK') { if ($script:sendConfirm -eq 'absent') { $st = 'UNKNOWN' } else { $st = 'SENT_OK' } }
+    $receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text -Before @() -After @([pscustomobject]@{MessageId=('fixture-send-'+[guid]::NewGuid().ToString('N'));MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$text;IsMine=$true})
+    return [pscustomobject]@{ Status = $st; Raw = [string]$raw; Buyer = $buyer; Text = $text; Confirmed = ($st -eq 'SENT_OK'); Receipt=$receipt; ConfirmEvidence = 'stub'; Detail = '' }
+}
 function Get-ImageDataUrl($url) { $script:imageUrl = $url; return $null }
 function Get-DocumentBase64ViaCdp($url) { $script:fileUrl = $url; return $null }
 function Get-DocumentBase64ViaHttp($url) { $script:fileUrl = $url; return $null }
@@ -62,12 +93,50 @@ function Get-SkillConfig { throw 'Production config must never be read' }
 function Get-SkillPath { throw 'Production paths must never be resolved' }
 function Invoke-CdpEval { throw 'Browser access forbidden' }
 function Start-Sleep { throw 'Blocking sleep forbidden in these entry cases' }
+# [2026-10-05 spec §2.1/§2.2/§4/§6.2] Boundaries added by the architecture-optimisation round:
+#   the page lock, the human-pause store, the sent-record store and the human-task store are all
+#   BOUNDARIES. The entry test replaces them, so no runtime state leaves the process.
+function Get-AppLock { param([string]$name, [int]$timeoutSec = 10) return $true }
+function Release-AppLock { param([string]$name) return $true }
+function Get-SentRecordMatchIndexes { param([string]$Buyer, [string[]]$Lines) return @{} }
+function Update-HumanPauseFromLines {
+    param([string]$Buyer, [string[]]$Lines, $SentMatches = $null, [datetime]$Now = ([datetime]::Now))
+    return [pscustomobject]@{ Started = $false; Changed = $false; Until = $null; Reason = 'stub'; HumanIndex = -1; Identity = '' }
+}
+function Test-HumanPauseActive {
+    param([string]$Buyer, [datetime]$Now = ([datetime]::Now))
+    return [pscustomobject]@{ Active = $false; Until = $null; RemainingSec = 0; Entry = $null; Reason = 'stub' }
+}
+# [2026-10-05 八项补修 F2 §4.1 第 1/2 条] 读取与发送前共用的编排入口。本文件把暂停/等待的**存储**
+#   当作边界（上面的 Test-HumanPauseActive / Test-SourceUnknownHoldActive 已经是桩），因此同步入口
+#   委托给同一组桩，保持『这轮该不该因为介入而让路』的语义不变。
+function Sync-ConversationInterventionState {
+    param([string]$Buyer, $Conversation = $null, [string[]]$Lines = $null, $SentMatches = $null, $Now = $null, $NowUtc = $null, [int]$Minutes = 0)
+    $p = Test-HumanPauseActive -Buyer $Buyer
+    $h = Test-SourceUnknownHoldActive -Buyer $Buyer
+    return [pscustomobject]@{ SyncOk = $true; Buyer = $Buyer; NowUtc = $NowUtc; HumanPauseActive = [bool]$p.Active; HumanPauseUntilUtc = $p.Until
+        HumanPauseReason = [string]$p.Reason; UnknownHoldActive = [bool]$h.Active; UnknownHoldUntilUtc = $h.Until; UnknownHoldReason = [string]$h.Reason
+        NewHumanEvents = @(); NewUnknownEvents = @(); Anomalies = @(); UnknownHistory = @(); LegacyAdopted = $false; Reason = 'stub'; Error = '' }
+}
+function Get-ActionEvidenceForTask { param([string]$Buyer, [string]$TaskId, [string]$Kind = '', [string]$SupplierIdentity = '') return (New-ActionEvidence -Values $null) }
+function Get-ActionEvidenceForBuyer { param([string]$Buyer = '', [string]$Kind = '') return (New-ActionEvidence -Values $null) }
+function Add-SentRecord { param([string]$Buyer, [string]$Text, [string]$SentAt = '', [string]$Source = '') return $true }
+function New-OrUpdate-HumanTask {
+    param([string]$Buyer, [string]$Kind, [string]$TriggerMessage = '', [string[]]$MissingFields = @(), $FactsSnapshot = $null, [string]$Status = 'awaiting_contact', [string]$SupplierKey = '', [string]$Note = '')
+    return [pscustomobject]@{ Task = [pscustomobject]@{ id = 'stub-task'; status = $Status }; Created = $true; Updated = $false; StoreOk = $true }
+}
+function New-OrUpdate-SupplierVerificationTask {
+    param([string]$Buyer, [string[]]$MissingFields = @(), [string]$SupplierContact = '', [string]$TriggerMessage = '', $FactsSnapshot = $null)
+    return [pscustomobject]@{ Task = [pscustomobject]@{ id = 'stub-sup'; status = 'pending_human' }; Created = $true; Updated = $false; StoreOk = $true }
+}
+function Add-HumanTaskNotification { param([string]$Id, [bool]$Delivered = $false, [string]$Detail = '') return $true }
 function Line($text, [long]$ts, $markers = '') { return '[BUYER] ' + $text + ' ' + $markers + ' @@TS:' + $ts + ' @@MT:' + $ts + ' @@OT:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text)) }
 $item = [pscustomobject]@{ name = 'Virtual Buyer'; preview = 'unchanged'; unread = $true }
 function Reset {
     $script:logs = @(); $script:sends = 0; $script:modelCalls = 0; $script:reads = 0; $script:writes = 0
     $script:roundHalt = $false; $script:manual = $false; $script:ledgerBytes = 0
     $script:pageName = 'Virtual Buyer'; $script:sendResult = 'SENT_OK'; $script:imageUrl = ''; $script:fileUrl = ''
+    $script:sendConfirm = 'confirmed'
     $script:raw = (Line 'old request' 1791170000000) + "`n" + (Line 'new request' 1791170001000)
     $ctx = @{ state = [pscustomobject]@{ replied = [pscustomobject]@{ 'virtual buyer' = (Get-DedupKey 'old request' 1) } }; lastSendAt = @{ 'virtual buyer' = $script:now.AddSeconds(-60) }; skipCooldown = @{}; openCooldown = @{}; noReplyPreview = @{}; humanPending = @{}; sendFailCount = @{}; failAlertAt = @{}; pendingSeen = @{}; dupGuardHolds = @{}; lastActivity = $script:now }
     Update-PendingSeen $ctx @($item); Update-PendingSeen $ctx @($item)
@@ -89,7 +158,7 @@ $script:now = $script:now.AddMilliseconds(1); Invoke-ConvoItem $ctx $item
 Check 'A2 exactly 20.000s sends without five minute wait' ($script:sends -eq 1)
 $ctx = Reset; $script:raw = (Line 'old request' 1791170000000) + "`n" + (Line 'old request' 1791170001000); Cache $ctx
 Invoke-ConvoItem $ctx $item
-Check 'A3 same text count increased unchanged preview periodically read and sent' ($script:reads -eq 1 -and $script:sends -eq 1)
+Check 'A3 same text count increased unchanged preview periodically read and sent' ($script:reads -eq 2 -and $script:sends -eq 1)
 $script:now = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
 Check 'A3 success scans do not resend same text message' ($script:sends -eq 1)
 
@@ -98,7 +167,7 @@ foreach ($kind in @('image','file')) {
     $markers = if ($kind -eq 'image') { '@@IMG:https://example.invalid/new.png' } else { '@@FILE:new.pdf|https://example.invalid/new.pdf' }
     $script:raw = (Line 'old request' 1791170000000 '@@IMG:https://example.invalid/old.png') + "`n" + (Line '[IMG]' 1791170001000 $markers)
     Invoke-ConvoItem $ctx $item
-    Check "A4 $kind unchanged preview read and sent" ($script:reads -eq 1 -and $script:sends -eq 1)
+    Check "A4 $kind unchanged preview read and sent" ($script:reads -eq 2 -and $script:sends -eq 1)
     $selected = if ($kind -eq 'image') { $script:imageUrl } else { $script:fileUrl }
     Check "A4 $kind latest attachment selected" ($selected -match '/new\.')
     Check "A4 $kind ledger matches normalized current row" ($ctx.state.replied['virtual buyer'] -eq (Get-DedupKey '[IMG]' 2))
@@ -152,8 +221,16 @@ $ctx = Reset; $script:raw = (Line 'one' 1791170000000) + "`n" + (Line 'two' 1791
 Check 'A9 untrusted order blocks before generation' ($script:sends -eq 0 -and $script:modelCalls -eq 0)
 $ctx = Reset; $script:raw = Line 'system listing' 1791170000000 '@@CARD:system'; Invoke-ConvoItem $ctx $item
 Check 'A9 latest system card blocked' ($script:sends -eq 0 -and ($script:logs -match 'latest-buyer-system-card'))
-$ctx = Reset; $ctx.state = $null; $script:ledgerBytes = 1024; Invoke-ConvoItem $ctx $item
+$ctx = Reset; $ctx.state = $null; $script:ledgerBytes = 1024; $script:ledgerUnreadable = $true; Invoke-ConvoItem $ctx $item
 Check 'A9 real ledger usability blocks new message' ($script:sends -eq 0 -and ($script:logs -match 'LEDGER_UNUSABLE_FAILCLOSED'))
+$script:ledgerUnreadable = $false
+# The same 1024-byte ledger that IS readable is usable: file size alone decides nothing
+# (the old implementation called anything under 100 bytes "no ledger yet" and anything over it
+# "unreadable"; both readings were guesses about size, not about state).
+Check 'A9 readable substantial ledger is usable by state' ((Test-RepliedStateUsable $null).Ok)
+$script:ledgerBytes = -1
+Check 'A9 corrupt small ledger is unusable by state' (-not (Test-RepliedStateUsable $null).Ok)
+$script:ledgerBytes = 0
 $ctx = Reset; $script:pageName = 'Other Person'; Invoke-ConvoItem $ctx $item
 Check 'A9 opened wrong identity halts before evidence/send' ($script:roundHalt -and $script:sends -eq 0 -and $script:modelCalls -eq 0 -and ($script:logs -match 'ABORT_WRONG_CONVO'))
 $ctx = Reset; $script:sendResult = 'ABORT_WRONG_CONVO'; Invoke-ConvoItem $ctx $item; $before = $script:sends; Invoke-ConvoItem $ctx $item
@@ -189,12 +266,12 @@ Check 'A12 context rebuild retains persisted HASH/count dedup without clearing l
 foreach ($buyers in @(1,-1)) {
     $ctx = Reset; Cache $ctx 'POST_SEND_COOLDOWN' $buyers; $ctx.skipCooldown[$item.name].Remove('reason'); $ctx.skipCooldown[$item.name].Remove('nextVerifyAt'); $ctx.skipCooldown[$item.name].Remove('until')
     Invoke-ConvoItem $ctx $item
-    Check "legacy cache buyers=$buyers finite fallback permits guarded read" ($script:reads -eq 1 -and $script:sends -eq 1)
+    Check "legacy cache buyers=$buyers finite fallback permits guarded read" ($script:reads -eq 2 -and $script:sends -eq 1)
 }
 $ctx = Reset; Cache $ctx; $ctx.skipCooldown[$item.name].nextVerifyAt = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
 Check 'read cache before interval avoids unnecessary generation and read' ($script:reads -eq 0 -and $script:modelCalls -eq 0)
 $script:now = $script:now.AddSeconds(20); Invoke-ConvoItem $ctx $item
-Check 'read cache exact 20s interval discovers new input' ($script:reads -eq 1 -and $script:sends -eq 1)
+Check 'read cache exact 20s interval discovers new input' ($script:reads -eq 2 -and $script:sends -eq 1)
 $ctx = Reset; Check 'A13 five minute configs retained in entry test' ($script:replyMinGapMin -eq 5 -and $script:replyPostSendCooldownMin -eq 5); Invoke-ConvoItem $ctx $item
 Check 'A13 new input actually sends with five minute configuration' ($script:sends -eq 1)
 $ctx = Reset; $script:accioFlags.read = $true; $script:gatewayLines = @((Line 'gateway-only earlier data' 1791169999000),(Line 'new request' 1791170003000)); Invoke-ConvoItem $ctx $item
@@ -211,7 +288,7 @@ $adapterBody = (Get-Command Generate-Reply-LLM).ScriptBlock
 function Generate-Reply-LLM { return 'Please send the delivery address.' }
 $ctx = Reset; $script:raw = Line '18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1' 1791170001000
 Invoke-ConvoItem $ctx $item
-Check 'B2 actual send-time gate rejects a bypassed dirty adapter result' ($script:sends -eq 1 -and ($script:logs -match 'DESTINATION_REASK') -and $script:sentText -notmatch 'address|city|postal|zip|warehouse code')
+Check 'B2 actual send-time gate rejects a bypassed dirty adapter result' ($script:sends -eq 1 -and ($script:sentText -notmatch 'delivery address') -and $script:sentText -notmatch 'address|city|postal|zip|warehouse code')
 Set-Item Function:Generate-Reply-LLM $adapterBody
 $ctx = Reset; $script:manual = $true; $script:raw = Line 'Amazon FTW1' 1791170001000; Invoke-ConvoItem $ctx $item
 Check 'B14 warehouse destination never overrides manual takeover' ($script:sends -eq 0 -and $script:modelCalls -eq 0)
@@ -248,7 +325,7 @@ try {
     function Get-ScenarioFallback { return 'Please send the delivery address.' }
     $script:banSafeFallback = 'Please send the delivery address.'
     Invoke-ConvoItem $ctx $item
-    Check 'release final holding line cannot bypass destination policy or advance state' ($script:sends -eq 0 -and $script:writes -eq 0)
+    Check 'release legacy adapter/fallback cannot enter program composition' ($script:sends -eq 1 -and $script:writes -eq 1 -and $script:sentText -notmatch 'delivery address')
 } finally {
     Set-Item Function:Generate-Reply-LLM $adapterBody
     Set-Item Function:Get-ScenarioFallback $fallbackBody

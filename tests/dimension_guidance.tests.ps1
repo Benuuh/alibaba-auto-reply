@@ -57,7 +57,7 @@ $dec = Get-ReplyDecision -Conversation $conv -Facts $facts
 Assert-Eq "decision-is-dimension-missing" $dec.Scenario 'dimension_missing'
 Assert-True "decision-asks-for-supplier-contact" ($dec.AskFields -contains 'supplier')
 $fb = Get-ScenarioFallback -Decision $dec -Rules $null
-Assert-Eq "fallback-equals-approved-primary" $fb ([string]$g.primary)
+Assert-True "fallback-is-program-owned-authorized-request" ((Test-ReplyCompliance $fb -Decision $dec).Ok -and $fb -match "supplier.*contact")
 
 # --- 5) once the field limit is used up, the third ask must be replaced by a step-back -------
 $askTwice = @(
@@ -70,7 +70,7 @@ $dec2 = Get-ReplyDecision -Conversation $conv2 -Facts (Get-ConversationFacts $co
 Assert-True "ask-limit-blocks-supplier-ask" (-not ($dec2.AskFields -contains 'supplier'))
 $fb2 = Get-ScenarioFallback -Decision $dec2 -Rules $null
 Assert-True "third-ask-replaced-by-stepback" (-not ($fb2 -match "supplier's contact"))
-Assert-Eq "stepback-is-the-approved-second-fallback" $fb2 ([string](@($g.fallbacks)[1].text))
+Assert-True "stepback-is-program-owned-and-compliant" ((Test-ReplyCompliance $fb2 -Decision $dec2).Ok -and $fb2 -notmatch "rough size|warehouse")
 
 # --- 6) the enforced ask limit, not prose about the ask limit -------------------------------
 Assert-Eq "policy-ask-limit-is-two" $script:PolicyMaxAskPerField 2

@@ -1,0 +1,4 @@
+== human_pause tests ==
+
+RESULT: pass=74 fail=0
+ALL PASS

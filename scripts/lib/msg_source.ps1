@@ -59,3 +59,119 @@ function Get-HumanInterjectionGate([string[]]$lines) {
     if ($r.LastMeSource -eq 'bot') { $reason = 'bot-last' }
     return @{ Action = 'SEND'; Reason = $reason; HasHumanLast = $false; HumanIndex = $r.HumanIndex; LastMeSource = $r.LastMeSource }
 }
+# =============================================================================================
+# [2026-10-05 spec §2.2] 证据化的消息来源判定
+#
+# 为什么要改：旧判据把"@@TS 存在"当作"这条是我们机器人发的"。时间字段只能证明页面给了这条消息
+#   一个时间，不能独立证明发送者身份。新判据按证据分级：
+#     1) 显式发送者标记（页面/API 给出的 @@SRC:bot|human）—— 最高等级证据；
+#     2) 本系统**已确认发送记录**（发送成功后落盘的 send receipt）；
+#     3) 既无发送记录、也没有任何逐条时间 ⇒ 人工手打（这是本机实测的既有形态，保留但不外推）；
+#     4) 只有时间字段、没有前两类证据 ⇒ **unknown**：既不当作机器人，也不当作人工。
+#
+# 未知来源的处置（spec §2.2 要求独立设计）：
+#   - 不把 unknown 当作"一条新的人工回复"（不因此开始/延长人工暂停）；
+#   - 我方尾部最新一条是 unknown 时，发送闸门按"抢话风险不明"处理 ⇒ 不自动发送并留日志，
+#     由人工核对（对话里最新一条既然是我方，买家当前诉求通常已被答复，代价可控）。
+# =============================================================================================
+
+# 稳定的行指纹（跨进程一致，用于人工消息身份去重）。本文件保持"无依赖"契约，自带 SHA1。
+function Get-MessageLineFingerprint([string]$Line) {
+    if ([string]::IsNullOrEmpty($Line)) { return '' }
+    try {
+        $sha = [System.Security.Cryptography.SHA1]::Create()
+        try {
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($Line)
+            return ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+        } finally { $sha.Dispose() }
+    } catch { return ([string]$Line.Length).ToString() }
+}
+
+# 单行来源分级。返回 @{ Class = 'buyer'|'bot'|'human'|'unknown'; Evidence = '<reason>' }
+function Get-MessageSourceClass([string]$line, [bool]$SentRecordMatch = $false) {
+    if (-not $line) { return @{ Class = 'unknown'; Evidence = 'empty-line' } }
+    if ($line -match '^\[BUYER\]') { return @{ Class = 'buyer'; Evidence = 'explicit-role-marker' } }
+    if ($line -notmatch '^\[ME\]') { return @{ Class = 'unknown'; Evidence = 'no-role-marker' } }
+    if ($line -match '@@SRC:(bot|human)\b') {
+        return @{ Class = ([string]$Matches[1]).ToLowerInvariant(); Evidence = 'explicit-sender-marker' }
+    }
+    if ($SentRecordMatch) { return @{ Class = 'bot'; Evidence = 'confirmed-send-record' } }
+    # @@TS 是"我方消息带逐条时间"的既有伴随标记（页面抽取对我方消息同时写 @@TS/@@MT）。
+    # 它只说明"这条有时间戳"，不足以证明发送者是机器人 ⇒ unknown（既不当作机器人，也不当作人工）。
+    if ($line -match '@@(?:TS|MID):') { return @{ Class = 'unknown'; Evidence = 'timer-marker-only' } }
+    # 完全没有机器人标记、也不在本系统发送记录里 ⇒ 人工手打（本机实测形态；不外推为其他结论）。
+    return @{ Class = 'human'; Evidence = 'no-bot-marker-and-not-in-send-records' }
+}
+
+# 会话里所有**可信人工回复**（spec §2.1 的计时依据）。返回按出现顺序的数组：
+#   @{ Index; Identity; MessageTs; Evidence; Preview }
+function Get-TrustedHumanReplies([string[]]$lines, $SentMatches = $null) {
+    $out = New-Object System.Collections.ArrayList
+    if (-not $lines) { return @() }
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $ln = [string]$lines[$i]
+        if (-not $ln) { continue }
+        $sentMatch = $false
+        if ($SentMatches -and $SentMatches.ContainsKey($i)) { $sentMatch = [bool]$SentMatches[$i] }
+        $cls = Get-MessageSourceClass $ln $sentMatch
+        if ($cls.Class -ne 'human') { continue }
+        $ts = ''
+        $mts = [regex]::Match($ln, '@@MT:([^\s]+)')
+        if ($mts.Success) { $ts = [string]$mts.Groups[1].Value }
+        $preview = ($ln -replace '^\[ME\]\s*', '')
+        $preview = ($preview -replace '@@[A-Z]+:[^\s]*', '').Trim()
+        if ($preview.Length -gt 60) { $preview = $preview.Substring(0, 60) }
+        [void]$out.Add([pscustomobject]@{
+            Index = $i
+            Identity = (Get-MessageLineFingerprint $ln)
+            MessageTs = $ts
+            Evidence = [string]$cls.Evidence
+            Preview = $preview
+        })
+    }
+    return @($out.ToArray())
+}
+
+# 发送闸门的证据化版本（spec §2.2）。返回与 Get-HumanInterjectionGate 同形，另加：
+#   SourceClass / SourceEvidence / UnknownIndex
+#   Action='SKIP' 的三种原因：
+#     'human-last'       —— 我方尾部最新一条是**可信人工**消息（沿用旧语义：不抢话）
+#     'unknown-me-tail'  —— 我方尾部最新一条来源无法证明（不当作机器人，也不当作人工）
+#     'no-actionable'    —— 会话里没有任何带角色标记的消息
+function Get-HumanInterjectionGateEx([string[]]$lines, $SentMatches = $null) {
+    $r = @{ Action = 'SEND'; Reason = ''; HasHumanLast = $false; HumanIndex = -1; LastMeSource = '';
+            SourceClass = ''; SourceEvidence = ''; UnknownIndex = -1 }
+    if (-not $lines -or $lines.Count -eq 0) {
+        $r.Action = 'SKIP'; $r.Reason = 'no-actionable'
+        return $r
+    }
+    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+        $ln = [string]$lines[$i]
+        if (-not $ln) { continue }
+        $sentMatch = $false
+        if ($SentMatches -and $SentMatches.ContainsKey($i)) { $sentMatch = [bool]$SentMatches[$i] }
+        $cls = Get-MessageSourceClass $ln $sentMatch
+        if ($cls.Class -eq 'unknown' -and $cls.Evidence -eq 'no-role-marker') { continue }   # UI 噪声行
+        if ($cls.Class -eq 'buyer') {
+            $r.Reason = 'buyer-last'
+            return $r
+        }
+        $r.SourceClass = [string]$cls.Class
+        $r.SourceEvidence = [string]$cls.Evidence
+        if ($cls.Class -eq 'human') {
+            $r.Action = 'SKIP'; $r.Reason = 'human-last'; $r.HasHumanLast = $true
+            $r.HumanIndex = $i; $r.LastMeSource = 'human'
+            return $r
+        }
+        if ($cls.Class -eq 'bot') {
+            $r.Reason = 'bot-last'; $r.LastMeSource = 'bot'
+            return $r
+        }
+        # unknown 的我方消息：不能证明是机器人 ⇒ 不自动发送（宁可少发，不可抢话）
+        $r.Action = 'SKIP'; $r.Reason = 'unknown-me-tail'
+        $r.UnknownIndex = $i; $r.LastMeSource = 'unknown'
+        return $r
+    }
+    $r.Reason = 'no-me-tail'
+    return $r
+}

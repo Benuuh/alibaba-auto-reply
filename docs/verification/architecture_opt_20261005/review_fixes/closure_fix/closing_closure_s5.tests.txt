@@ -1,0 +1,13 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+WARNING: no_reply: 
+C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-41fbd404e18542e78c8b82e0511722fe\data\manual_override.json 不存在,按空名单处理
+PASS P03-program-source-send
+PASS D04-awaiting-conditional-send
+PASS X01
+PASS X02
+PASS X03
+PASS X04
+PASS X05
+PASS X05-invalid-success-claim
+PASS X05-reconciled-positive
+RESULT closure_s5 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-41fbd404e18542e78c8b82e0511722fe

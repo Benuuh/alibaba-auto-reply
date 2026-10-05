@@ -1,0 +1,154 @@
+[
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\accio.ps1",
+    "SHA256": "3D4C33CA665B353531A1950985299C043799076225472764D419342AA10E3D62"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\alert_dedup.ps1",
+    "SHA256": "B29A6D84A2CA0C98066BE25E08232F41DE5491392B8706135FF10127517B78D6"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\alert_local.ps1",
+    "SHA256": "6194FFF69578080108FD3F0399BA8F8421876BA13B15919E60C9CA71528F85FF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\cdp.ps1",
+    "SHA256": "01B184384DC178987EB7E66414163FACD21CA6F0081ED74ED676AA0F3595123B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\contact_rules.ps1",
+    "SHA256": "7891CB027FD14BA26116A502D802CCCAAA95AD98C00618CCF5FEC777B61E902F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\creds.ps1",
+    "SHA256": "A91EE5EF76CEA04B053610E3EBCFFA618DFDD0840E6C7E0D91397D138BE02A38"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\deadman.ps1",
+    "SHA256": "E9AA6126C6263DC1EC13C29E5DDC97286F9E9FCF9CD7FB5A7F3CDDA5961636BA"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\destination.ps1",
+    "SHA256": "9A0AA43553EDF95A5642EFF748A2FDBDA6DF05D5B3F49D1759CF91E4FD300FA1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\doc.ps1",
+    "SHA256": "8F78485BFC51CC09BD1F63E94C5E7FD966AD1951D170F674AC3C1DC64A87B3B3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\facts_engine.ps1",
+    "SHA256": "FC74BFE2A019919DF1EA9C6800F363DE9E71F5A232AA7BCC8BE9F01466C9F9FF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\goods.ps1",
+    "SHA256": "CE01607E274176884F100BB544B33BEAB90EC0100419955DD6943515A2F73584"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\heartbeat.ps1",
+    "SHA256": "7C2CB6DD50A532A9EEDE6ED0AE599028D6BF397F65208E381F503E9C92BBC276"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\human_pause.ps1",
+    "SHA256": "3338647531C507DB5C43A887BC0F0B59DCE725A03745C9EFD348B391B64F55D2"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\human_style.ps1",
+    "SHA256": "EF0FD3D8D6D30D95FE3CF76717B8722FEB0E952EF3967B91B6C70C40DB07FF57"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\human_tasks.ps1",
+    "SHA256": "704BBE086B7C53ACF0D855C02DAEC73C93957A4FB47C768BFA29D7A9A7FD52C8"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\llm.ps1",
+    "SHA256": "682E54ED7B01ED69A9F03BA057D59F34721140157554A7B517B852A0312F89BF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\lock.ps1",
+    "SHA256": "768A5DEA22F10A66110D791BC9BD09C325D71F9997FB20EC01AD9AC5C04D0C7A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\log.ps1",
+    "SHA256": "A7762B07F97B7FCF7D7E0E37218CB1B1427565F4961311EA96DF1CDA5256146C"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\msg_norm.ps1",
+    "SHA256": "BCCFE2CDE4A81E00869560DCF4812C913FA4960B2D415C87836C2D5C957FFDB9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\msg_source.ps1",
+    "SHA256": "FCD4E8B5519B6CAE9B61FF1992F4D20A4C51B3CED42AA1C2546C102452058D91"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\no_reply.ps1",
+    "SHA256": "87C57DA4F53DF7A5C40C7B3AC864D61864FCB43D00281E4C6024E141B593F284"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\paths.ps1",
+    "SHA256": "895F134049991A630B25127E70FD74F029E57FAFB30877E45E6288223D2E3BB5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\quote.ps1",
+    "SHA256": "1504B6C47FE1DFD2856632F40635AC0DB0FFB887DE9AEE9CA79356D0BF2B17B3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\reply_gen.ps1",
+    "SHA256": "BFC4981F361036E3DC644DDE580C53E131305544659B73C636853CD31CEC0852"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\reply_metrics.ps1",
+    "SHA256": "878F44C6B0D6B17944D6100588D3903530F578C42E6E54CCADD057DFAF21C7CF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\reply_policy.ps1",
+    "SHA256": "5E5567DFBB5537F33CE4DD0688154C8FFDD0EAAF092BE119217FCD070906E6FD"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\report_push.ps1",
+    "SHA256": "B1764EEF8E3B945E07ADA202D11F85403F92A02EC9688ADBECB7B4A95694A885"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\seller_context.ps1",
+    "SHA256": "F6BC408AAD512D078922DB80EEE8D08F5D391154A5CC6AA49087DECF9A7F29FF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\send.ps1",
+    "SHA256": "0CE3F4715FA44E44A348B94AC34590840D19DABA263922653F3CEAEC4CCCD62D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\sent_records.ps1",
+    "SHA256": "CDBB420D12D5D0ED6B311DD248269C7E6AC0F8A71B26DEE5CEC624828172879D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\state_store.ps1",
+    "SHA256": "5E16C6DDA9A072818490A60BD9C85991A22A9C8F9281767469183B4D1038DBA8"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\suggestions.ps1",
+    "SHA256": "A2AF2932D99A0D887A8F6B1D52F9A47ABCDBF51C01E16686433951C7E7F73BD4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\task_facts.ps1",
+    "SHA256": "EC3C74E5869A9085CCE68E8DE9A4315101857A51FEDB2C5E0291876BC3364812"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\vision.ps1",
+    "SHA256": "D22A8B7F92D3953868CCAF2F9A76A07C85B70AEA74EEC3BD162652BD6252BC38"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\wecom.ps1",
+    "SHA256": "7358188B048AC8DF9D56397BFC95E0566600DD2A55BEC951A22AEE58962C5A6B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\monitor.ps1",
+    "SHA256": "6AC5CBCF5C23C454733DDF8195F34D3015DDCD7A2D1CF66F95EF90AFE8B2F1ED"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\run_tests.ps1",
+    "SHA256": "04DF8191A7A51E1CEF0E62EB2A9E6A9617963D7B80A93F568468E5F126F558A0"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\layers.json",
+    "SHA256": "D3FB4164A95A7ECD31C89FAD7DCE2BBE0EB2DCB99C5DA1D1D1904527D6F4C313"
+  }
+]

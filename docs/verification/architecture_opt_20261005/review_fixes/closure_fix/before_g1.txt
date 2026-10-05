@@ -1,0 +1,5 @@
+FAIL G01 The term 'Test-AarChildAttestation' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+CMD ERROR: no onetalk page found (url guard)
+FAIL G02 missing marker / cleared env cannot enable live egress
+FAIL G03 boolean or process absence cannot attribute test writing
+RESULT closure_g1 pass=0 fail=3 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-f982cf3d19cb4a3f8a8a01d719538d1c

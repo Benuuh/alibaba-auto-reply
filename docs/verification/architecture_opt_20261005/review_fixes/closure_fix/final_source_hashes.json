@@ -1,0 +1,666 @@
+[
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\analyze_replies.ps1",
+    "SHA256": "E41C74A82B8AE34FC722A190892A91C7EFD7EFC066B9399811CF967816C3AEB0"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\apply_suggestion.ps1",
+    "SHA256": "75A038B57FA408A97432A112132DB625F0086D8995D5D4A3418AB5DD8D3F4506"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\auto_optimize.ps1",
+    "SHA256": "8BB1962F4463636371BDD86708CFD93EE88DF930CBDFD38315067727DE5E6D21"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\backup.ps1",
+    "SHA256": "741A1A0204E154DF03BCBEC9F225977ABF8AF68B3488B4F37F4320BC491E608D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\cdp.ps1",
+    "SHA256": "7E533BB30CA69368A0EB1547991E886B722AFD1E5401D685F7846B112B9A82B3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\chrome_ensure.ps1",
+    "SHA256": "20D4FCD6BDDBB3166F3CD8A0CDB9C90FB2B4E462A0E062B4D707F040157B1C43"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\config.ps1",
+    "SHA256": "348D0D2C1D60B86652AB3427E5F1EF1ADA3683E9DCEE2D9EC1A8F3D4E33DA703"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\dashboard.ps1",
+    "SHA256": "936193519729EE0963A35D6100BD7F3567328ABC02AFF92168FC018AF521EEA5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_batch.ps1",
+    "SHA256": "474B94F1C08E8A5B03824AC66858DEB5C97FAE18B3E12B916F83C76EF16A865F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_cdp.ps1",
+    "SHA256": "ADF6EDE8FD6C9543B734734127CED65057679F8D61C8267E5CA2234A73D05BF1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_ensure.ps1",
+    "SHA256": "6CA46011DEC5BE265C7056BCFECC902296CC706D88E8836B58B2CB287D7BBE27"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_lib.ps1",
+    "SHA256": "089A2F973B24B496A60CCE5ECBA9D3D38F4E2CDA5A2DE95E6E09E0E94C2A6FF0"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_loop.ps1",
+    "SHA256": "6E26B31D0F5F129F17C7819491ACD48CF18906F39B7DD9DCE67454860E7D2283"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_probe.ps1",
+    "SHA256": "C3AD02FD4FEC4AE3D969B76C2AA3D622878252FF7E3B1363B272B5F2B5080247"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\gonghai\\gonghai_recon.ps1",
+    "SHA256": "D99ABE209D88577E90E78A061400E40F4F57A104013E67BC5F51D4CC771009F3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\health_check.ps1",
+    "SHA256": "FBF84C04E24D9950FEB95E7FACCEA8F1BEBA28DEBE32CDA11ECE0A232CD7AD2A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\human_style.ps1",
+    "SHA256": "B177763924AD7CD9FFE885402D661AE13C4F345ED179D8999CF8840C167BC65D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\accio.ps1",
+    "SHA256": "CBFAD706CEE28FFC7F39C14423DA82628178669604F12B7A12E555B3681DA4B2"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\alert_dedup.ps1",
+    "SHA256": "B29A6D84A2CA0C98066BE25E08232F41DE5491392B8706135FF10127517B78D6"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\alert_local.ps1",
+    "SHA256": "6194FFF69578080108FD3F0399BA8F8421876BA13B15919E60C9CA71528F85FF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\cdp.ps1",
+    "SHA256": "F936177ECA06A15223446A932A0D74F57B539433A5DBB0B4C3FA0B780E96D85E"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\contact_rules.ps1",
+    "SHA256": "BB7B76E8497F4DF7B8C64E60161EE6D2C06054CF9B5485DDC6D70B4B59781805"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\creds.ps1",
+    "SHA256": "A91EE5EF76CEA04B053610E3EBCFFA618DFDD0840E6C7E0D91397D138BE02A38"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\deadman.ps1",
+    "SHA256": "E9AA6126C6263DC1EC13C29E5DDC97286F9E9FCF9CD7FB5A7F3CDDA5961636BA"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\destination.ps1",
+    "SHA256": "9A0AA43553EDF95A5642EFF748A2FDBDA6DF05D5B3F49D1759CF91E4FD300FA1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\doc.ps1",
+    "SHA256": "8F78485BFC51CC09BD1F63E94C5E7FD966AD1951D170F674AC3C1DC64A87B3B3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\facts_engine.ps1",
+    "SHA256": "3503C151F6CF264D2B3AAE0C1616607D4F11080B441DEBF73703C30469A868A1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\goods.ps1",
+    "SHA256": "CE01607E274176884F100BB544B33BEAB90EC0100419955DD6943515A2F73584"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\heartbeat.ps1",
+    "SHA256": "7C2CB6DD50A532A9EEDE6ED0AE599028D6BF397F65208E381F503E9C92BBC276"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\human_pause.ps1",
+    "SHA256": "A68D2980B925649DE050DB3AFB1BA1BBEACC2F11C71CC3C7C35BB71D770894E8"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\human_style.ps1",
+    "SHA256": "EF0FD3D8D6D30D95FE3CF76717B8722FEB0E952EF3967B91B6C70C40DB07FF57"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\human_tasks.ps1",
+    "SHA256": "7B0D8D4069B405C051CC29E685C2963710055149156CC0768DB5FA164C42FF45"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\llm.ps1",
+    "SHA256": "C4C7BA9229504D8A7F61F36B68E087CE03BBE1D20D69101D950B6BAA23737D31"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\lock.ps1",
+    "SHA256": "768A5DEA22F10A66110D791BC9BD09C325D71F9997FB20EC01AD9AC5C04D0C7A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\log.ps1",
+    "SHA256": "A7762B07F97B7FCF7D7E0E37218CB1B1427565F4961311EA96DF1CDA5256146C"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\msg_norm.ps1",
+    "SHA256": "0B04E3CAE18B31453DB812D6A18138C83E67864DB8EB3A86B152F9DD7E882EF0"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\msg_source.ps1",
+    "SHA256": "B894753DA9C26065E3869D312DB48F4AF1F4D51D74B26DDA7C38CE67404C6B0F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\no_reply.ps1",
+    "SHA256": "87C57DA4F53DF7A5C40C7B3AC864D61864FCB43D00281E4C6024E141B593F284"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\outbound_receipts.ps1",
+    "SHA256": "90C0B76001343F9322B51BEF9DAA237882A45A067BFA37274DF4A5DF7382D2EF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\paths.ps1",
+    "SHA256": "290A15C87ABEE41E262912C8FE72765AB141B02CF306601E333FF9FA4CAFBAA7"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\quote.ps1",
+    "SHA256": "1504B6C47FE1DFD2856632F40635AC0DB0FFB887DE9AEE9CA79356D0BF2B17B3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\reply_gen.ps1",
+    "SHA256": "C7A6F3B72C8DAD4BD69E51D2C91F4480629081D5A879989D5028DE5DB05DECD3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\reply_metrics.ps1",
+    "SHA256": "878F44C6B0D6B17944D6100588D3903530F578C42E6E54CCADD057DFAF21C7CF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\reply_policy.ps1",
+    "SHA256": "4475C274EA2B90DC3379443EC67C5DD674691E96D60F132EF5FEB2BFC79EECAA"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\report_push.ps1",
+    "SHA256": "B1764EEF8E3B945E07ADA202D11F85403F92A02EC9688ADBECB7B4A95694A885"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\response_plan.ps1",
+    "SHA256": "8C3DF18FEF9E46679871A4A7690CCFE9FB0EBA79251C5DD8A98C70946CC5FCA5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\seller_context.ps1",
+    "SHA256": "A71A73D8599F2DFF3046FAE4BE74BF92CEB8C1BDD799E7645CA48141E3A41AE1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\send.ps1",
+    "SHA256": "34E077078176BBE19F73DA438781E3DB57AA322074BC4AAF49ED9E8099BD99C5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\sent_records.ps1",
+    "SHA256": "4B31EC710A1A631ABD66EDE70B00A4D7E6ED163D31330B0E1F1C369EAA1225A4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\state_store.ps1",
+    "SHA256": "5E16C6DDA9A072818490A60BD9C85991A22A9C8F9281767469183B4D1038DBA8"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\suggestions.ps1",
+    "SHA256": "A2AF2932D99A0D887A8F6B1D52F9A47ABCDBF51C01E16686433951C7E7F73BD4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\task_contracts.ps1",
+    "SHA256": "F0CDFC94C69B3A8AACF4E8066AA6E4C7A57D58A52EB3A0FBAF875F49BA8774A7"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\task_facts.ps1",
+    "SHA256": "7E5C2EF88CE92F4247ED431457619B34FD2E6C998892FF04104D841D291DBF17"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\test_context.ps1",
+    "SHA256": "BBA7B4762B4ED0A81A4A4B4807C862DADAACC9F5A6D1ED6988B27AAA02B74FA9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\time_claims.ps1",
+    "SHA256": "6DBE25DE8AF2DEE57D515A2DF8C9D8201D1C0C19DA2A5AA5BDB13C27FBE1A400"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\vision.ps1",
+    "SHA256": "D22A8B7F92D3953868CCAF2F9A76A07C85B70AEA74EEC3BD162652BD6252BC38"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\lib\\wecom.ps1",
+    "SHA256": "C5C6A44402693F115FE25233FAC27E0E5BA25EECE459DB9B86038700BEAA66A9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\log_rotate.ps1",
+    "SHA256": "7AE617BB9950C6E3F176FFA6EC1DDD2C7EA04C020677F686409C4B5E8463A591"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\monitor.ps1",
+    "SHA256": "50DFB7BFF889C6007778B3244F2D808FD1CA50172E1E122C476E2866561E94C4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\nudge.ps1",
+    "SHA256": "9CCA0F84BB530C06A8BB2DF22229C76CD16FB506588C013B416A90806A355917"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\make_country_names.ps1",
+    "SHA256": "60172966E2C503109FC2871D1940D77C81C26CC9CAF1E00E790E3D5B0E8FA949"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\okki_cdp.ps1",
+    "SHA256": "9BCB614B9AD22C515C02A61494C1972E3BD9D993EF42390C086642B8C470BE9B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\okki_ensure.ps1",
+    "SHA256": "F4BA3FB9B3F3CC0D9E96B281B63B0A19D23702752E45AF2F41347AEC0FEFC120"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\okki_lib.ps1",
+    "SHA256": "5D08F3CCA9844B787B66C0A1AFFFA9AB841AC8557A7D733E26E152615970EB94"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\okki_login.ps1",
+    "SHA256": "0C8D13F8D182B2E9D748E969936DE031EDDA203755AD1D6558CD6DEA837CA5A5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\okki_opportunity.ps1",
+    "SHA256": "804F42818687138044EAE73E0F15C1F47F5693299A531B39EFD9128431DFBB99"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\okki\\okki_probe.ps1",
+    "SHA256": "457B94A0332777416AF22E2E44AD7E594BBBFE6D1053F7848DB27B715E776BB9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\quote_remind.ps1",
+    "SHA256": "AB783EB3068CD10F692EF0420335947B4EDBD981E8A17098C6975732D6AD768B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\reply_agent_prompt.md",
+    "SHA256": "D0094358A5B635A33D48A437E9257D60BE095AC344A8CFC43BFDBFA8A91BE4B2"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\reply_engine.ps1",
+    "SHA256": "B79B3CAC1F7079C637F29A2E32DC9302451469C2EFA6652A3DA13CE7E880C915"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\reply_rules.registry.json",
+    "SHA256": "EAF465C447003C3115B480CB97202A521F9A9D153BBAE8C81E35A847BD998108"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\reply_scenarios.md",
+    "SHA256": "5B0F9A3A8D9E737861A39AD30EB773727CDDAE814F5531D7016442F6A3049054"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\retention.ps1",
+    "SHA256": "36CB37F40D1C415FBAAA321D8357991590CD8638708EC2F85246DCD383AD4EA4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\review_suggestions.ps1",
+    "SHA256": "B8E52F85DF353494035DB318D17BEFAF968BE0C296ABE6F26210B07434EB2C70"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\status.ps1",
+    "SHA256": "750107A25BBD3BCCEA0CC7AFDCB61917082DC43D74004949D7646C56A4DA5C79"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\summarize.ps1",
+    "SHA256": "1F9AE91397577D8AD4E46DB7DDFF3226C8764D8A93A7C4AC83CECE6E54235E2D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\sync.ps1",
+    "SHA256": "7B3972ECEB76B130287B9C624F214A5EC289CC4AD648817588AA942EB98906A9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\watchdog.ps1",
+    "SHA256": "3EDB4CB8D04F8F6D5A182106291CCD37906438885F4F1A7FF144D8FFCD7C6676"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\weekly_report.ps1",
+    "SHA256": "79247F07671EE0448CE969FBF8E574B64E1FE6E31294FC2050D7BFA3115BB1CF"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\scripts\\whitelist.ps1",
+    "SHA256": "32F6CAC19E81768380AE0FF2DE08324464A3C84DA0276F802A7570B6C3EDF33D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\accio.tests.ps1",
+    "SHA256": "44B5243B8E6F3FEDE08C275965EE0D3CDD87BFAF9361F641B96A3CD41F5F1917"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\alert_dedup.tests.ps1",
+    "SHA256": "C5612F1AA8FE0BD9CAF7A15D385224F1F44888994690285D8E0FA75F43DE0169"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\amazon_destination.tests.ps1",
+    "SHA256": "C10BED5D29070A9BB3B00277041DB6EEBBBBB319E6ABE259585C5473C3B69F79"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\atomic_state.tests.ps1",
+    "SHA256": "88902406A7CE2D7FFF3E9AD399D5F352D7491D40BCC1D3CC215619D56F2CA984"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\cargo_facts.tests.ps1",
+    "SHA256": "809A7C7AE64A3E22BB375EC6DBB7A14E8F4836663504D0100E95D189ED4EFF14"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_edges.tests.ps1",
+    "SHA256": "AA0A494C0F43EFCECBE97FEB4E1CC95B4BB7A4E6E2B2C030018CABDB6DEA6CA3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_g1.tests.ps1",
+    "SHA256": "E0BE56E0C5A348FEB18F5E72D91A2F5507553A86E42011FFF28D210F20D858FD"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_s1.tests.ps1",
+    "SHA256": "85A603207597A435B7E09619AEB612F178BBDBEEB44648EC981FF94A328806C0"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_s2.tests.ps1",
+    "SHA256": "480FF2B0432740C6BCFFDC6AC9AB922FD4A5B4EA25D88A33666E8F92390F6F8B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_s3.tests.ps1",
+    "SHA256": "F3A094908986D42AF3BE6F9A1775A5EE4D4C28D1D76DABC4F3ED8433DAA131D9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_s4.tests.ps1",
+    "SHA256": "3F9662C33BBC63EC482576708FFF96E8BA3D6FF95F906131C9A1317E4A117487"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\closure_s5.tests.ps1",
+    "SHA256": "31DA955A92156C2D7F47FBAAEEEA44625577CD4CDB4FF0A054CF1953BF9555CD"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\contact_redline.tests.ps1",
+    "SHA256": "07C6E2E56D40EA3627FABCBAC2BEDAC58227ECDF354CB84D090BEC7D62632C57"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\daemon_launch.tests.ps1",
+    "SHA256": "279F1FCA78891AA18DF2952EAFE93A4B0D02825565C465B6CBFDB7620CCEFEB9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\dedup_order.tests.ps1",
+    "SHA256": "C406421E9EA39F87B77F3FC0C442EBFE50149DEA5005DE5B3D3EBEA6EB4C8C5D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\dimension_guidance.tests.ps1",
+    "SHA256": "7720E81CE89C23DAA586DC600C0C536F03A540CD14E0DF2C3C7931C6CE26CEC1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\docs_consistency.tests.ps1",
+    "SHA256": "D31FBBC3F142EE4CC5BB7FAC3A53DCFD898FF0FF0F57076AF540C0C796C44807"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\env_block.tests.ps1",
+    "SHA256": "8F3AA42D206CF5A5F04E4BF7FF3516A2F9E1D4AB02CE5851864BB85DB4B40159"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\gonghai.tests.ps1",
+    "SHA256": "2BB24C083FC4CD158D942C6CED5ED68E06188DB427BC84A40EA049F314E74C41"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\gonghai_chrome_isolation.tests.ps1",
+    "SHA256": "FB2F95DA6F9A1A680462F482BDABC574CDCF29DF14A003F9448A3B89492B0110"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\goods_engine.tests.ps1",
+    "SHA256": "0DF6B201E87D2D01B1E85852D112F1F1A59D2E2AF0556256DDB6676F0E05714C"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\heartbeat.tests.ps1",
+    "SHA256": "F34CF14EC0493CB12C4ACB48FC3FBDA0E5780A12CBAE17E7BA5DED779DBB4536"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\human_pause.tests.ps1",
+    "SHA256": "7966AC823A22B0F4320F71FDA42479C7CF45913EAD163F16EE2140C5C53E2F55"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\human_tasks.tests.ps1",
+    "SHA256": "315D57DAAF5E57B789CAE6E867618472B7A5117FD3CFFC4D91FE863EFAF1A5A4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\isolation.tests.ps1",
+    "SHA256": "9ED389A862DCC788AD856E108E0FA8B3299B60A39B8C6B2FEDBC2B841ECCB91B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\layers.json",
+    "SHA256": "BADFDB51AFB5739D8EEBC87C579892110FCD9BA0052EE79B0B4FC1F56F0B6510"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\lock.tests.ps1",
+    "SHA256": "C4D8AC71904357851A36A5F4E85315D28C2986DF746A6500C181B74C2C1E8DA5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\lock_scope.tests.ps1",
+    "SHA256": "916211673BEB9BBBAEEAA6C25284B0278584E3BB8831C0190EC3729E57984763"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\log_maintenance.tests.ps1",
+    "SHA256": "DF25AB57D0644D9ED3ABD838B8C8D401F8ECB559D0E44099371C3A9C1B2C07AA"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\message_order.tests.ps1",
+    "SHA256": "F1C76DAAEB99655BDA63F780E5902513B1564C90E73CE555EAC572FF04B540D9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\msg_source.tests.ps1",
+    "SHA256": "F15F01820CBACF0ADDE727B5F77A99C188CF87A623F046741EBE45CC836D8554"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\new_message_cooldown.tests.ps1",
+    "SHA256": "2F718FDE398F50C37296EF1979A50A11806771D79F1968B5C6662F2454A17D9A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\no_reply.tests.ps1",
+    "SHA256": "34A8C7107253F9E182606CAEC8EF6A9FED73FA238874DAEA49F56E1F1615B81F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\no_reply_write.tests.ps1",
+    "SHA256": "1676D2903D3F44A0272F9A4DE49F445754CD1D4AC70CC893B90CD351AC848A0F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\page_heal_throttle.tests.ps1",
+    "SHA256": "C197A6DAC4669007B5103F1275942114DD901E507697AC694FC0727AFCAF8440"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\page_health.tests.ps1",
+    "SHA256": "D5CC0871C58171C244280631873C9588906EC4D17E667631308F23B986A05482"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\page_health_verdict.tests.ps1",
+    "SHA256": "AE42A486919B7E995B1CD6948CDD8C239DA3027BA25816E55C1E2BBDEB0F430D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\page_select.tests.ps1",
+    "SHA256": "1024A01931B7A6B5CCC59348F6DEAF575EFF10642B70F6825E044871CCC122F6"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\reception_facts.tests.ps1",
+    "SHA256": "9AD3390DAD0EA754C0712337845781F16A5D0F9DDFA92AFCD8AB784FCDF25EB6"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\reply_chain.tests.ps1",
+    "SHA256": "70F9FE941DC201837440E9B77B76E5BECC9DC55C18032F91D3B6A4D2F78BBB60"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\reply_engine.tests.ps1",
+    "SHA256": "AE89066848D2A3CDC3A02B29F3A3535FE17BB80BC77CBF1329F97F1425D4E432"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\reply_gate_dupskip.tests.ps1",
+    "SHA256": "FD526439605A6053BE6C254FECC40CD7D7B39BC20BABB6626573433B4FECC15E"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\report_push.tests.ps1",
+    "SHA256": "FF19E5026CC35E20ABB91844F39B797433E167DFFC8C2C3BC827BD330534CE18"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\review_fixes.tests.ps1",
+    "SHA256": "F81CB8E8547F63FBAC0F608613DA1B42F8C79C8A4A597BE9F5DAA108F499007B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\review_fixes_entry.tests.ps1",
+    "SHA256": "68209C55152D9B245C95445C68C16D9C716F4A094FCA3F6391A7F200316EB903"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\rule_registry.tests.ps1",
+    "SHA256": "BFA6BF0E7AFD1CEBE2EC529700D302CD5CF88DE156B302932BD9175BED55C645"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\run_child.ps1",
+    "SHA256": "166FD5C28CDA9F3B068D5E26132694FB024C4CC7B41F15B1A2462E56843B9E03"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\run_tests.ps1",
+    "SHA256": "022813E70712AB1CA91BB9D0D84EC793B5CD8A0ABF8C43EE3D2EB6ADE069776A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\second_fix_contact.tests.ps1",
+    "SHA256": "A68122BCD8422D69A98FA19C22E8E8E7641C140C34E6D672B16BFE0D02787CCA"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\second_fix_policy.tests.ps1",
+    "SHA256": "AB25174C431508BE10C9A775FDC9A92D717E5AED41A3CC5E687B86CE201AFBAA"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\second_fix_summary.tests.ps1",
+    "SHA256": "2488FEB75BDFE916428DE2ADDB78F1563CFB52011028A728A993A72E099F43A2"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\send_page_param.tests.ps1",
+    "SHA256": "1A3B71C82936ED2E6BC63A28375A00AD1B8D9D6DBA364BD50DFA5059B010AFC9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\send_result.tests.ps1",
+    "SHA256": "F72E73E5F76E93858C60BE5C1F1206E98EE49263DAF82188F45566F29555DEDC"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\should_reply.tests.ps1",
+    "SHA256": "91A3FDE162020440B81499D705A17A778EC1840C960C664FD785AFEB84D11518"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\should_reply_v2.tests.ps1",
+    "SHA256": "4252580E7B6324DA4CBC1709D3B2089BB36B71AF70F293F434C9B2299FFD76FB"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\suggestions.tests.ps1",
+    "SHA256": "45F022BB5738903DF6F8B359A75DF67B10105BC86FEA7AE7E89B7516A9F646AE"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\third_fix_clarify.tests.ps1",
+    "SHA256": "8A1C7BF0B7DDB38C82382997F3A91C7042B3977591F0A80324DC8E35A2D425EC"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\third_fix_contact_fields.tests.ps1",
+    "SHA256": "BB6B7C7DBE15CAB57A9D583B55652D27CA454994C1BB60A7ED370554B2FD149F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\third_fix_g1_guard.tests.ps1",
+    "SHA256": "CE655F73C85344AB805F9C9BEC756E29AA61518CF91B7353AF2DB996F4EB2578"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\third_fix_pause_source.tests.ps1",
+    "SHA256": "44B89595D56593B09125A858438B2F375DAFB8C8CD478E99204456C8D4B0FABD"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\third_fix_tasks_evidence.tests.ps1",
+    "SHA256": "2F8FA0AA8E0A2D3AD7519233187377170D92C04F57B4FB11B9A6CDFD1752BAF8"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\third_fix_time_binding.tests.ps1",
+    "SHA256": "2F56E489077838754B0EB7FC1825F4A01192D2D581AE347AE56EA4B03BD285A1"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tests\\vision.tests.ps1",
+    "SHA256": "0400243364FCB67AB6F51842B3C3519FB7027CA61A190841E110078CB44D58CD"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\_gh56_hunt.ps1",
+    "SHA256": "CE8A698174E4DACDEE40885DA270A1C97516EA7415535484009531460A411661"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\_my.ps1",
+    "SHA256": "DB92B16550E9402DBD2FF9429F02EB64906500D6668A87744B6768AB73B3CED2"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\_u.ps1",
+    "SHA256": "979B0C9566060C70E03E7295ED09917A4F6A050E033134E1FDF1BEAFE2E554D4"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\closure_awaiting_probe.ps1",
+    "SHA256": "FD8A6BB8447590FBA51492B96A9E41502CAD5B4DD5F511B908ED2136BECC3E55"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\closure_original_adapted.ps1",
+    "SHA256": "FE5545671A3DEF962CF1A0B5F5A4A54FCEB50094367F4156B56B5DE79963ECB3"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\closure_phone_flow_probe.ps1",
+    "SHA256": "591BF821F02ACD5E1E7B2F37ED0401F9937D48F53DBF20928975F806CCBC9D2D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\closure_probe_runner.ps1",
+    "SHA256": "890329CA1C0F14A3A35608F858FF1AEC947B64E1B093F02AFD992B311B8397F6"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\debug_time.ps1",
+    "SHA256": "C581F4A245A09601CE5715D88C0955128ED29C7005508E156E8E333832DB7268"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\old_vs_new.ps1",
+    "SHA256": "706177EED6496357906EFF29849082BF03F9B13E3D0F63B571EF794BFF55F6C6"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\replay.ps1",
+    "SHA256": "8732C8812E0280D0BD645E39255632C4EB727D13BED1DF7B9FA27F3E6335E1EC"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\acceptance\\review_fixes_baseline.ps1",
+    "SHA256": "2AF20306223A4EB7949D6E93140D5BEFD1B6CCD0C1763FD86345F3AB2274192F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\accio-client\\shadow_compare.ps1",
+    "SHA256": "46BE5D7ADE8E1ED264CA2D703EAA93583E285797A954118649E28270F6056BA0"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\dedup_acceptance\\A2_A10_replay.ps1",
+    "SHA256": "2AC301BD55E55F21726DB373CE076FBF93D326D38CE620DDA596235025C9364D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\dedup_acceptance\\A4_A5_A6_gate_offline.ps1",
+    "SHA256": "F5CE62E2C2B547E51592ABBB49CC924A3F50379BADE5B3CD8C900479CA5125F9"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\dedup_acceptance\\A9_red_baseline.ps1",
+    "SHA256": "BD3A021385FA264C88B0A4D07D9F171EB6FE826872F39487001E5DD266C57672"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\dedup_acceptance\\static_call_closure.ps1",
+    "SHA256": "34040C570C321CDB6414B6CCB77B241B3E65AD6822506AB2A9C6D56CAF292467"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\doc-reader\\node_modules\\.bin\\crc32.ps1",
+    "SHA256": "B532CDC96C232EA1322754D8B417FBAA02837270CF4935CCAC1BB31A27B59B0B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\doc-reader\\node_modules\\.bin\\mammoth.ps1",
+    "SHA256": "D0754504C783FD5169A0BB8C2D1A0981571C04FF6B9AA8C643DA49864A681B1E"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\doc-reader\\node_modules\\.bin\\xlsx.ps1",
+    "SHA256": "BB92576F2952BD32FF5330D77318BCA6575FE0F12E81D38B0150CA2B62C07BF2"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\gonghai_doctor.ps1",
+    "SHA256": "587BD8B8B700E1715F358E8BD77044A107577C0651A5AC578125D64CF9E42C5D"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\gonghai_night_report.ps1",
+    "SHA256": "F38523D4EABB7DA525E6F58F4383CF020A8C145ED001B8C11938030899D31EE8"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\gonghai_recover.ps1",
+    "SHA256": "4A5ABE175759F102597659326E7796932FDC196B5A74C956F4E7E8D2CF801121"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\tools\\ps_bom.ps1",
+    "SHA256": "D50723EDCA1DCCFF8D92F81C14F84F3F38554311A1A5BECF6DAEDF371D243E94"
+  }
+]

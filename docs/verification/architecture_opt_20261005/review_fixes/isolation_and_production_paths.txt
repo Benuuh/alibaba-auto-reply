@@ -1,0 +1,52 @@
+# 隔离与生产路径保护证据（2026-10-05）
+
+本轮执行者：DSH 会话。仓库：C:\path\to\alibaba-auto-reply。
+
+## 1. 隔离方式
+
+- 每个子测试进程都由 `tests\run_tests.ps1` 指到本次运行独有的临时运行根（`%TEMP%\aar-test-<guid>`），
+  并在该根写入 `.aar-isolation.json` 标记（含生产路径清单）。
+- 真实 CDP 出口（`Invoke-CdpEval`）与真实发送适配器（`Send-OneTalkMessage`）在隔离模式下直接抛错。
+- 运行前后各取一次生产路径指纹（大小 + 最后写入时间），变化按写者归因。
+
+## 2. 本轮离线回归的生产守卫结论（逐字取自 offline_layer_final.txt）
+
+```text
+PRODUCTION-GUARD-WARN: 2 path(s) under the live writer's own output roots changed while a production writer is running (lockHolder=) - attributed to the live writer, not to this run
+  changed: C:\path\to\alibaba-auto-reply-runtime\data
+  changed: C:\path\to\alibaba-auto-reply-runtime\logs\monitor.log
+PRODUCTION-GUARD: fatal=0 benign=2 writerRunning=True
+```
+
+`fatal=0`：没有任何配置、凭据、代码或账本类生产路径被本轮改动。
+`benign` 的 2 条全部落在 `C:\path\to\alibaba-auto-reply-runtime\data` 与 `logs\monitor.log`，即**正在运行的生产写者自己的输出根**；
+运行器把并发写者的变化逐条列出并归因，而不是自动宣称“本轮无写入”。
+
+## 3. 生产侧关键文件的只读核对（会话内两次取样一致）
+
+```text
+checkedAtUtc=2026-10-05T00:13:11.1054323Z
+scripts\remind_state.json bytes=11378 mtimeUtc=2026-10-04T23:59:32.1262536Z
+scripts\state.json bytes=5417 mtimeUtc=2026-10-04T23:19:14.2392812Z
+scripts\state.json.bak bytes=5417 mtimeUtc=2026-10-04T23:19:14.2392812Z
+scripts\config.json bytes=2426 mtimeUtc=2026-10-04T21:42:01.3470686Z
+scripts\monitor.pid bytes=7 mtimeUtc=2026-10-04T21:02:55.4699480Z
+scripts\human_pause.json MISSING
+scripts\human_tasks.json MISSING
+```
+
+说明：这些时间戳均早于本轮开工时刻；上述文件在本轮开工前已是该值、核对时未变。
+生产进程可能同时在写它自己的日志与数据根，因此本文件不声称“生产路径整体零写入”，只声明上述文件的观测结果。
+
+## 4. 本轮实际写入路径
+
+- `%TEMP%\aar-*`（每个测试自己的隔离运行根）
+- 仓库内：`docs/verification/architecture_opt_20261005/review_fixes/**`、`tests/**`、`tools/acceptance/**`、`docs/*.md`、`scripts/lib/**`、`scripts/monitor.ps1`
+
+## 5. 未执行的动作
+
+- 未启动或重启生产 monitor/watchdog，未改变任何计划任务。
+- 未运行 `-Layer Live` / `-Layer All`（会读写生产配置与账本、访问 9222 页面）。
+- 未操作真实 OneTalk 页面，未发送客户消息，未投递真实通知（所有通知都是桩）。
+- 未修改生产 `scripts\config.json`、`scripts\state.json`（及其 `.bak`）、`scripts\remind_state.json`。
+- 未 `git add` / `git commit` / `git push`。

@@ -351,7 +351,11 @@ foreach ($f in $files) {
 
     # ---- REAL decision ----
     $notify = [bool](Get-JProp $scenario 'notifyChannelAvailable')
-    $decision = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:$notify
+    # [2026-10-05 spec §6.3] ActionEvidence distinguishes "really persisted a todo / really
+    # delivered a notification / really committed a deadline" from a reachable channel. All four
+    # default to false; a fixture must opt in explicitly.
+    $scenarioEvidence = New-ActionEvidence -Values (Get-JProp $scenario 'actionEvidence')
+    $decision = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:$notify -ActionEvidence $scenarioEvidence
 
     # ---- REAL context block (the exact call reply_gen makes) ----
     $context = New-ReplyContextBlock -Conversation $conv -Decision $decision
@@ -622,11 +626,14 @@ foreach ($f in $files) {
         $pname = [string](Get-JProp $probe 'name')
         $pNotify = Get-JProp $probe 'notifyChannelAvailable'
         if ($null -eq $pNotify) { $pNotify = $notify }
+        $pEvidence = Get-JProp $probe 'actionEvidence'
+        if ($null -eq $pEvidence) { $pEvidence = $scenarioEvidence }
+        $pActionEvidence = New-ActionEvidence -Values $pEvidence
         $force = [string](Get-JProp $probe 'forceScenario')
         if ($force) {
-            $pDec = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:([bool]$pNotify) -ForceScenario $force
+            $pDec = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:([bool]$pNotify) -ForceScenario $force -ActionEvidence $pActionEvidence
         } else {
-            $pDec = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:([bool]$pNotify)
+            $pDec = Get-ReplyDecision -Conversation $conv -Facts $facts -Rules $rules -NotifyChannelAvailable:([bool]$pNotify) -ActionEvidence $pActionEvidence
         }
         $pFb = [string](Get-ScenarioFallback -Decision $pDec -Rules $rules)
         $pFbCheck = Test-ReplyCompliance -Text $pFb -Rules $rules

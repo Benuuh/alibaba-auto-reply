@@ -1,0 +1,2 @@
+FULL-EMAIL actual=packing@sub.example expected=factory+packing@sub.example.invalid
+FAIL D12-full-email

@@ -1,0 +1,4 @@
+== third_fix task/evidence tests (R2 / R3) ==
+
+RESULT: pass=61 fail=0
+ALL PASS

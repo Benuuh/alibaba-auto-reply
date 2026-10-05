@@ -1,0 +1,14 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+PASS T01
+FAIL T02 assertion failed
+FAIL T03 assertion failed
+FAIL T04 assertion failed
+FAIL T05 assertion failed
+FAIL T06 assertion failed
+True
+PASS T07
+True
+True
+True
+PASS T08
+RESULT closure_s4 pass=3 fail=5 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-dd3f9e4bf4594e58afad6f4a4c1c35ed

@@ -1,0 +1,73 @@
+# A1–A6 / T1–T2 失败基线（修复前实测快照）
+
+日期：2026-10-05（北京时间）。执行者：本轮 DSH 会话。仓库：C:\path\to\alibaba-auto-reply。
+
+本文件是**修复动作发生之前**的第一次实测控制台输出（逐字保留）。当时仓库里已有其他执行者的未提交改动，
+本轮没有回退任何既有改动。
+
+复现入口：`powershell -ExecutionPolicy Bypass -NoProfile -File tools\acceptance\review_fixes_baseline.ps1`
+（隔离：临时运行根 + .aar-isolation.json 标记；无浏览器、无模型、无发送、无通知、不写生产路径）。
+
+```text
+RUNTIME-MODE: runtime-mode=isolated root=<临时目录>
+ISOLATED: True
+
+=== A1 最高优先级联系方式红线漏拦 ===
+  [FAIL] A1-block[You can email me if that is easier.] must be blocked expected=False actual=True codes=
+  [FAIL] A1-block[You can email us if that is easier.] must be blocked expected=False actual=True codes=
+  [FAIL] A1-block[Please leave a phone number for delivery] must be blocked expected=False actual=True codes=
+  [FAIL] A1-block[Please leave a contact number for delive] must be blocked expected=False actual=True codes=
+  [PASS] A1-block[We'll contact your supplier directly and] must be blocked expected=False actual=False codes=UNSUPPORTED_PROMISE
+  [PASS] A1-allow[Could you share the consignee'] must be allowed expected=True actual=True codes=
+  [PASS] A1-allow[Could you share your supplier'] must be allowed expected=True actual=True codes=
+  [FAIL] A1-allow-req-role-purpose-without-ask role+purpose allowed expected=True actual=False codes=ASK_OUT_OF_SCOPE
+  [PASS] A1-narrative-not-offer supplier narrative must not be misread expected=True actual=True codes=
+
+=== A4 报价提醒仍用旧的三字段规则 ===
+  ready buyers: Virtual Count Buyer ; Virtual NoCount Buyer
+  [FAIL] A4-nocount-excluded buyer without carton count must not be a reminder candidate expected=False actual=True
+  [PASS] A4-count-included buyer with carton count is a candidate expected=True actual=True
+
+=== A5 不足 100 字节的损坏账本被当作不存在 ===
+  15-byte sample: bytes=15 readStatus=corrupt
+  Test-RepliedStateUsable => Ok=True Reason=no-ledger-yet Bytes=15
+  [FAIL] A5-small-corrupt-detected corrupt 15-byte ledger must not be treated as no-ledger expected=False actual=True
+
+=== A6 每箱重量/尺寸被误判为额外询问箱数 ===
+  [FAIL] A6-allow-weight-per-unit[Could you share the packed wei] per-unit weight is inside a weight authorization expected=True actual=False codes=ASK_OUT_OF_SCOPE
+  [FAIL] A6-allow-weight-per-unit[Could you share the weight of ] per-unit weight is inside a weight authorization expected=True actual=False codes=ASK_OUT_OF_SCOPE
+  [FAIL] A6-allow-dims-per-carton per-carton dimensions are inside a dimension authorization expected=True actual=False codes=ASK_OUT_OF_SCOPE
+  [PASS] A6-block-real-count-ask a real carton-count question still needs count authorization expected=False actual=False codes=ASK_OUT_OF_SCOPE
+  [PASS] A6-block-mixed-count-ask the count half of a mixed request is still unauthorised expected=False actual=False codes=ASK_OUT_OF_SCOPE,ASK_OUT_OF_SCOPE
+
+=== T1/T2 时间问答地点绑定 ===
+  [FAIL] T1-lowercase-hamburg-place requested place want=[hamburg] got=[]
+  [FAIL] T1-lowercase-hamburg-kind requested place kind want=[explicit] got=[seller]
+  [PASS] T1-uppercase-hamburg-place requested place want=[Hamburg] got=[Hamburg]
+  [PASS] T1-uppercase-hamburg-kind requested place kind want=[explicit] got=[explicit]
+  T1 lower-case direct=[It's 2:05 PM in China (UTC+8).]
+  [FAIL] T1-no-seller-clock-for-lowercase-hamburg T1 must not answer the seller clock expected=False actual=True
+  T1 upper-case direct=[I can't confirm the time in Hamburg here. Which country or time zone do you mean?]
+  T2a place=[Tokyo] direct=[It's 3:05 PM in Japan (UTC+9).]
+  [FAIL] T2a-china-not-overridden the later company sentence must not override the time target expected=True actual=False
+  T2b place=[Tokyo] direct=[It's 3:05 PM in Japan (UTC+9).]
+  [FAIL] T2b-no-place-defaults-seller an unspecified time question defaults to the seller zone expected=True actual=False
+
+BASELINE-RESULT: fail=15 cases=15
+BASELINE-FAILED: A1-block[You can email me if that is easier.], A1-block[You can email us if that is easier.],
+  A1-block[Please leave a phone number for delivery], A1-block[Please leave a contact number for delive],
+  A1-allow-req-role-purpose-without-ask, A4-nocount-excluded, A5-small-corrupt-detected,
+  A6-allow-weight-per-unit[Could you share the packed wei], A6-allow-weight-per-unit[Could you share the weight of ],
+  A6-allow-dims-per-carton, T1-lowercase-hamburg-place, T1-lowercase-hamburg-kind,
+  T1-no-seller-clock-for-lowercase-hamburg, T2a-china-not-overridden, T2b-no-place-defaults-seller
+```
+
+说明（诚实记录）：
+
+1. A2（人工回复后买家补充消息绕过暂停）与 A3（供应商任务创建顺序）在**本轮第一次基线运行之前**就已经被
+   其他执行者的既有改动改掉了编排点，因此第一次纯函数基线里没有出现这两项的失败行；它们的"修复前"证据
+   来自本轮**入口层**的原始复现（见 `baseline_entry_before.txt`：真实 `Invoke-ConvoItem` + 发送桩）。
+2. A1 的第 8 行（role+purpose 无 AskFields）在原始仓库里报 `ASK_OUT_OF_SCOPE`：联系方式红线本身放行了，
+   但同一句话被 §6.1 的 AskFields 范围核对拦下。本轮把"买家已提供"并入同一事实模型后，该场景的诚实代码
+   变成 `ASK_ALREADY_PROVIDED`（重复索取已提供的字段），见通过证据。
+3. 本文件不声称任何修复已完成；它只是修复动作之前的实测控制台输出。

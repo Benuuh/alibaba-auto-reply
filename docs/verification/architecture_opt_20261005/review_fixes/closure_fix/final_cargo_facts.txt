@@ -1,0 +1,4 @@
+== cargo_facts tests ==
+
+RESULT: pass=159 fail=0
+ALL PASS

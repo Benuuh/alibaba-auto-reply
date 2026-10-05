@@ -1,0 +1,40 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+True
+RESULT: pass=195 fail=0
+ALL PASS

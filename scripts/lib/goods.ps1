@@ -1,4 +1,8 @@
 ﻿# lib/goods.ps1 - 买家货物数据判断(从 summarize.ps1 抽取,复用不复制)
+# [2026-10-05 spec §4.2 第 1/2 条] 本文件现在是**兼容/展示适配器**：每一项的"有没有"以及
+#   ready/missingFields/collectionComplete 都来自唯一事实模型（Get-CargoFacts / Get-QuoteReadiness，
+#   经 msg_norm.ps1::Get-QuoteReadinessForConversationText 适配），与回复决策、报价候选、报价提醒、
+#   摘要与报告消费同一份判据，不再各持一套关键词正则或三布尔值。
 # Get-GoodsDataStatus: 判断快照中买家货物 5 项数据齐全度(重量/尺寸/图片/报价目的地/供应商)
 # Get-GoodsName: 提取货物品名(产品链接标题优先,其次品名词)
 # Get-GoodsDetails: 提取重量/尺寸/报价目的地具体值
@@ -41,33 +45,58 @@ function Get-VisionSidecarForGoods([string]$buyer, [string]$dataDir) {
     if (-not (Test-Path $f)) { return $null }
     try { return (Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
 }
-
 function Get-GoodsDataStatus([string]$buyer, [string]$snapDir = "") {
     $side = Get-VisionSidecarForGoods $buyer $snapDir
     $latest = Get-LatestSnapshot $buyer $snapDir
-    if (-not $latest) {
-        $unknownDestination = Get-SnapshotDestination ''
-        if ($side -and ($side.weight_kg -or $side.dims)) {
-            return @{ weight = [bool]$side.weight_kg; dims = [bool]$side.dims; img = $false; addr = $false; supplier = $false; file = $null; source = 'vision'; Destination = $unknownDestination; HasPostalAddress = $false }
+    $raw = ''
+    if ($latest) { $raw = [string](Get-Content $latest.FullName -Raw -Encoding UTF8) }
+    # [2026-10-05 spec §4.2 第 1/2 条] 唯一判据：附件 sidecar 的提取值作为一条合成的
+    #   "[BUYER] (from attachment) ..." 证据并进对话，再由 Get-QuoteReadiness 统一判定；
+    #   本文件不再自己数关键词，也不再把 sidecar 与事实模型算成两套结果。
+    $rw = $null
+    # [spec §5.4 第 3 条] 任务落盘在**指定运行根**；这里显式要求合并已验证的确认资料，
+    #   与回复决策/摘要使用同一份证据适配契约（隔离时读取的是隔离运行根里的任务库）。
+    try { $rw = Get-QuoteReadinessForSidecarText -Text $raw -Sidecar $side -ConvoName $buyer -WithTaskEvidence } catch { $rw = $null }
+    if (-not $rw -or -not $rw.Available) {
+        if (-not $latest) { return $null }
+        $unknownDest = Get-SnapshotDestination $raw
+        return @{
+            weight = $false; dims = $false; img = $false; addr = $false; supplier = $false
+            file = $latest.Name; Destination = $unknownDest; HasPostalAddress = $unknownDest.HasPostalAddress
+            ready = $false; missingFields = @(); optionalMissingFields = @(); collectionComplete = $false
+            ruleVersion = ''; error = ('one-fact-model-unavailable: ' + $(if ($rw) { [string]$rw.Error } else { 'Get-QuoteReadinessForSidecarText missing' }))
         }
-        return $null
     }
-    $raw = Get-Content $latest.FullName -Raw -Encoding UTF8
-    $destination = Get-SnapshotDestination $raw
-    $w = $false; $d = $false; $i = $false; $s = $false
-    foreach ($line in @($raw -split "`r?`n")) {
-        if ($line -notmatch '^\[BUYER\]') { continue }
-        if ($line -match '(?i)\b\d+(\.\d+)?\s*(kg|kgs|kilograms?|ton|tons|tonnes?)\b') { $w = $true }
-        if ($line -match '(?i)\bdimensions?\b' -or $line -match '\b\d+\s*[x×*]\s*\d+\s*[x×*]\s*\d+\s*(cm|mm|m)?\b') { $d = $true }
-        if ($line -match '\[IMG\]') { $i = $true }
-        if ($line -match '(?i)\b(supplier|vendor|fornecedor|proveedor|fabricante|manufacturer)\b') { $s = $true }
+    $bk = $rw.CargoFacts.ByKey
+    $has = @{}
+    foreach ($k in @('unit_weight', 'total_weight', 'unit_dimensions', 'lot_dimensions', 'reference_images', 'supplier_contact', 'delivery_address')) {
+        $has[$k] = [bool]($bk.ContainsKey($k) -and $bk[$k] -and [string]$bk[$k].Status -eq 'provided')
     }
-    # B6: 快照正则外合并 sidecar(附件识别提取的重量/尺寸)
-    if (-not $w -and $side -and $side.weight_kg) { $w = $true }
-    if (-not $d -and $side -and $side.dims) { $d = $true }
-    return @{ weight = $w; dims = $d; img = $i; addr = $destination.QuoteUsable; supplier = $s; file = $latest.Name; Destination = $destination; HasPostalAddress = $destination.HasPostalAddress }
+    $destination = $null
+    if ($rw.Facts) { $destination = $rw.Facts.Destination }
+    if (-not $destination) { $destination = Get-SnapshotDestination $raw }
+    $fileName = $null
+    if ($latest) { $fileName = $latest.Name }
+    return @{
+        weight = ($has['unit_weight'] -or $has['total_weight'])
+        dims = ($has['unit_dimensions'] -or $has['lot_dimensions'])
+        img = $has['reference_images']
+        addr = $has['delivery_address']
+        supplier = $has['supplier_contact']
+        file = $fileName; Destination = $destination; HasPostalAddress = $destination.HasPostalAddress
+        # 统一判据的直接结论：ready 才能进报价候选，collectionComplete 只表示标准清单齐全。
+        ready = [bool]$rw.Ready
+        missingFields = @($rw.MissingFields)
+        optionalMissingFields = @($rw.OptionalMissingFields)
+        collectionComplete = [bool]$rw.CollectionComplete
+        ruleVersion = [string]$rw.RuleVersion
+        # [2026-10-05 spec §8.1 F7 第 1 条] 摘要/报表要显示"确实存在的澄清"与"判据是否可用"。
+        #   这两个键只是把统一结果里**已经存在**的字段原样透出（Clarifications / Error），
+        #   不新增任何判据、不改变 ready/missingFields 的口径；失败分支的 error 键保持原样。
+        clarifications = @($rw.Clarifications)
+        error = [string]$rw.Error
+    }
 }
-
 function Get-GoodsName([string]$buyer, [string]$snapDir = "") {
     $latest = Get-LatestSnapshot $buyer $snapDir
     if (-not $latest) { return @{ known = $false; name = "未知" } }

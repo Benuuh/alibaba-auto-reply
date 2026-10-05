@@ -1,0 +1,7 @@
+PASS D06-buyer-negative
+PASS P03-corresponding-source
+PASS H08-legacy-no-anchor
+CONCURRENT-CHILD pid=11568 nonce=48e5307217454bc49c5c1d4cf125caf7 verified=True exit=0
+CONCURRENT-CHILD pid=34764 nonce=0e4af010d43d49188de22e1a9973a936 verified=True exit=0
+PASS D10-concurrent
+RESULT closure_edges pass=4 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-edges-e71f9efdf4c342cc9acbef0e1be3571d

@@ -415,9 +415,12 @@ Assert-True "G1b-fatal" ($monRaw -match 'ABORT-PAGE-DOWN-FATAL')
 Assert-True "G2-round-halt" ($monRaw -match 'round-halt')
 Assert-True "G2-abort-wrong-convo-consumed" ($monRaw -match "sendRes -match 'ABORT_WRONG_CONVO'")
 Assert-True "G3-cold-start" ($monRaw -match 'COLD-START observe-only cycle=')
-# P7 最小间隔: 日志仍在, 但值必须来自配置键
-Assert-True "G4-rate-skip-min-gap" ($monRaw -match 'RATE-SKIP buyer=')
-Assert-True "G4-rate-skip-reads-config-key" ($monRaw -match 'if \(\$gapMin2 -lt \$script:replyMinGapMin\)')
+# P7 最小间隔: 值必须来自配置键, 并由唯一判据消费
+# [2026-10-05 契约更新] 冷却修复把分钟门禁移入 Test-ShouldReply(RATE_MIN_GAP)并删除了 monitor 内
+#   的第二个覆盖点($gapMin2 / RATE-SKIP 分支)。故这里断言**当前契约的等价不变量**, 不删除保护:
+#   配置键仍被读取、仍作为判据入参、仍出现在留痕里。
+Assert-True "G4-rate-skip-min-gap" ($monRaw -match 'minGap=\$\(\$script:replyMinGapMin\)m')
+Assert-True "G4-rate-skip-reads-config-key" ($monRaw -match '-MinGapMinutes \$script:replyMinGapMin')
 Assert-True "G4-reads-reply_min_gap_min" ($monRaw -match "\`$script:replyMinGapMin = \[int\]\`$script:skillCfg\.reply_min_gap_min")
 # P8 发送后冷却: 日志仍在, 但值必须来自配置键
 Assert-True "G4-post-send-cooldown-reads-config-key" ($monRaw -match "\`$script:replyPostSendCooldownMin = \[int\]\`$script:skillCfg\.reply_post_send_cooldown_min")
@@ -443,7 +446,8 @@ Assert-True "Update-PendingSeen-called" ($monRaw -match 'Update-PendingSeen \$ct
 Assert-True "pendingSeen-passed-to-judge" ($monRaw -match '-PendingSeenRounds \$seenRounds')
 Assert-True "required-seen-rounds-from-config" ($monRaw -match '-RequiredSeenRounds \$script:requiredSeenRounds')
 Assert-True "pending-confirm-wait-logged" ($monRaw -match 'PENDING-CONFIRM-WAIT')
-Assert-True "min-gap-and-cooldown-share-lastSendAt" ($monRaw -match '\$ctx\.lastSendAt\[\$skey\] = Get-Date')
+# [2026-10-05 契约更新] 成功发送时刻在账本/补发表 I/O 之前捕获, 分钟门禁与秒级下限共用该数据面。
+Assert-True "min-gap-and-cooldown-share-lastSendAt" ($monRaw -match '\$sentAt = Get-Date' -and $monRaw -match '\$ctx\.lastSendAt\[\$skey\] = \$sentAt')
 
 $seenCallLine = 0; $loopLine = 0; $gateLine = 0
 foreach ($cl in (Get-CodeLines $monPath)) {

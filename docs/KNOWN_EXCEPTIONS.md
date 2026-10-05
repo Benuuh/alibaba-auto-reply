@@ -463,7 +463,7 @@
 - **恢复旧桥的前置禁令**：**禁止**以任何形式启动 19886 桥（它与 dsh-im 抢同一企微机器人，
   `exit_on_kicked_offline=true` ⇒ 互相顶下线）；也**禁止**重建 `AlibabaAutoReplyWeComCmd` 计划任务。
 - **本地未提交残留（已知，非遗漏）**：部署根的 `docs\文档权威约定.md` 有一处**规划期遗留的未提交改动**
-  （新增一行含本机绝对路径），会被 `.githooks\sanitize_check.ps1` 的 `D:\\alibaba-auto-reply` 规则判为
+  （新增一行含本机绝对路径），会被 `.githooks\sanitize_check.ps1` 的 `C:\\path\\to\\alibaba-auto-reply` 规则判为
   `[BLOCK]`，故本轮**未纳入提交**（保持原样、未被回滚）。与本条同时产生的 `README_部署说明.md` 中的
   同类字面路径已在提交前改写为不含绝对路径的表述。
 - **相关**：E-04 / E-07（已作废）/ E-14 / E-16 / E-20。

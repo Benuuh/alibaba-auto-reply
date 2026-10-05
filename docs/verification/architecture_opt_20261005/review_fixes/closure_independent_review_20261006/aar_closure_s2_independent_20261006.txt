@@ -1,0 +1,28 @@
+CHECK|redline-and|Ok=False|Codes=CONTACT_ASK_NO_ROLE|Text=Please share the supplier's contact details for packing and contact details so we can reach you.
+CHECK|redline-,|Ok=False|Codes=CONTACT_ASK_NO_ROLE|Text=Please share the supplier's contact details for packing , contact details so we can reach you.
+CHECK|redline-plus|Ok=False|Codes=CONTACT_ASK_NO_ROLE|Text=Please share the supplier's contact details for packing plus contact details so we can reach you.
+CHECK|redline-as well as|Ok=False|Codes=CONTACT_ASK_NO_ROLE|Text=Please share the supplier's contact details for packing as well as contact details so we can reach you.
+CHECK|redline-together with|Ok=False|Codes=CONTACT_ASK_NO_ROLE|Text=Please share the supplier's contact details for packing together with contact details so we can reach you.
+CHECK|name-phone-reverse|Ok=False|Codes=CONTACT_ASK_UNAUTHORIZED_FIELD|Text=Could you share the recipient's phone number and name for delivery?
+CHECK|weight-extra-dimensions|Ok=False|Codes=ASK_OUT_OF_SCOPE|Text=Please share the total weight and packed dimensions.
+GEN|total-conflict-no-collect|Scenario=details_given|Ask=dimension|Clarify=total_weight|Source=BLOCKED|Codes=ASK_OUT_OF_SCOPE|Text=|Rendered=Could you share the carton sizes (L x W x H)? Could you confirm which weight and its packaging scope we should use?
+GEN|dimensions-conflict-no-collect|Scenario=details_given|Ask=weight|Clarify=unit_dimensions|Source=BLOCKED|Codes=ASK_OUT_OF_SCOPE|Text=|Rendered=Could you share the total weight? Could you confirm which packed dimensions and their scope we should use?
+GEN|unit-conflict-plus-provided-total|Scenario=details_given|Ask=dimension,address|Clarify=unit_weight|Source=BLOCKED|Codes=ASK_ALREADY_PROVIDED|Text=|Rendered=Could you share the carton sizes (L x W x H)? Could you share the delivery address? Could you confirm which weight and its packaging scope we should use?
+GEN|dimensions-conflict-plus-complete-minimum|Scenario=details_given|Ask=unit_dimensions,recipient_contact|Clarify=unit_dimensions|Source=LLM|Codes=|Text=Could you share the consignee's contact number for delivery? Could you confirm which packed dimensions and their scope we should use? Happy to help with this.|Rendered=Could you share the consignee's contact number for delivery? Could you confirm which packed dimensions and their scope we should use?
+GEN|name-conflict|Scenario=new_inquiry|Ask=weight|Clarify=recipient_name|Source=LLM|Codes=|Text=Could you share the total weight? Could you confirm which recipient's name we should use? Happy to help with this.|Rendered=Could you share the total weight? Could you confirm which recipient's name we should use?
+GEN|contact-conflict|Scenario=new_inquiry|Ask=weight|Clarify=recipient_contact|Source=LLM|Codes=|Text=Could you share the total weight? Could you confirm which recipient's delivery contact we should use? Happy to help with this.|Rendered=Could you share the total weight? Could you confirm which recipient's delivery contact we should use?
+GEN|supplier-contact-conflict|Scenario=new_inquiry|Ask=weight|Clarify=supplier_contact|Source=BLOCKED|Codes=CONTACT_ASK_NO_ROLE|Text=|Rendered=Could you share the total weight? Could you confirm which supplier's business contact we should use?
+GEN|refusal-with-prior-conflict|Scenario=refusal|Ask=|Clarify=total_weight|Source=BLOCKED|Codes=ASK_OUT_OF_SCOPE|Text=|Rendered=Could you confirm which weight and its packaging scope we should use?
+GEN|process-explain|Scenario=process_explain|Ask=carton_count|Clarify=|Source=LLM|Codes=|Text=Could you share the number of cartons or pallets? Happy to help with this.|Rendered=Could you share the number of cartons or pallets?
+GEN|billing-explain|Scenario=billing_explain|Ask=carton_count|Clarify=|Source=LLM|Codes=|Text=Could you share the number of cartons or pallets? Happy to help with this.|Rendered=Could you share the number of cartons or pallets?
+GEN|unassigned-contact|Scenario=new_inquiry|Ask=weight|Clarify=unassigned_contact|Source=LLM|Codes=|Text=Could you share the total weight? Happy to help with this.|Rendered=Could you share the total weight?
+CHECK|count-check|Ok=True|Codes=|Text=Which carton count should we use - 20 or 24?
+CHECK|count-check|Ok=False|Codes=ASK_OUT_OF_SCOPE|Text=Which carton count can you provide for the quote?
+CHECK|count-check|Ok=False|Codes=ASK_OUT_OF_SCOPE|Text=Please share the carton count, which we need for the quote.
+REQUEST_ITEMS|open-weight|{"Text":"Could you confirm which weight","Kind":"collect","FieldKey":"weight","ClarifyRef":"","VerbSource":"explicit"}
+REQUEST_ITEMS|open-supplier-contact|{"Text":"Could you confirm which supplier\u0027s business contact we should use?","Kind":"collect","FieldKey":"","Role":"none","ClarifyRef":"","Raw":"Could you confirm which supplier\u0027s business contact we should use?"}
+GEN|fact-only-prior-conflict|FactOnly=False|Ask=weight|Source=LLM|Text=It's 12:00 PM in China (UTC+8). Could you share the total weight? Could you confirm which recipient's name we should use? Happy to help with this.
+GEN|address-conflict-positive|Scenario=new_inquiry|Ask=address|Clarify=delivery_address|Source=LLM|Codes=|Text=Could you confirm which delivery destination we should use? Happy to help with this.|Rendered=Could you confirm which delivery destination we should use?
+CHECK|old-C05-no-evidence|Ok=True|Codes=|Text=Thanks, I have your supplier's contact on file.
+CHECK|old-C05-no-evidence|Ok=True|Codes=|Text=The supplier already gave us their contact person.
+CHECK|old-C05-no-evidence|Ok=True|Codes=|Text=Thanks for the contact list.

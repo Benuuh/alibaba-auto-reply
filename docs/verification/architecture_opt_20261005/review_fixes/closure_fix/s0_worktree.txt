@@ -1,0 +1,94 @@
+ M README_部署说明.md
+ M SKILL.md
+ M docs/当前状态.md
+ M docs/项目地图.md
+ M scripts/analyze_replies.ps1
+ M scripts/config.json.example
+ M scripts/config.ps1
+ M scripts/lib/cdp.ps1
+ M scripts/lib/goods.ps1
+ M scripts/lib/lock.ps1
+ M scripts/lib/msg_norm.ps1
+ M scripts/lib/msg_source.ps1
+ M scripts/lib/quote.ps1
+ M scripts/lib/reply_gen.ps1
+ M scripts/lib/reply_metrics.ps1
+ M scripts/lib/reply_policy.ps1
+ M scripts/lib/send.ps1
+ M scripts/monitor.ps1
+ M scripts/reply_agent_prompt.md
+ M scripts/reply_scenarios.md
+ M scripts/summarize.ps1
+ M tests/lock.tests.ps1
+ M tests/message_order.tests.ps1
+ M tests/new_message_cooldown.tests.ps1
+ M tests/reply_chain.tests.ps1
+ M tests/reply_gate_dupskip.tests.ps1
+ M tests/run_tests.ps1
+ M tests/scenarios/01_cargo_received_query.json
+ M tests/scenarios/03_supplier_handoff_failure.json
+ M tests/scenarios/04_human_requested.json
+ M tests/scenarios/05_repeated_chasing.json
+ M tests/scenarios/06_angry_buyer.json
+ M tests/scenarios/10_simple_acknowledgement.json
+ M tests/scenarios/13_several_short_messages.json
+ M tests/scenarios/14_same_text_new_message.json
+ M tests/scenarios/15_human_already_answered.json
+ M tests/scenarios/16_notification_failure.json
+ M tests/scenarios/17_quote_ready_query.json
+ M tests/scenarios/18_reverse_dom_order.json
+ M tests/should_reply.tests.ps1
+ M tools/acceptance/replay.ps1
+?? %SystemDrive%/
+?? docs/specs/业务约束收敛与完整闭环修复_spec_20261005.md
+?? docs/specs/接待基础问答验收补充_20261005.md
+?? docs/specs/接待身份与时间问答及可信回复门禁_20261005.md
+?? docs/specs/时间问答地点绑定补修_20261005.md
+?? docs/specs/架构交付复核八项补修_spec_20261005.md
+?? docs/specs/架构优化讨论稿_20261005.md
+?? docs/specs/架构审查六项与时间地点绑定修复_spec_20261005.md
+?? docs/specs/独立复核七项与验收守卫修复_spec_20261005.md
+?? docs/verification/architecture_opt_20261005/
+?? docs/verification/reception_facts_20261005/
+?? docs/接待基础问答修复交付_20261005.md
+?? docs/架构交付复核八项补修交付_20261005.md
+?? docs/架构交付复核八项补修独立复核_20261005.md
+?? docs/架构优化实施交付_20261005.md
+?? docs/架构审查与时间地点绑定交付复核_20261005.md
+?? docs/架构审查与时间地点绑定修复交付_20261005.md
+?? docs/独立复核七项与验收守卫修复交付_20261005.md
+?? docs/独立复核七项修复交付复核_20261005.md
+?? scripts/lib/contact_rules.ps1
+?? scripts/lib/facts_engine.ps1
+?? scripts/lib/human_pause.ps1
+?? scripts/lib/human_tasks.ps1
+?? scripts/lib/paths.ps1
+?? scripts/lib/seller_context.ps1
+?? scripts/lib/sent_records.ps1
+?? scripts/lib/state_store.ps1
+?? scripts/lib/task_facts.ps1
+?? scripts/reply_rules.registry.json
+?? tests/atomic_state.tests.ps1
+?? tests/cargo_facts.tests.ps1
+?? tests/contact_redline.tests.ps1
+?? tests/human_pause.tests.ps1
+?? tests/human_tasks.tests.ps1
+?? tests/isolation.tests.ps1
+?? tests/layers.json
+?? tests/lock_scope.tests.ps1
+?? tests/reception_facts.tests.ps1
+?? tests/review_fixes.tests.ps1
+?? tests/review_fixes_entry.tests.ps1
+?? tests/rule_registry.tests.ps1
+?? tests/second_fix_contact.tests.ps1
+?? tests/second_fix_policy.tests.ps1
+?? tests/second_fix_summary.tests.ps1
+?? tests/send_result.tests.ps1
+?? tests/third_fix_clarify.tests.ps1
+?? tests/third_fix_contact_fields.tests.ps1
+?? tests/third_fix_g1_guard.tests.ps1
+?? tests/third_fix_pause_source.tests.ps1
+?? tests/third_fix_tasks_evidence.tests.ps1
+?? tests/third_fix_time_binding.tests.ps1
+?? tools/acceptance/review_fixes_baseline.ps1
+?? tools/ps_bom.ps1

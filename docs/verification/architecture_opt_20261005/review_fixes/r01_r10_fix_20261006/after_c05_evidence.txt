@@ -1,0 +1,7 @@
+{"Text":"Thanks, I have your supplier\u0027s contact on file.","Ok":false,"Codes":["UNSUPPORTED_RECEIVED_FACT"],"FactsPresent":false}
+PASS missing-evidence-must-block-Thanks, I have your supplier's contact on file.
+{"Text":"The supplier already gave us their contact person.","Ok":false,"Codes":["UNSUPPORTED_RECEIVED_FACT"],"FactsPresent":false}
+PASS missing-evidence-must-block-The supplier already gave us their contact person.
+PASS ordinary-contact-explanation-positive
+PASS generic-contact-redline-negative
+RESULT independent_c05 pass=4 fail=0

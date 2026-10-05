@@ -46,12 +46,16 @@ function Assert-SendPageNotSharedPort {
 }
 
 function Invoke-SendEval([string]$Js) {
+    if($script:AarSendEvalAdapter){return (& $script:AarSendEvalAdapter $Js $script:SendPageOverride)}
+    if(-not(Get-Command Assert-AarSendAllowed -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'paths.ps1')}
+    Assert-AarSendAllowed 'real page send/evaluation'
     # [SPEC §3.4-2] 内部 JS 执行出口:**不传 `-Page` 时与改动前逐字一致**(直接 Invoke-CdpEval)。
     if ($script:SendPageOverride) {
         return (Invoke-GonghaiEvalOnPage -Page $script:SendPageOverride -Script $Js)
     }
     return (Invoke-CdpEval $Js)
 }
+function Set-SendEvaluationAdapter([scriptblock]$Adapter){$script:AarSendEvalAdapter=$Adapter}
 
 function Send-OneTalkMessage([string]$buyer, [string]$text, $Page = $null, [switch]$AlreadyOpen) {
     # [SPEC §3.4] `-Page` 非空 ⇒ 本次发送落在该页上(公海自己的 Chrome)。
@@ -73,6 +77,10 @@ function Send-OneTalkMessage([string]$buyer, [string]$text, $Page = $null, [swit
 }
 
 function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [switch]$AlreadyOpen) {
+    # [2026-10-05 spec §6.3] Isolation enforcement lives at the REAL page egress (lib\cdp.ps1):
+    # under an isolated runtime root every page evaluation throws ISOLATION-VIOLATION, so a real send
+    # can never complete. A white-box test that replaces that egress with a simulated adapter is
+    # exactly the "模拟适配器" the spec allows, and is therefore not blocked here.
     # Accio 网关发送（灰度开关 accio_send_enabled 默认关；失败自动回退 CDP；仅 Phase 4 验证后开启）
     try {
         if ((Get-Command Send-AccioMessage -ErrorAction SilentlyContinue) -and (Get-Command Get-SkillConfig -ErrorAction SilentlyContinue)) {
@@ -193,3 +201,97 @@ function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [
     if ($r2 -match 'LEN:0') { return "FILLED | CLICKED | SENT_OK" }
     return ($r2 -replace '\|',' | ') + " | NOT_SENT"
 }
+
+# =============================================================================================
+# [2026-10-05 spec §5-3/§5-4] 发送结果的结构化返回与发送后核对
+#
+# 为什么需要：输入框清空只证明"页面动作的一个阶段"完成（spec §5-3）。真正的发送结果必须再核对
+#   会话里出现了新的我方消息；核对不到时结果是**未知**，先对账再决定是否重试，绝不直接当失败补发。
+# 兼容：Send-OneTalkMessage 的返回串一个字都不改（monitor/nudge/公海与既有测试依赖它）；
+#   需要结构化结果的新调用方使用 Send-OneTalkMessageEx。
+# =============================================================================================
+
+# 纯函数：把"刚发送的文本"与"页面读到的最新消息文本"做归一化比较。
+# 归一化只处理不可见字符/空白/大小写；页面可能把长文本截断或拼接译文，因此再允许前缀比较。
+function Test-TextMatchesSent([string]$Expected, [string]$Actual) {
+    if ([string]::IsNullOrWhiteSpace($Expected) -or [string]::IsNullOrWhiteSpace($Actual)) { return $false }
+    $e = ([string]$Expected) -replace '[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]', ''
+    $a = ([string]$Actual) -replace '[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]', ''
+    $e = ($e -replace '\s+', ' ').Trim().ToLowerInvariant()
+    $a = ($a -replace '\s+', ' ').Trim().ToLowerInvariant()
+    if (-not $e -or -not $a) { return $false }
+    if ($a -eq $e) { return $true }
+    return $false
+}
+
+function Get-OutboundConfirmScript {
+    return @"
+(function(){
+  var rows = Array.from(document.querySelectorAll('[class*=message-item-wrapper]'));
+  if (!rows.length) return JSON.stringify({rows:0, lastIsMine:false, lastText:''});
+  var last = rows[rows.length-1];
+  var rich = last.querySelector('.session-rich-content.text')
+          || last.querySelector('.content-with-translation .session-rich-content')
+          || last.querySelector('.content-with-translation.text-content');
+  var t = rich ? (rich.innerText||'').replace(/\n+/g,' ').trim() : '';
+  var nameEl = last.querySelector('.item-base-info .name');
+  var cls = (last.className||'').toString();
+  var isBuyer = !!(nameEl && nameEl.innerText.trim()) || cls.indexOf('item-left') >= 0;
+  return JSON.stringify({rows: rows.length, lastIsMine: !isBuyer, lastText: t.substring(0,400)});
+})()
+"@
+}
+
+# 页面核对：最新一条消息必须是我方且内容与刚发送的文本一致。
+# 返回 @{ Status = 'confirmed' | 'absent' | 'unverified'; Evidence; Detail }
+function Confirm-OneTalkOutboundMessage([string]$buyer,[string]$text,$Before=$null) {
+    $r=[pscustomobject]@{Status='unverified';Evidence='';Detail='before-snapshot-required';Receipt=$null}
+    if($null -eq $Before){return $r}
+    try{$after=@(Get-OutboundSnapshot);$receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text -Before $Before -After $after;$r.Receipt=$receipt
+        if($receipt.Valid){$r.Status='confirmed';$r.Evidence=$receipt.ConfirmationType;$r.Detail='unique-exact-new-outbound-event'}else{$r.Detail=$receipt.Error}
+    }catch{$r.Detail=$_.Exception.Message};return $r
+}
+
+# 结构化发送：Status = SENT_OK（已核对）| UNKNOWN（页面动作完成但核对不到，需对账）| FAILED。
+function Send-OneTalkMessageEx {
+    param(
+        [Parameter(Mandatory = $true)][string]$buyer,
+        [Parameter(Mandatory = $true)][string]$text,
+        $Page = $null,
+        [switch]$AlreadyOpen,
+        # 页面核对需要真实页面读取；模拟适配器可显式跳过，此时状态降级为 UNKNOWN（不得当作已确认）。
+        [switch]$SkipConfirmation
+    )
+    $oldPage=$script:SendPageOverride
+    if($Page){Assert-SendPageNotSharedPort $Page;$script:SendPageOverride=$Page}
+    try {
+    $before=$null
+    try{$before=@(Get-OutboundSnapshot)}catch{}
+    $raw = Send-OneTalkMessage -buyer $buyer -text $text -Page $Page -AlreadyOpen:$AlreadyOpen
+    $res = [pscustomobject]@{
+        Status = 'FAILED'; Raw = [string]$raw; Buyer = $buyer; Text = $text
+        Confirmed = $false; ConfirmEvidence = ''; Detail = ''; Receipt=$null; BeforeSnapshot=$before
+    }
+    if ($raw -match 'ABORT_WRONG_CONVO') { $res.Detail = 'wrong-conversation'; return $res }
+    if ($raw -match 'SENT_OK') {
+        if ($SkipConfirmation) {
+            $res.Status = 'UNKNOWN'; $res.ConfirmEvidence = 'confirmation-skipped'
+            $res.Detail = 'page-action-only'
+            return $res
+        }
+        $c = Confirm-OneTalkOutboundMessage -buyer $buyer -text $text -Before $before
+        $res.ConfirmEvidence = $c.Evidence
+        $res.Receipt=$c.Receipt
+        if ($c.Status -eq 'confirmed') {
+            $res.Status = 'SENT_OK'; $res.Confirmed = $true; $res.Detail = $c.Detail
+        } else {
+            $res.Status = 'UNKNOWN'; $res.Detail = ('receipt-unclear: ' + $c.Status + ' (' + $c.Detail + ')')
+        }
+        return $res
+    }
+    $res.Detail = 'send-not-confirmed'
+    return $res
+    } finally {$script:SendPageOverride=$oldPage}
+}
+
+if(-not(Get-Command New-ConfirmedOutboundReceipt -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'sent_records.ps1')}

@@ -1,0 +1,11 @@
+﻿IsolationRoot=C:\Users\<local-user>\AppData\Local\Temp\aar-review-third-pause-5d0fa92e11ab48ae9bde63f53e22e69f
+Get-MessageSourceClass : Cannot process argument transformation on parameter 'SentRecordMatch'. Cannot convert value ""
+ to type "System.Boolean". Boolean parameters accept only Boolean values and numbers, such as $True, $False, 1 or 0.
+At C:\path\to\alibaba-auto-reply\docs\verification\architecture_opt_20261005\review_fixes\third_independent_review_20261005\pau
+se_probes.ps1:26 char:199
++ ...  SourceSecond='+(Get-MessageSourceClass $lines[1] $matches[1]).Class)
++                                                       ~~~~~~~~~~~
+    + CategoryInfo          : InvalidData: (:) [Get-MessageSourceClass], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : ParameterArgumentTransformationError,Get-MessageSourceClass
+ 
+CHILD_EXIT=1

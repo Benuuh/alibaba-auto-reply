@@ -1,0 +1,5 @@
+== reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+  FAIL: C12-cross-day-text | got:[] want:[It's 2:05 AM on 2026-10-06 in China (UTC+8).]
+  FAIL: R4-explicit-place-precise [What time is it in London?] | got:[It's 7:05 AM in London (UTC+1).] want:[It's 7:05 AM in the UK (UTC+1).]
+  FAIL: R3-mixed-correct-zone-clock-allowed
+RESULT pass=503 fail=3

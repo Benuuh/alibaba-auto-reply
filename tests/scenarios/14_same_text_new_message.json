@@ -20,7 +20,7 @@
   },
   "fakeModel": {
     "mode": "compliant",
-    "compliantReply": "I am on it - I am confirming the actual status now and will come back to you as soon as I have it."
+    "compliantReply": "I can't confirm the actual status from here. I will not give you a guess on it."
   },
   "expectedDecision": {
     "needHumanTodo": true,

@@ -95,7 +95,10 @@ foreach ($marker in @('COOLDOWN-RECHECK', 'COOLDOWN-HOLD', 'COOLDOWN-LIFT', 'DUP
 }
 # 不变量(与 should_reply.tests.ps1 的 A8 同源, 这里防"改到一半"): 判据调用点唯一 / 发送调用点唯一
 Assert-Eq "single-judge-call-site" (@($code | Where-Object { $_.code -match 'Test-ShouldReply\s+-' }).Count) 1
-Assert-Eq "single-send-site" (@($code | Where-Object { $_.code -match '\bSend-OneTalkMessage\b' }).Count) 1
+# [2026-10-05 spec §5-3] The single production send site is now the STRUCTURED entry point
+# (Send-OneTalkMessageEx), because the page action alone is not a send result any more.
+Assert-Eq "single-send-site" (@($code | Where-Object { $_.code -match '\bSend-OneTalkMessageEx\s+-' }).Count) 1
+Assert-Eq "legacy-send-entry-not-called" (@($code | Where-Object { $_.code -match '\bSend-OneTalkMessage\s+-' }).Count) 0
 # §2.1: 轮数不足那条路仍只等待、不写冷却(否则第 2 轮永远等不到)
 Assert-True "pending-confirm-wait-intact" ($monRaw -match 'PENDING-CONFIRM-WAIT')
 Assert-True "dup-guard-not-on-pending-confirm-path" ($monRaw -match 'DUP-GUARD-HOLD')

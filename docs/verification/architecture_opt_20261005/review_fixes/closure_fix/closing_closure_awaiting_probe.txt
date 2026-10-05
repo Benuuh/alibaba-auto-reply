@@ -1,0 +1,3 @@
+== review_fixes entry tests (real monitor entry, isolated) ==
+ACTUAL-SEND count=1 text=Could you share your supplier's contact details so we can confirm the packing information? Once you share the supplier's contact, our team will check the packing information with your supplier. Happy to help with this.
+PASS D04-awaiting-conditional

@@ -64,6 +64,8 @@ function Set-LlmRoundBudgetExceeded([string]$stage, [string]$logFile) {
 }
 
 function Invoke-LLM([object[]]$messages, [double]$temperature, [int]$maxTokens, [string]$logFile) {
+    if(-not(Get-Command Assert-AarSendAllowed -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'paths.ps1')}
+    Assert-AarSendAllowed 'real model'
     # F4(2026-09-15 修复):轮次预算检查 —— 预算不足则跳过本次调用,由调用方走安全收尾(本轮不回复,下一轮重试)
     if ($script:LlmRound) {
         $remain = Get-LlmRoundRemainingSec

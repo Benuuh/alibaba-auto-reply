@@ -1,0 +1,66 @@
+[
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\contact_entry_probe.ps1",
+    "SHA256": "230C208A9876135C55BB1F14F01EEC67BBB4BB96C70169D5C6D4CFBD4B394350"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\contact_entry_probe.txt",
+    "SHA256": "75B6A2EC284D13CD526F32735D1E4055EEFAE9A04889B19789433CB2BE69A64B"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\offline_rerun.production-audit.json",
+    "SHA256": "3DCC48F3A9FB9A8D472BE18EAAFE2A54716B23D25B968B81304705460BFF829A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\offline_rerun.txt",
+    "SHA256": "ED4F8E4B1BB35D65DF4A5B66E608FA132ADA8E4C65AAC7DA17E7A6FC1E313907"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\original_probes.ps1",
+    "SHA256": "BA0BC208ED46319F12ABA9C93A9176919F306DE3699EE289D5DC36190E361CD5"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\original_probes_rerun.txt",
+    "SHA256": "3DE7EC363A4DFED8CB864CAB34180791D0AC292DA5B8CB9E5452128A2F04E50F"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\pause_probes.ps1",
+    "SHA256": "7876CF465380F422FD0F6F34461FD11BDDCC1241C23EB8F7E7D93C6F3865252E"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\pause_probes.txt",
+    "SHA256": "D71C045A48D37B9E350F80E4C5548AA00CBC1EF4D4AF5DF3C1835F66D61C8F0A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\README.md",
+    "SHA256": "5E38B8289A4C1950850E17545D645F36EDBDA66DD8C380EBA7DC8A2D521F1A27"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\request_probes.ps1",
+    "SHA256": "1DBA60934818614E14797B8069A0C7E47D364357E51B5472F3DAD20DACA22F8C"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\request_probes.txt",
+    "SHA256": "69090846999DEF359925C3963247D807A7AE3AD267EA780607E9E2B99185CB7A"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\reviewed_source_hashes.json",
+    "SHA256": "55ADD1E07CBB2D55B080CB89816B0118FC522FF295BCD433AB3B7EF417CB8F21"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\task_probes.ps1",
+    "SHA256": "F1AF355A2A74AF1A4061D2AA35E4C92C428F0F5D84125D729E2BF3752C3FC1DB"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\task_probes.txt",
+    "SHA256": "A34FBCE725FC4C2347740FA5280CFFD7D7B204716D3CCC39D32815F9A7D833FD"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\time_probes.ps1",
+    "SHA256": "AEF8A794D4B50F6218A9EC70A5893CD8FB84557E84DEDA78DD5244C1D4686792"
+  },
+  {
+    "Path": "C:\\path\\to\\alibaba-auto-reply\\docs\\verification\\architecture_opt_20261005\\review_fixes\\third_independent_review_20261005\\time_probes.txt",
+    "SHA256": "AD42A024D74400FDE6B248B99EEC135E3594E3E661ACC652405770D6A174CCF4"
+  }
+]

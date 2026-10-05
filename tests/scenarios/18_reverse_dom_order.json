@@ -21,7 +21,7 @@
   },
   "fakeModel": {
     "mode": "compliant",
-    "compliantReply": "I do not want to give you a guess on this. I am confirming the actual container status right now and will come back to you as soon as I have it."
+    "compliantReply": "I do not want to give you a guess on this. I can't confirm the container status from here."
   },
   "expectedDecision": {
     "needHumanTodo": true,

@@ -19,7 +19,7 @@
   },
   "fakeModel": {
     "mode": "compliant",
-    "compliantReply": "Understood - I will get a person on this. I am passing it to the team now so they can take it from here."
+    "compliantReply": "Understood. I'm a virtual assistant, so a person from the team needs to take this over."
   },
   "expectedDecision": {
     "needHumanTodo": true,

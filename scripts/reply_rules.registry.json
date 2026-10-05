@@ -1,0 +1,558 @@
+﻿{
+  "version": "2026-10-05.1",
+  "note": "生效规则清单（spec §6.1）。每条规则记录：RuleId、适用阶段、实际消费函数、需要的证据、规则版本、验收样例，以及 Status（wired=已在生产代码路径上消费；partial=部分消费；not_wired=配置里存在但当前没有生产消费方，不得声称已生效）。本清单由 tests\\rule_registry.tests.ps1 校验。",
+  "stages": [
+    "decision",
+    "generation",
+    "compliance",
+    "send",
+    "state",
+    "human"
+  ],
+  "rules": [
+    {
+      "RuleId": "R-CONTACT-OURS",
+      "Stage": "compliance",
+      "Consumer": "Test-ContactRedline",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [
+        "OUR_CONTACT_OFFER"
+      ],
+      "Evidence": "text pattern (our channel words, invitations, literal email/phone)",
+      "Version": "2026-10-05.1",
+      "Sample": "contact_redline.tests.ps1#block-our-contact",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CONTACT-BUYER-PERSONAL",
+      "Stage": "compliance",
+      "Consumer": "Test-ContactRedline",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [
+        "BUYER_PERSONAL_CONTACT_ASK",
+        "BUYER_CONTACT_REQUEST"
+      ],
+      "Evidence": "text pattern without an explicit consignee/supplier role",
+      "Version": "2026-10-05.1",
+      "Sample": "contact_redline.tests.ps1#block-buyer-contact",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CONTACT-ROLE-ALLOWED",
+      "Stage": "compliance",
+      "Consumer": "Test-ContactRedline",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [
+        "CONTACT_ROLE_UNCLEAR",
+        "CONTACT_ASK_UNAUTHORIZED_FIELD"
+      ],
+      "Evidence": "explicit consignee/recipient or supplier role + shipping/verification purpose, or this turn's AskFields authorization for THAT field key; a role that is authorized for one field does not authorize another (name != contact channel, supplier address != supplier contact)",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_contact_fields.tests.ps1#C09",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-REQUEST-ITEMS",
+      "Stage": "compliance",
+      "Consumer": "Get-ReplyRequestItems",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [],
+      "Evidence": "one structured request-item list (source span, action, verb source/inheritance, role, concrete FieldKey, purpose, collect/clarify) shared by Test-ContactRedline and Test-AskFieldConformance; a conjoined request inherits the ACTION but not the ROLE (purpose clauses, new verbs/owners, personal pronouns and sentence boundaries end the role scope)",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_contact_fields.tests.ps1#C01",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CLARIFY-CANDIDATE-EVIDENCE",
+      "Stage": "compliance",
+      "Consumer": "Get-ReplyClarificationRequests",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "CLARIFY_CANDIDATE_UNSUPPORTED"
+      ],
+      "Evidence": "structured ClarificationRequests derived from the ONE fact model (CargoFacts.ByKey status + Conflicts.Candidates with value/unit/scope/source refs + Destination ambiguity). Every number in a clarification clause must match a real candidate (unit/scope consistent; only evidence-backed conversions are normalized); a bare ClarifyFields index or a scenario name never authorizes arbitrary values",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_clarify.tests.ps1#Q01",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CONTACT-ASK-NO-ROLE",
+      "Stage": "compliance",
+      "Consumer": "Test-ContactRedline",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [
+        "CONTACT_ASK_NO_ROLE"
+      ],
+      "Evidence": "a contact request with no consignee/supplier business role; a shipping purpose such as 'for delivery updates' does not substitute for the role",
+      "Version": "2026-10-05.2",
+      "Sample": "review_fixes.tests.ps1#A1-generic-ask",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CONTACT-ASK-ALREADY-PROVIDED",
+      "Stage": "compliance",
+      "Consumer": "Test-ContactRedline",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [
+        "CONTACT_ASK_ALREADY_PROVIDED"
+      ],
+      "Evidence": "the concrete field key is already in this turn's facts (HasSupplierContact, or CargoFacts.ByKey supplier_contact / recipient_contact / recipient_name / supplier_address / delivery_address = provided) - asking again is blocked, and an AskFields authorization never overrides an already-provided field (recipient_name does not prove recipient_contact)",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_contact_fields.tests.ps1#C08",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CONTACT-MIXED-CLAUSE",
+      "Stage": "compliance",
+      "Consumer": "Get-ContactClauses",
+      "ConsumerFile": "scripts/lib/contact_rules.ps1",
+      "Codes": [],
+      "Evidence": "per-clause evaluation so a supplier/consignee mention cannot exempt another contact request",
+      "Version": "2026-10-05.1",
+      "Sample": "contact_redline.tests.ps1#block-mixed",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-ASK-SCOPE",
+      "Stage": "compliance",
+      "Consumer": "Test-AskFieldConformance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "ASK_OUT_OF_SCOPE"
+      ],
+      "Evidence": "this turn's Decision.AskFields (by field group); a unit modifier such as 'per carton' / 'each pallet' is not a count request by itself",
+      "Version": "2026-10-05.2",
+      "Sample": "rule_registry.tests.ps1#ask-scope",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-TIME-TARGET-ANSWERED",
+      "Stage": "compliance",
+      "Consumer": "Test-OutputTimeClaims",
+      "ConsumerFile": "scripts/lib/time_claims.ps1",
+      "Codes": [
+        "FACT_TIME_TARGET_UNANSWERED"
+      ],
+      "Evidence": "each TimeExpectation (target id, original/canonical place, zone, real UTC offset, local clock/date) derived from the full Decision.TimeTargets and the SAME RuntimeContext must be answered by an OutputTimeClaim bound to that target: an answered clock must match the target's clock AND the stated place/offset; same-clock or same-offset different named places are never merged",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_time_binding.tests.ps1#T01",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-TIME-TARGET-CLARIFIED",
+      "Stage": "compliance",
+      "Consumer": "Test-OutputTimeClaims",
+      "ConsumerFile": "scripts/lib/time_claims.ps1",
+      "Codes": [
+        "FACT_TIME_TARGET_UNCLARIFIED"
+      ],
+      "Evidence": "every unresolved target must be named inside an explicit place/time-zone clarification question; naming one target does not cover another, and a plain statement that mentions the place ('The shipment is going to Atlantis.') is not a time clarification",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_time_binding.tests.ps1#T05",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-ASK-ALREADY-PROVIDED",
+      "Stage": "compliance",
+      "Consumer": "Test-AskFieldConformance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "ASK_ALREADY_PROVIDED"
+      ],
+      "Evidence": "Facts.HasWeight/HasDimensions/HasQuoteDestination/HasImages plus the one cargo fact model (ByKey status=provided) for count/weight/dimensions/destination/supplier/recipient",
+      "Version": "2026-10-05.2",
+      "Sample": "rule_registry.tests.ps1#ask-provided",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-DEST-NO-REASK",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "DESTINATION_REASK"
+      ],
+      "Evidence": "Facts.Destination.QuoteUsable + amazon_warehouse kind",
+      "Version": "2026-10-05.1",
+      "Sample": "amazon_destination.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-SUPPLIER-PLAN-EVIDENCE",
+      "Stage": "compliance",
+      "Consumer": "Test-SupplierPlanWording",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "UNSUPPORTED_PROMISE"
+      ],
+      "Evidence": "canonical supplier_verification task read back by exact TaskId (EvidenceOrigin=exact-task-readback, ExactTaskMatch, IsOpen) + per-action action records: a future plan needs an open exact task, 'we contacted the supplier' needs a contacted record (legacy contacted/awaiting_supplier_reply status keeps the legacy-status meaning), and 'the supplier confirmed X' needs a structured supplier_reply record whose ConfirmedFields support the stated field/value/unit/scope. A non-empty legacy resolution is legacy-unverified and never authorizes a confirmation",
+      "Version": "2026-10-05.3",
+      "Sample": "third_fix_action_evidence.tests.ps1#A08",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-TIME-COMMITMENT",
+      "Stage": "compliance",
+      "Consumer": "Test-TimeCommitment",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "UNSUPPORTED_PROMISE"
+      ],
+      "Evidence": "ActionEvidence.TodoPersisted + NotificationDelivered + HasDeadline",
+      "Version": "2026-10-05.1",
+      "Sample": "reception_facts.tests.ps1#C14",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-PRICE-DISCLOSURE",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "PRICE_DISCLOSURE"
+      ],
+      "Evidence": "currency/price word next to a number",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_chain.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-LIABILITY-COMMITMENT",
+      "Stage": "compliance",
+      "Consumer": "Test-FinancialCommitment",
+      "ConsumerFile": "scripts/reply_engine.ps1",
+      "Codes": [
+        "LIABILITY_COMMITMENT"
+      ],
+      "Evidence": "sentence-level liability pattern",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_engine.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-BANNED-PHRASES",
+      "Stage": "compliance",
+      "Consumer": "Test-BannedText",
+      "ConsumerFile": "scripts/reply_engine.ps1",
+      "Codes": [
+        "BANNED_PHRASE"
+      ],
+      "Evidence": "reply_rules.banned_phrases",
+      "ConfigPointer": "banned_phrases",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_engine.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-NO-DIMENSION-QUOTE",
+      "Stage": "compliance",
+      "Consumer": "Test-NoDimensionQuoteHint",
+      "ConsumerFile": "scripts/reply_engine.ps1",
+      "Codes": [
+        "NO_DIMENSION_QUOTE_HINT"
+      ],
+      "Evidence": "forbidden hint wording",
+      "Version": "2026-10-05.1",
+      "Sample": "dimension_guidance.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-UNRESOLVED-TEMPLATE",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "UNRESOLVED_TEMPLATE"
+      ],
+      "Evidence": "Get-SellerTemplatePatterns",
+      "Version": "2026-10-05.1",
+      "Sample": "reception_facts.tests.ps1#C02",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-IDENTITY-OBJECT",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "IDENTITY_WRONG_OBJECT",
+        "FACT_TOPIC_DRIFT",
+        "FACT_COMPANY_MISMATCH",
+        "FACT_NAME_MISMATCH"
+      ],
+      "Evidence": "Decision.RequestedFacts / FactOnly / confirmed seller profile",
+      "Version": "2026-10-05.1",
+      "Sample": "reception_facts.tests.ps1#C03",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CLOCK-MATCH",
+      "Stage": "compliance",
+      "Consumer": "Test-OutputTimeClaims",
+      "ConsumerFile": "scripts/lib/time_claims.ps1",
+      "Codes": [
+        "FACT_TIME_MISMATCH"
+      ],
+      "Evidence": "RuntimeContext.NowUtc + requested place timezone",
+      "Version": "2026-10-05.1",
+      "Sample": "reception_facts.tests.ps1#C01",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-LANGUAGE-EN",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "NOT_AMERICAN_ENGLISH"
+      ],
+      "Evidence": "CJK / non-English function words",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_chain.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-BRITISH-SPELLING",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "BRITISH_SPELLING"
+      ],
+      "Evidence": "spelling table (warning only)",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_chain.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-HUMAN-PAUSE-5MIN",
+      "Stage": "human",
+      "Consumer": "Start-HumanPause",
+      "ConsumerFile": "scripts/lib/human_pause.ps1",
+      "Codes": [],
+      "Evidence": "stable event identity (role + normalized text + reliable per-message time) and an ABSOLUTE UTC deadline = the reply instant + 5 minutes; rescans, position changes, window truncation and restarts never re-base it and never extend it",
+      "Version": "2026-10-05.3",
+      "Sample": "human_pause.tests.ps1#F3a-until-is-reply-time-plus-5-not-scan-time",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-HUMAN-SOURCE-EVIDENCE",
+      "Stage": "human",
+      "Consumer": "Get-MessageSourceClass",
+      "ConsumerFile": "scripts/lib/msg_source.ps1",
+      "Codes": [],
+      "Evidence": "explicit sender marker, confirmed send record, or absence of any bot marker; unknown never counts as human",
+      "Version": "2026-10-05.1",
+      "Sample": "human_pause.tests.ps1#P7",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-SENT-RECORD-EVIDENCE",
+      "Stage": "send",
+      "Consumer": "Get-SentRecordMatchIndexes",
+      "ConsumerFile": "scripts/lib/sent_records.ps1",
+      "Codes": [],
+      "Evidence": "confirmed outbound message recorded after a verified send",
+      "Version": "2026-10-05.1",
+      "Sample": "human_pause.tests.ps1#P8",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-SEND-RESULT-CONFIRM",
+      "Stage": "send",
+      "Consumer": "Send-OneTalkMessageEx",
+      "ConsumerFile": "scripts/lib/send.ps1",
+      "Codes": [],
+      "Evidence": "page action + newest outbound message in the conversation",
+      "Version": "2026-10-05.1",
+      "Sample": "send_result.tests.ps1#X-confirmed-is-sent-ok",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-SEND-UNKNOWN-RECONCILE",
+      "Stage": "send",
+      "Consumer": "Resolve-UnknownSendResult",
+      "ConsumerFile": "scripts/monitor.ps1",
+      "Codes": [],
+      "Evidence": "re-read the conversation before retrying",
+      "Version": "2026-10-05.1",
+      "Sample": "reception_facts.tests.ps1#C23",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-ATOMIC-STATE",
+      "Stage": "state",
+      "Consumer": "Write-JsonDocumentAtomic",
+      "ConsumerFile": "scripts/lib/state_store.ps1",
+      "Codes": [],
+      "Evidence": "temp write + read-back verify + atomic replace + backup",
+      "Version": "2026-10-05.1",
+      "Sample": "atomic_state.tests.ps1#S6",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-STATE-NOT-EMPTY-WHEN-CORRUPT",
+      "Stage": "state",
+      "Consumer": "Read-JsonDocument",
+      "ConsumerFile": "scripts/lib/state_store.ps1",
+      "Codes": [],
+      "Evidence": "missing / empty / valid / corrupt classification",
+      "Version": "2026-10-05.1",
+      "Sample": "atomic_state.tests.ps1#S3",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-ATOMIC-LOCK",
+      "Stage": "state",
+      "Consumer": "Get-AppLock",
+      "ConsumerFile": "scripts/lib/lock.ps1",
+      "Codes": [],
+      "Evidence": "atomic CreateNew + holder token; release verifies ownership",
+      "Version": "2026-10-05.1",
+      "Sample": "lock.tests.ps1#L7",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-RUNTIME-ISOLATION",
+      "Stage": "state",
+      "Consumer": "Assert-AarNoProductionPath",
+      "ConsumerFile": "scripts/lib/paths.ps1",
+      "Codes": [],
+      "Evidence": "isolated runtime root + marker + production path list",
+      "Version": "2026-10-05.1",
+      "Sample": "isolation.tests.ps1#I04",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-HUMAN-TASK-EVIDENCE",
+      "Stage": "human",
+      "Consumer": "Get-ActionEvidenceForTask",
+      "ConsumerFile": "scripts/lib/human_tasks.ps1",
+      "Codes": [],
+      "Evidence": "persisted task read back by EXACT TaskId + buyer + canonical kind + supplier identity; per-fact evidence: notification delivery, owner acceptance, recorded contact, supplier reply and confirmed deadline are separate facts (acceptance never authorises a past-action claim)",
+      "Version": "2026-10-05.1",
+      "Sample": "review_fixes_entry.tests.ps1#E-A3g-exact-task-evidence",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CARGO-FACTS-SINGLE-MODEL",
+      "Stage": "decision",
+      "Consumer": "Get-CargoFacts",
+      "ConsumerFile": "scripts/lib/facts_engine.ps1",
+      "Codes": [],
+      "Evidence": "conversation messages + destination authority",
+      "Version": "2026-10-05.1",
+      "Sample": "cargo_facts.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-QUOTE-READINESS",
+      "Stage": "decision",
+      "Consumer": "Get-QuoteReadiness",
+      "ConsumerFile": "scripts/lib/facts_engine.ps1",
+      "Codes": [],
+      "Evidence": "carton count + weight + dimensions + usable quote destination; CollectionComplete reported separately",
+      "Version": "2026-10-05.1",
+      "Sample": "cargo_facts.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-CONFIG-ALWAYS-NEVER-UNWIRED",
+      "Stage": "generation",
+      "Consumer": "",
+      "ConsumerFile": "scripts/reply_rules.json",
+      "Codes": [],
+      "Evidence": "no production reply consumer: only suggestion tooling writes them",
+      "ConfigPointer": "reply_rules.always",
+      "Version": "2026-10-05.1",
+      "Sample": "rule_registry.tests.ps1#unwired",
+      "Status": "not_wired"
+    },
+    {
+      "RuleId": "R-CONFIG-NEVER-UNWIRED",
+      "Stage": "generation",
+      "Consumer": "",
+      "ConsumerFile": "scripts/reply_rules.json",
+      "Codes": [],
+      "Evidence": "no production reply consumer: only suggestion tooling writes them",
+      "ConfigPointer": "reply_rules.never",
+      "Version": "2026-10-05.1",
+      "Sample": "rule_registry.tests.ps1#unwired",
+      "Status": "not_wired"
+    },
+    {
+      "RuleId": "R-CONFIG-URGENCY-UNWIRED",
+      "Stage": "generation",
+      "Consumer": "",
+      "ConsumerFile": "scripts/reply_rules.json",
+      "Codes": [],
+      "Evidence": "no production consumer",
+      "ConfigPointer": "reply_rules.urgency",
+      "Version": "2026-10-05.1",
+      "Sample": "rule_registry.tests.ps1#unwired",
+      "Status": "not_wired"
+    },
+    {
+      "RuleId": "R-CONFIG-DATA-TO-COLLECT-PARTIAL",
+      "Stage": "decision",
+      "Consumer": "Get-MissingInfo",
+      "ConsumerFile": "scripts/reply_engine.ps1",
+      "Codes": [],
+      "Evidence": "kept for regression only; the reply policy now derives missing fields from the fact model",
+      "ConfigPointer": "data_to_collect",
+      "Version": "2026-10-05.1",
+      "Sample": "rule_registry.tests.ps1#unwired",
+      "Status": "partial"
+    },
+    {
+      "RuleId": "R-CONFIG-PROCESS-TEMPLATE",
+      "Stage": "generation",
+      "Consumer": "",
+      "ConsumerFile": "scripts/lib/reply_gen.ps1",
+      "Codes": [],
+      "Evidence": "Free template text is not admitted by ResponsePlan. Retained as inactive configuration.",
+      "ConfigPointer": "templates.process_overview",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_chain.tests.ps1",
+      "Status": "not_wired"
+    },
+    {
+      "RuleId": "R-CONFIG-BILLING-RULE",
+      "Stage": "generation",
+      "Consumer": "",
+      "ConsumerFile": "scripts/lib/reply_gen.ps1",
+      "Codes": [],
+      "Evidence": "Free template text is not admitted by ResponsePlan. Retained as inactive configuration.",
+      "ConfigPointer": "pricing.billing_rule",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_chain.tests.ps1",
+      "Status": "not_wired"
+    },
+    {
+      "RuleId": "R-EMPTY-TEXT",
+      "Stage": "compliance",
+      "Consumer": "Test-ReplyCompliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Codes": [
+        "EMPTY"
+      ],
+      "Evidence": "empty candidate text is never sent",
+      "Version": "2026-10-05.1",
+      "Sample": "reply_chain.tests.ps1",
+      "Status": "wired"
+    },
+    {
+      "RuleId": "R-RECEIVED-EVIDENCE",
+      "Stage": "compliance",
+      "ConsumerFile": "scripts/lib/reply_policy.ps1",
+      "Consumer": "Test-ReplyCompliance",
+      "Evidence": "Matching persisted or buyer facts only",
+      "Version": "2026-10-05",
+      "Sample": "Received claim without corresponding fact blocks",
+      "Status": "wired",
+      "Codes": [
+        "UNSUPPORTED_RECEIVED_FACT"
+      ]
+    }
+  ]
+}

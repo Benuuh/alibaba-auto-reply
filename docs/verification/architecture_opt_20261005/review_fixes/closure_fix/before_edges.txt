@@ -1,0 +1,14 @@
+FAIL D06-buyer-negative negative/missing-unit buyer input cannot become valid positive cargo
+PASS P03-corresponding-source
+PASS H08-legacy-no-anchor
+FAIL D10-concurrent Initialize-AarIsolation : Exception calling "WriteAllText" with "3" argument(s): "The process cannot access the file 'C
+:\Users\22129\AppData\Local\Temp\aar-closure-edges-eb117bb2205346dcb377413fa2489a75\.aar-isolation.json' because it is 
+being used by another process."
+At C:\Users\<local-user>\AppData\Local\Temp\aar-closure-edges-eb117bb2205346dcb377413fa2489a75\concurrent.ps1:3 char:55
++ ... epo 'scripts/lib/msg_norm.ps1');[void](Initialize-AarIsolation $Root)
++                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Initialize-AarIsolation], MethodInvocationException
+    + FullyQualifiedErrorId : IOException,Initialize-AarIsolation
+ 
+
+RESULT closure_edges pass=2 fail=2 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-edges-eb117bb2205346dcb377413fa2489a75

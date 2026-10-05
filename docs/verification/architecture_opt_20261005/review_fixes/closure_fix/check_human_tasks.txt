@@ -1,0 +1,8 @@
+== human_tasks tests ==
+NO-TRUSTED-FLOW-TRIGGER
+At C:\path\to\alibaba-auto-reply\scripts\lib\task_contracts.ps1:122 char:24
++         if(-not $flow){throw 'NO-TRUSTED-FLOW-TRIGGER'}
++                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (NO-TRUSTED-FLOW-TRIGGER:String) [], RuntimeException
+    + FullyQualifiedErrorId : NO-TRUSTED-FLOW-TRIGGER
+ 

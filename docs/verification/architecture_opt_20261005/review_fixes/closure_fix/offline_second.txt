@@ -1,0 +1,795 @@
+﻿TEST-LAYER=Offline files=53 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=True lockHolder= processes=2344,34196
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== alert_dedup.tests.ps1 ===
+CHILD-CONTEXT test=alert_dedup.tests.ps1 pid=26260 nonce=1bc538334c044b139a43d1c86e085073 verified=True contexts=2 exit=0
+  == alert_dedup tests (table-driven) ==
+    dedup source = C:\path\to\alibaba-auto-reply\scripts\lib\alert_dedup.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== cargo_facts.tests.ps1 ===
+CHILD-CONTEXT test=cargo_facts.tests.ps1 pid=6568 nonce=187b67b4dfbb487a8fcc0b47bd900eb2 verified=True contexts=2 exit=0
+  == cargo_facts tests ==
+  
+  RESULT: pass=159 fail=0
+  ALL PASS
+  
+  
+=== contact_redline.tests.ps1 ===
+CHILD-CONTEXT test=contact_redline.tests.ps1 pid=31196 nonce=8331e75d82104c2aaa2e17853b0dc3b9 verified=True contexts=2 exit=1
+  == contact_redline tests ==
+    FAIL: allow: Could you share the consignee's name, contact number and delivery address? CONTACT_ROLE_UNCLEAR,CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Could you share your supplier's contact details so we can confirm the packing information? CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Please share the recipient's phone number for delivery. CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Could you send the consignee's contact so the carrier can reach them? CONTACT_ROLE_UNCLEAR
+    FAIL: allow: Could you share your supplier's contact so we can check the carton count and packed weight with them? CONTACT_ROLE_UNCLEAR
+    FAIL: buyer-is-consignee-allowed 
+  
+  RESULT: pass=51 fail=6
+  FAILED CASES: allow: Could you share the consignee's name, contact number and delivery address?, allow: Could you share your supplier's contact details so we can confirm the packing information?, allow: Please share the recipient's phone number for delivery., allow: Could you send the consignee's contact so the carrier can reach them?, allow: Could you share your supplier's contact so we can check the carton count and packed weight with them?, buyer-is-consignee-allowed
+  
+  
+=== dedup_order.tests.ps1 ===
+CHILD-CONTEXT test=dedup_order.tests.ps1 pid=10588 nonce=408312848d7847e3b0c542889c74abab verified=True contexts=2 exit=0
+  == dedup_order tests ==
+    锚点已退出判定: 2 种顺序 × 3 种账本 key = 6 种组合, 结论全部 = True|IN_PENDING_LIST
+    防哑巴: 会话在待回复列表里(连续 2 轮) ⇒ 必回, 与账本条数是否增长无关
+  RESULT: pass=50 fail=0
+  ALL PASS
+  
+  
+=== dimension_guidance.tests.ps1 ===
+CHILD-CONTEXT test=dimension_guidance.tests.ps1 pid=35004 nonce=a7e7fda40184408fbf3964356c346a5a verified=True contexts=2 exit=1
+  == dimension_guidance tests ==
+    FAIL: fallback-equals-approved-primary | got:[Could you share your supplier's contact details so we can confirm the packing information? Could you share the number of cartons or pallets? Thanks for your message.] want:[If you can share your supplier's contact, I can confirm the cargo details with them directly - that way I get you an accurate quote faster, and you don't have to go back and forth.]
+    FAIL: stepback-is-the-approved-second-fallback | got:[Could you share the number of cartons or pallets? Thanks for your message.] want:[Understood, no pressure. A rough size is fine to start - we can adjust it once the cargo reaches our warehouse.]
+  RESULT: pass=42 fail=2
+  FAILED
+  
+  
+=== docs_consistency.tests.ps1 ===
+CHILD-CONTEXT test=docs_consistency.tests.ps1 pid=4708 nonce=0e6cb357246543c2888be1da77c544c7 verified=True contexts=2 exit=0
+  == docs_consistency tests ==
+    ok   health_check.ps1 能派生出检查项
+    ok   README_部署说明.md 有检查项声明行
+    ok   检查项【数量】一致
+    ok   检查项【名单】无遗漏
+    ok   检查项【名单】无多余
+    ok   config.json.example 存在
+    ok   config.json.example 是合法 JSON
+    ok   模板键集 ⊇ 现役键集
+    ok   config.json.example 含 reply_min_gap_min = 5
+    ok   config.json 含 reply_min_gap_min = 5
+    ok   config.json.example 含 reply_post_send_cooldown_min = 5
+    ok   config.json 含 reply_post_send_cooldown_min = 5
+    ok   发送后冷却 ≥ 最小间隔（§0.1 硬要求）
+    ok   README.md 未写死测试数字
+    ok   README_部署说明.md 未写死测试数字
+    ok   docs\KNOWN_EXCEPTIONS.md 未写死测试数字
+    ok   SKILL.md 未写死测试数字
+  RESULT: pass=17 fail=0
+  ALL PASS
+  
+  
+=== gonghai_chrome_isolation.tests.ps1 ===
+CHILD-CONTEXT test=gonghai_chrome_isolation.tests.ps1 pid=33304 nonce=c0899d1466a648e484b2aab97b5fe3d6 verified=True contexts=2 exit=0
+  == gonghai_chrome_isolation tests ==
+  
+  RESULT: pass=124 fail=0
+  ALL PASS
+  
+  
+=== goods_engine.tests.ps1 ===
+CHILD-CONTEXT test=goods_engine.tests.ps1 pid=25988 nonce=7cd859adce1940d2ad3fd91b65eead51 verified=True contexts=2 exit=0
+  == goods_engine tests ==
+  
+  RESULT: pass=27 fail=0
+  ALL PASS
+  
+  
+=== heartbeat.tests.ps1 ===
+CHILD-CONTEXT test=heartbeat.tests.ps1 pid=11680 nonce=194567100c5d432b951b5b7549ae44d6 verified=True contexts=2 exit=0
+  == heartbeat tests (table-driven) ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== log_maintenance.tests.ps1 ===
+CHILD-CONTEXT test=log_maintenance.tests.ps1 pid=37956 nonce=2d2e00e3065f49b2bc2b5698acbb60f2 verified=True contexts=2 exit=0
+  == log_maintenance tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== message_order.tests.ps1 ===
+CHILD-CONTEXT test=message_order.tests.ps1 pid=31264 nonce=232c9a7d09764cff9a19f6408aa79927 verified=True contexts=2 exit=1
+  FAIL: monitor-adapter-model-sees-question
+  FAIL: adapter-cannot-recreate-confident-order-from-stripped-lines
+  FAIL: generator-rejects-decision-about-an-older-message
+  FAIL: unsafe-handler-did-not-model-or-mutate-ledger
+  RESULT: pass=31 fail=4
+  
+  
+=== msg_source.tests.ps1 ===
+CHILD-CONTEXT test=msg_source.tests.ps1 pid=19956 nonce=2d8492d360e341358f75d67aa5439dee verified=True contexts=2 exit=0
+  == msg_source tests ==
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== no_reply_write.tests.ps1 ===
+CHILD-CONTEXT test=no_reply_write.tests.ps1 pid=29612 nonce=dd501994afad4357927d7d7e67b03caa verified=True contexts=2 exit=0
+  == no_reply_write tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_write_c32ccc0186da4a909687dd9d296b3e7b\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== no_reply.tests.ps1 ===
+CHILD-CONTEXT test=no_reply.tests.ps1 pid=4844 nonce=ddfe10873aab4f65862337bfdcc27040 verified=True contexts=2 exit=0
+  == no_reply tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_tests_c5f46753d0544c83ae4923af6bad9c17\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=29 fail=0
+  ALL PASS
+  
+  
+=== review_fixes.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes.tests.ps1 pid=29908 nonce=d4de2588cc1a445597b475223fe01421 verified=True contexts=2 exit=1
+  == review_fixes tests (pure layer) ==
+    FAIL: A1-role-purpose-allowed [Could you share the consignee's contact number for delivery?] CONTACT_ROLE_UNCLEAR
+    FAIL: A1-role-purpose-allowed [Could you share your supplier's contact details so we can confirm the packing information?] CONTACT_ROLE_UNCLEAR
+    FAIL: A1-role-purpose-allowed [Please share the recipient's phone number for delivery.] CONTACT_ROLE_UNCLEAR
+    FAIL: A1-role-purpose-allowed [Could you send the consignee's contact so the carrier can reach them?] CONTACT_ROLE_UNCLEAR
+    A1 done
+    A4 done
+    A6 done
+    FAIL: T1-variant-answers-tokyo [What time is it now in Tokyo?] It's 3:05 PM in Tokyo (UTC+9).
+    FAIL: T1-variant-answers-tokyo [What time is it in Tokyo now?] It's 3:05 PM in Tokyo (UTC+9).
+    FAIL: T1-variant-answers-tokyo [What's the current time in Tokyo?] It's 3:05 PM in Tokyo (UTC+9).
+    FAIL: T-mixed-time-answered We're Example Freight. It's 3:05 PM in Tokyo (UTC+9).
+    T1/T2 done
+    ledger states done
+  
+  RESULT: pass=113 fail=8
+  FAILED CASES: A1-role-purpose-allowed [Could you share the consignee's contact number for delivery?], A1-role-purpose-allowed [Could you share your supplier's contact details so we can confirm the packing information?], A1-role-purpose-allowed [Please share the recipient's phone number for delivery.], A1-role-purpose-allowed [Could you send the consignee's contact so the carrier can reach them?], T1-variant-answers-tokyo [What time is it now in Tokyo?], T1-variant-answers-tokyo [What time is it in Tokyo now?], T1-variant-answers-tokyo [What's the current time in Tokyo?], T-mixed-time-answered
+  
+  
+=== second_fix_contact.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_contact.tests.ps1 pid=14844 nonce=d7226164b9c34b22b1c336005337bae4 verified=True contexts=3 exit=1
+  == second_fix contact tests (F1) ==
+    FAIL: F1-authorized-recipient-redline-passes CONTACT_ASK_UNAUTHORIZED_FIELD
+    FAIL: F1-role-purpose-still-allowed [Could you share the consignee's name, contact number and delivery address?] CONTACT_ROLE_UNCLEAR,CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Could you share your supplier's contact details so we can confirm the packing information?] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Please share the recipient's phone number for delivery.] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Could you send the consignee's contact so the carrier can reach them?] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-role-purpose-still-allowed [Could you share your supplier's contact so we can check the carton count and packed weight with them?] CONTACT_ROLE_UNCLEAR
+    FAIL: F1-gen-rewrite-source got=[FALLBACK] want=[LLM_REWRITE]
+    FAIL: F1-gen-double-violation-reason business-body-sensitive
+  
+  RESULT: pass=52 fail=8
+  FAILED CASES: F1-authorized-recipient-redline-passes, F1-role-purpose-still-allowed [Could you share the consignee's name, contact number and delivery address?], F1-role-purpose-still-allowed [Could you share your supplier's contact details so we can confirm the packing information?], F1-role-purpose-still-allowed [Please share the recipient's phone number for delivery.], F1-role-purpose-still-allowed [Could you send the consignee's contact so the carrier can reach them?], F1-role-purpose-still-allowed [Could you share your supplier's contact so we can check the carton count and packed weight with them?], F1-gen-rewrite-source, F1-gen-double-violation-reason
+  
+  
+=== second_fix_policy.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_policy.tests.ps1 pid=2324 nonce=e9aa38cc2ff448fbbb1bf9046ff6ada8 verified=True contexts=2 exit=1
+  == second_fix policy tests (F5 / F6 / F8) ==
+    FAIL: F6-two-questions-answers-tokyo It's 2:05 PM in China (UTC+8). It's 3:05 PM in Tokyo (UTC+9).
+    FAIL: F6-one-question-answers-both It's 2:05 PM in China (UTC+8). It's 3:05 PM in Tokyo (UTC+9).
+    FAIL: F6-multi-message-answers-both It's 2:05 PM in China (UTC+8). It's 3:05 PM in Tokyo (UTC+9).
+    FAIL: F6-mixed-request-keeps-time We're Harbor Freight Management Co., Ltd. It's 3:05 PM in Tokyo (UTC+9).
+  
+  RESULT: pass=90 fail=4
+  FAILED CASES: F6-two-questions-answers-tokyo, F6-one-question-answers-both, F6-multi-message-answers-both, F6-mixed-request-keeps-time
+  
+  
+=== page_heal_throttle.tests.ps1 ===
+CHILD-CONTEXT test=page_heal_throttle.tests.ps1 pid=23516 nonce=71565497328b4e72aba752676e1e4110 verified=True contexts=2 exit=0
+  == page_heal_throttle tests ==
+  RESULT: pass=15 fail=0
+  ALL PASS
+  
+  
+=== page_health_verdict.tests.ps1 ===
+CHILD-CONTEXT test=page_health_verdict.tests.ps1 pid=23964 nonce=bd04f4c160ae49b394fad376f86fa897 verified=True contexts=2 exit=0
+  == page_health_verdict tests (table-driven) ==
+    verdict source = C:\path\to\alibaba-auto-reply\scripts\lib\cdp.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== reply_chain.tests.ps1 ===
+CHILD-CONTEXT test=reply_chain.tests.ps1 pid=38068 nonce=6f662d6f8ebe46f19707e69159d7949a verified=True contexts=2 exit=1
+  == reply_chain tests ==
+    FAIL: compliance-allows: If you can share your supplier's contact
+    FAIL: fallback-compliant: dimension_missing
+  RESULT: pass=154 fail=2
+  FAILED
+  
+  
+=== reply_engine.tests.ps1 ===
+CHILD-CONTEXT test=reply_engine.tests.ps1 pid=38628 nonce=5f3ba52b83764fa2b5c32d221277fff0 verified=True contexts=2 exit=0
+  == reply_engine tests ==
+  RESULT: pass=75 fail=0
+  ALL PASS
+  
+  
+=== reply_gate_dupskip.tests.ps1 ===
+CHILD-CONTEXT test=reply_gate_dupskip.tests.ps1 pid=26788 nonce=76bb717b3148422aa0e8d2c078694d65 verified=True contexts=2 exit=0
+  == reply_gate_dupskip tests ==
+  
+  RESULT: pass=42 fail=0
+  ALL PASS
+  
+  
+=== report_push.tests.ps1 ===
+CHILD-CONTEXT test=report_push.tests.ps1 pid=38564 nonce=849768e48f2a4c628c8b00469d606ebc verified=True contexts=2 exit=0
+  == report_push tests ==
+  
+    RESULT: pass=33 fail=0
+    ALL PASS
+  
+  
+=== rule_registry.tests.ps1 ===
+CHILD-CONTEXT test=rule_registry.tests.ps1 pid=6952 nonce=5f956470685f4a3eaeb1469eff0b6872 verified=True contexts=2 exit=1
+  == rule_registry tests ==
+    FAIL: wired-consumers-exist R-CONFIG-PROCESS-TEMPLATE:Get-ScenarioFallbackBody ; R-CONFIG-BILLING-RULE:Get-ScenarioFallbackBody
+    FAIL: every-violation-code-is-registered unregistered: UNSUPPORTED_RECEIVED_FACT
+    FAIL: wired-codes-exist-in-code R-TIME-TARGET-ANSWERED:FACT_TIME_TARGET_UNANSWERED ; R-TIME-TARGET-CLARIFIED:FACT_TIME_TARGET_UNCLARIFIED ; R-CLOCK-MATCH:FACT_TIME_MISMATCH
+  
+  RESULT: pass=11 fail=3
+  FAILED CASES: wired-consumers-exist, every-violation-code-is-registered, wired-codes-exist-in-code
+  
+  
+=== send_result.tests.ps1 ===
+CHILD-CONTEXT test=send_result.tests.ps1 pid=32760 nonce=158c40fa8e174231966806861eb7c73f verified=True contexts=2 exit=1
+  == send_result tests ==
+    FAIL: P-confirmed-status got=[unverified] want=[confirmed]
+    FAIL: P-confirmed-evidence 
+    FAIL: P-buyer-last-is-absent got=[unverified] want=[absent]
+    FAIL: P-other-ours-is-absent got=[unverified] want=[absent]
+    FAIL: X-confirmed-is-sent-ok got=[UNKNOWN] want=[SENT_OK]
+    FAIL: X-confirmed-flag got=[False] want=[True]
+  
+  RESULT: pass=19 fail=6
+  FAILED CASES: P-confirmed-status, P-confirmed-evidence, P-buyer-last-is-absent, P-other-ours-is-absent, X-confirmed-is-sent-ok, X-confirmed-flag
+  
+  
+=== should_reply_v2.tests.ps1 ===
+CHILD-CONTEXT test=should_reply_v2.tests.ps1 pid=31656 nonce=cf972b45597f425ea54757aa78a165db verified=True contexts=2 exit=0
+  == should_reply_v2 tests ==
+    §2 判定表: 5 行(行 2 两种形态)逐行断言, Reason 逐字
+    §4.1 裁决: 方案甲(保守) —— 账本不可读 ⇒ 判据行 1 fail-closed, 且整轮门禁 P6 保持
+  
+  RESULT: pass=90 fail=0
+  ALL PASS
+  
+  
+=== suggestions.tests.ps1 ===
+CHILD-CONTEXT test=suggestions.tests.ps1 pid=15120 nonce=f5d15242b6794574bf30e0c9e1bf8e66 verified=True contexts=2 exit=0
+  == suggestions tests ==
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== third_fix_clarify.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_clarify.tests.ps1 pid=4408 nonce=62ebb9a242ff4a7fad11e84d25e3c3ea verified=True contexts=2 exit=0
+  == third_fix clarification tests (R7) ==
+  
+  RESULT: pass=24 fail=0
+  ALL PASS
+  
+  
+=== third_fix_contact_fields.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_contact_fields.tests.ps1 pid=1108 nonce=fda32624b45d4854a218146fd527b020 verified=True contexts=2 exit=0
+  == third_fix contact/field tests (R1 / R4) ==
+  
+  RESULT: pass=37 fail=0
+  ALL PASS
+  
+  
+=== third_fix_g1_guard.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_g1_guard.tests.ps1 pid=35720 nonce=f39420f19c68470f946a8a833a546066 verified=True contexts=2 exit=1
+  == third_fix G1 production-path guard tests ==
+    FAIL: G1-outside-writer-roots-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-outside-writer-roots-is-not-benign got=[1] want=[0]
+    FAIL: G1-chrome-profile-without-running-chrome-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-writer-owned-without-writer-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-no-writer-any-change-is-fatal got=[UNRESOLVED] want=[FAIL]
+    FAIL: G1-injected-proof-is-pass got=[UNRESOLVED] want=[PASS]
+  
+  RESULT: pass=28 fail=6
+  FAILED CASES: G1-outside-writer-roots-is-fatal, G1-outside-writer-roots-is-not-benign, G1-chrome-profile-without-running-chrome-is-fatal, G1-writer-owned-without-writer-is-fatal, G1-no-writer-any-change-is-fatal, G1-injected-proof-is-pass
+  
+  
+=== third_fix_time_binding.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_time_binding.tests.ps1 pid=20508 nonce=a585d6c5a7684bdeafd90bd8bc2b48f2 verified=True contexts=2 exit=1
+  == third_fix time binding tests (R6) ==
+    FAIL: T01-correct-answer-passes 
+    FAIL: T09-mixed-keeps-fresh-time We're Example Freight. It's 1:37 PM in Tokyo (UTC+9).
+  
+  RESULT: pass=37 fail=2
+  FAILED CASES: T01-correct-answer-passes, T09-mixed-keeps-fresh-time
+  
+  
+=== vision.tests.ps1 ===
+CHILD-CONTEXT test=vision.tests.ps1 pid=25280 nonce=482e05d9d6e2447889b47bd523c9e2cf verified=True contexts=2 exit=0
+  == vision tests ==
+  
+    RESULT: pass=43 fail=0
+    ALL PASS
+  
+  
+=== amazon_destination.tests.ps1 ===
+CHILD-CONTEXT test=amazon_destination.tests.ps1 pid=39380 nonce=6890056df1b5407591aae2c620f52a92 verified=True contexts=2 exit=1
+  PASS B1 quote destination fact
+  PASS B1 no address ask
+  FAIL B1 goods to quote candidate
+  PASS B1 warehouse is not postal address
+  PASS B1 model context distinguishes warehouse and street
+  PASS B1 source evidence is buyer original
+  FAIL B3 unavailable model real generation fallback
+  FAIL B2 real model chain bounded rewrite then compliant fallback
+  PASS B2 deterministic address request [Please send the delivery address.]
+  PASS B2 deterministic address request [What is the zip code?]
+  PASS B2 deterministic address request [Could you confirm the warehouse code?]
+  PASS B2 deterministic address request [I need the destination city and state.]
+  PASS B2 deterministic address request [Delivery address is required.]
+  PASS B2 deterministic address request [Please confirm Amazon FTW1.]
+  PASS B2 deterministic address request [Should I quote to FTW1?]
+  PASS B2 acknowledgment allowed
+  PASS B2 excessive caller rewrite budget still bounded to one
+  PASS B2 price prohibition retained
+  PASS B4 positive expression [DDP to amazon: ftw1.]
+  PASS B4 positive expression [deliver to FBA warehouse FTW1]
+  PASS B4 positive expression [亚马逊 FTW1 仓]
+  PASS B4 positive expression [送到亚马逊：ftw1]
+  PASS B4 positive expression [Amazon LGB8]
+  PASS B4 decoded original over translation
+  PASS B5 buyer Amazon context bare answer
+  PASS B5 bot question provides context only
+  PASS B6 unsupported source [Our model is FTW1]
+  PASS B6 unsupported source [SKU FTW1]
+  PASS B6 unsupported source [order number FTW1]
+  PASS B6 unsupported source [https://example.invalid/Amazon/FTW1]
+  PASS B6 unsupported source [Amazon FTW1.pdf]
+  PASS B6 unsupported source [FTW1]
+  PASS B6 robot repetition not buyer evidence
+  PASS B6 goods also ignores bot destination
+  PASS B6 explicit owner confirmation has human source
+  PASS B6 bot cannot forge owner confirmation
+  FAIL B7 exact code question [Deliver to Amazon warehouse]
+  FAIL B7 exact code question [FBA]
+  FAIL B7 exact code question [DDP to Amazon X123456]
+  PASS B8 non receiving location [not FTW1]
+  PASS B8 non receiving location [we used FTW1 before]
+  PASS B8 non receiving location [pickup from Amazon FTW1]
+  PASS B8 non receiving location [Our model is FTW1]
+  PASS B8 trusted explicit revocation drops warehouse
+  PASS B8 trusted negation drops selected warehouse
+  PASS B8 unrelated text retains destination
+  PASS B9 trusted switch updates current warehouse
+  PASS B9 context current quote destination updated
+  PASS B9 goods current destination updated
+  FAIL B10 ambiguous Amazon FTW1 or TEST2
+  PASS B10 ambiguous goods not complete
+  FAIL B10 ambiguous Amazon FTW1/Amazon TEST2
+  PASS B10 ambiguous goods not complete
+  FAIL B10 ambiguous Amazon FTW1/Delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  FAIL B10 ambiguous Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  PASS B10 associated same message address retained
+  PASS B10 known plus unsupported alternative remains ambiguous
+  PASS B11 required cargo missing [53 x 41 x 32 cm, Amazon FTW1]
+  PASS B11 required cargo missing [216 kg, Amazon FTW1]
+  PASS B12 ordinary postal address usable
+  PASS B12 ordinary missing destination still asks address
+  PASS B12 address ownership clarification retained
+  PASS B12 explicit switch to private address
+  FAIL B13 actual goods quote reminder success
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : Exception calling "ReadAllText" with "1" argument(s): "Could not find file 
+  'C:\Users\<local-user>\AppData\Local\Temp\amazon_destination_test_993c12dbdcc348b4bd9f75f07d0c1fd8\reminders.json'."
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== atomic_state.tests.ps1 ===
+CHILD-CONTEXT test=atomic_state.tests.ps1 pid=5028 nonce=a9f2a5191c224b1fa1e2d4927127610e verified=True contexts=3 exit=0
+  == atomic_state tests ==
+  
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== daemon_launch.tests.ps1 ===
+CHILD-CONTEXT test=daemon_launch.tests.ps1 pid=7540 nonce=8b4c32956eff4bbf8c956142e307ad60 verified=True contexts=2 exit=0
+  == daemon_launch tests ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== env_block.tests.ps1 ===
+CHILD-CONTEXT test=env_block.tests.ps1 pid=6908 nonce=29d13c1254ef43aaa87796ca666f5313 verified=True contexts=2 exit=0
+  == env_block tests ==
+    NOTE: parent process has no case-insensitive duplicate env keys, skipping the folding assertions (environment-dependent, not a regression)
+  RESULT: pass=11 fail=0
+  ALL PASS
+  
+  
+=== human_pause.tests.ps1 ===
+CHILD-CONTEXT test=human_pause.tests.ps1 pid=32400 nonce=d22dfdbe58364531b80313c2f4fc4d00 verified=True contexts=3 exit=1
+  == human_pause tests ==
+    FAIL: P8-record-match-exact 
+    FAIL: P8-record-match-normalised 
+    FAIL: P8-index-map-marks-record-line 
+    FAIL: P8-record-line-is-bot got=[unknown] want=[bot]
+    FAIL: P8-record-line-evidence got=[timer-marker-only] want=[confirmed-send-record]
+    FAIL: P8-gate-sends-when-our-message-proven got=[SKIP] want=[SEND]
+    FAIL: P8-gate-reason-bot got=[unknown-me-tail] want=[bot-last]
+    FAIL: P8-store-persisted 
+    FAIL: P8-bot-line-is-a-confirmed-send got=[unknown] want=[bot]
+  
+  RESULT: pass=65 fail=9
+  FAILED CASES: P8-record-match-exact, P8-record-match-normalised, P8-index-map-marks-record-line, P8-record-line-is-bot, P8-record-line-evidence, P8-gate-sends-when-our-message-proven, P8-gate-reason-bot, P8-store-persisted, P8-bot-line-is-a-confirmed-send
+  
+  
+=== human_tasks.tests.ps1 ===
+CHILD-CONTEXT test=human_tasks.tests.ps1 pid=12520 nonce=5acc199ba8754190a03a254a4bae5570 verified=True contexts=3 exit=1
+  == human_tasks tests ==
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : NO-TRUSTED-FLOW-TRIGGER
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== isolation.tests.ps1 ===
+CHILD-CONTEXT test=isolation.tests.ps1 pid=27724 nonce=b97bb1caa6154d3f93a59e4acb0f1163 verified=True contexts=2 exit=0
+  == isolation tests (spec §6.3) ==
+    ok   I01a explicit ConfigPath is honoured
+    ok   I01b code root follows the explicit config
+    ok   I01c runtime root defaults to the code root
+    ok   I01d not isolated without an explicit runtime root
+    ok   I02a runtime paths resolve inside the explicit RuntimeRoot
+    ok   I02b code paths still come from the config
+    ok   I02c isolated flag is on
+    ok   I03 unmarked isolated runtime fails closed
+    ok   I04a marker exists after New-AarIsolationRoot
+    ok   I04b Test-AarIsolatedRuntime is true with marker
+    ok   I04c production path list is non-empty
+    ok   I04d writing a production path is refused
+    ok   I05a writing inside the isolated root is allowed
+    ok   I05b -WithinRuntimeRoot refuses an outside path
+    ok   I10 isolation root inside a production path is refused
+    ok   I08 Invoke-CdpEval is refused while isolated
+    ok   I09 Send-OneTalkMessage is refused while isolated
+    ok   I11a isolated writes create no production file
+    ok   I11b the isolated files really were written
+    ok   I12a importing the modules has no runtime error
+    ok   I12b import does not create the runtime root
+    ok   I07 unmarked runtime root is not "isolated"
+    ok   I07b a marker with isolated=false does not count
+    ok   I06a default resolution is production (not isolated)
+    ok   I06b the guard is a no-op in production mode
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock_scope.tests.ps1 ===
+CHILD-CONTEXT test=lock_scope.tests.ps1 pid=27176 nonce=5215a49ec4e64de5854c6902efe1b1c3 verified=True contexts=3 exit=0
+  == lock_scope tests ==
+  
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock.tests.ps1 ===
+CHILD-CONTEXT test=lock.tests.ps1 pid=11244 nonce=c76f7f54dea84be0a4e7adb1540bf374 verified=True contexts=3 exit=0
+  == lock tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== new_message_cooldown.tests.ps1 ===
+CHILD-CONTEXT test=new_message_cooldown.tests.ps1 pid=38104 nonce=dde44e2bfadf4d808f03e8f01c2ac921 verified=True contexts=2 exit=1
+  FAIL B2 actual send-time gate rejects a bypassed dirty adapter result
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: 18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True trusted=True alreadyAnswered=False secSinceLastSend=60 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=1 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=6CC3D195
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  Reply source: FALLBACK
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=24 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Thanks for your message.
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=35 budget=180s
+  FAIL release final holding line cannot bypass destination policy or advance state
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: 18 cartons, 53 x 41 x 32 cm, 216 kg gross, Amazon FTW1
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=True trusted=True alreadyAnswered=False secSinceLastSend=60 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=1 minGap=5m cooldown=True ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1 lastBuyerHash=6CC3D195
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  Reply source: FALLBACK
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=24 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Thanks for your message.
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=35 budget=180s
+  RESULT pass=80 fail=2
+  
+  
+=== reception_facts.tests.ps1 ===
+CHILD-CONTEXT test=reception_facts.tests.ps1 pid=14168 nonce=11554cd0e8aa4f48bc882ba930973121 verified=True contexts=2 exit=1
+  == reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+    FAIL: C01-explicit-place-text | got:[It's 3:05 PM in Tokyo (UTC+9).] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: C12-cross-day-text | got:[] want:[It's 2:05 AM on Oct 6 in China (UTC+8).]
+    FAIL: C17-model-unavailable-reason | got:[] want:[llm-failed]
+    FAIL: C17-model-unavailable-calls | got:[1] want:[0]
+    FAIL: C17-dirty-fallback-blocks | got:[FALLBACK] want:[BLOCKED]
+    FAIL: C17-dirty-fallback-empty-text | got:[Could you share the number of cartons or pallets?] want:[]
+    FAIL: C17-dirty-fallback-reason | text:[]
+    FAIL: R3-explicit-place [What time is it now in Tokyo?] | got:[It's 3:05 PM in Tokyo (UTC+9).] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [What time is it in Tokyo now?] | got:[It's 3:05 PM in Tokyo (UTC+9).] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [What's the current time in Tokyo?] | got:[It's 3:05 PM in Tokyo (UTC+9).] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [what time is it in Tokyo] | got:[It's 3:05 PM in Tokyo (UTC+9).] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-explicit-place [What time is it in Tokyo, please?] | got:[It's 3:05 PM in Tokyo (UTC+9).] want:[It's 3:05 PM in Japan (UTC+9).]
+    FAIL: R3-mixed-place-answered | text:[We're Harbor Freight Management Co., Ltd. It's 3:05 PM in Tokyo (UTC+9).]
+    FAIL: R4-ambiguous-country-clarifies [What time is it in the USA?] | got:[] want:[Happy to help with the time. Which city or time zone in the United States do you mean?]
+    FAIL: R4-ambiguous-country-one-question [What time is it in the USA?] | got:[0] want:[1]
+    FAIL: R4-ambiguous-country-clarifies [What time is it in the US?] | got:[] want:[Happy to help with the time. Which city or time zone in the United States do you mean?]
+    FAIL: R4-ambiguous-country-one-question [What time is it in the US?] | got:[0] want:[1]
+    FAIL: R4-explicit-place-precise [What time is it in London?] | got:[It's 7:05 AM in London (UTC+1).] want:[It's 7:05 AM in the UK (UTC+1).]
+    FAIL: R3-mixed-correct-zone-clock-allowed
+    FAIL: C22-dirty-final-fallback-terminates-send | got:[1] want:[0]
+    FAIL: C22-dirty-final-fallback-does-not-advance-ledger | got:[1] want:[0]
+    FAIL: C22-final-block-logged | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What's the name of your company
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=98E55EE2
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved by this test
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  Reply source: DIRECT_FACT
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=22 elapsed=0s status=SENT_OK evidence=[stub:confirmed]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] newest-outbound-message-matches
+  Reply text: We're Example Freight.
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=35 budget=180s]
+    FAIL: C22-clean-holding-line-is-sent | got:[We're Example Freight.] want:[I can't confirm that from here.]
+    FAIL: C12-entry-refresh-logged | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: What time is it now
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=7D0D2D69
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved by this test
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=current_time src=DIRECT_FACT modelCalls=0 rewrites=0 ctxChars=0 violations=[] fallback= ask=[] todo= orderConfident=True subject=seller facts=[current_time] unresolved=[] clock=injected-utc
+  Reply source: DIRECT_FACT
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=30 elapsed=0s status=SENT_OK evidence=[stub:confirmed]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] newest-outbound-message-matches
+  Reply text: It's 2:06 PM in China (UTC+8).
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=89 budget=180s]
+    FAIL: R3-entry-tokyo-reaches-stub | got:[It's 3:07 PM in Tokyo (UTC+9).] want:[It's 3:07 PM in Japan (UTC+9).]
+    FAIL: R3-entry-correct-zone-retained | text:[It's 3:08 PM in Tokyo (UTC+9). Could you share the total weight? Could you share the carton sizes (L x W x H)?]
+    FAIL: C23-reconcile-absent | text:[PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  INTERVENTION-SYNC Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=stub
+  Latest buyer msg: Can you quote 10 cartons to Hamburg?
+  NEW-MSG-EVIDENCE Virtual Buyer confirmedNew=False trusted=True alreadyAnswered=False secSinceLastSend=-1 floor=20s
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST seen=2/2 gapMin=-1 minGap=5m cooldown=False ledgerUsable=True buyerMsgs=1 alreadyAnswered=False ledgerKey= lastBuyerHash=92D1DDEE
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved by this test
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=1 rewrites=0 ctxChars=1538 violations=[] fallback= ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  INTERVENTION-SYNC-SEND-TIME Virtual Buyer ok=True pause=False hold=False newHuman=0 newUnknown=0 reason=stub
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=79 elapsed=0s status=UNKNOWN evidence=[stub:absent]
+  REPLIED to Virtual Buyer: SENT_OK [UNKNOWN] receipt-unclear: absent
+  Reply text: Could you share the total weight? Could you share the carton sizes (L x W x H)?
+  SEND-RECONCILE Virtual Buyer: unverified - before-snapshot-required
+  RETRY-QUEUE Virtual Buyer: send failed (SENT_OK | RECONCILE_UNVERIFIED), will retry after cooldown
+  ROUND-DONE Virtual Buyer ms=81 budget=180s]
+  RESULT pass=479 fail=27
+  
+  
+=== review_fixes_entry.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes_entry.tests.ps1 pid=26788 nonce=9a6897ceff754cbaa06c69012f2d08c5 verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : NO-TRUSTED-FLOW-TRIGGER
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== second_fix_summary.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_summary.tests.ps1 pid=28272 nonce=7c7df213f87a4420881ed090e1130d7a verified=True contexts=3 exit=0
+  == second_fix summary tests (actual summarize.ps1 subprocess, isolated runtime root) ==
+  ISOLATED-ROOT: C:\Users\<local-user>\AppData\Local\Temp\aar-secondfix-summary-9f5ec3f901e5413ca837786ce3e86b88
+  
+  RESULT pass=95 fail=0
+  ALL PASS
+  
+  
+=== send_page_param.tests.ps1 ===
+CHILD-CONTEXT test=send_page_param.tests.ps1 pid=21168 nonce=69dc3d7706ae49019e94e75e67488db2 verified=True contexts=2 exit=0
+  == send_page_param tests ==
+    child output lines = 16
+    child2 output lines = 15
+  
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== third_fix_pause_source.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_pause_source.tests.ps1 pid=24656 nonce=252909e18fac47b085314e3f70718d46 verified=True contexts=3 exit=0
+  == third_fix pause source tests (R5) ==
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== third_fix_tasks_evidence.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_tasks_evidence.tests.ps1 pid=24164 nonce=baf724a6307049cfa74729bdd81a9ea2 verified=True contexts=3 exit=1
+  == third_fix task/evidence tests (R2 / R3) ==
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : NO-TRUSTED-FLOW-TRIGGER
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== closure_s1.tests.ps1 ===
+CHILD-CONTEXT test=closure_s1.tests.ps1 pid=24116 nonce=e2a8f1c00ec845f9aab7f6a6612590ab verified=True contexts=3 exit=0
+  PASS D01
+  PASS D02
+  PASS D03
+  PASS D04
+  PASS D05
+  PASS D06
+  PASS D07
+  PASS D08
+  PASS D09
+  PASS D10
+  PASS D11
+  PASS D12
+  PASS D13
+  PASS D14
+  PASS D15
+  PASS D16
+  RESULT closure_s1 pass=16 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-eb232cd0a82745ad9808beeaf44a8d15
+  
+  
+=== closure_s2.tests.ps1 ===
+CHILD-CONTEXT test=closure_s2.tests.ps1 pid=27928 nonce=918f81157fd04520a7e4d807e526e2d3 verified=True contexts=2 exit=0
+  PASS P01
+  PASS P02
+  PASS P03
+  PASS P04
+  PASS P05
+  PASS P06
+  PASS P07
+  PASS P08
+  PASS P09
+  PASS P10
+  PASS P11
+  RESULT closure_s2 pass=11 fail=0
+  
+  
+=== closure_s3.tests.ps1 ===
+CHILD-CONTEXT test=closure_s3.tests.ps1 pid=32784 nonce=21cd209011e94eccbd320bd04ff75011 verified=True contexts=3 exit=0
+  PASS H01
+  PASS H02
+  PASS H03
+  PASS H04
+  PASS H05
+  PASS H06
+  PASS H07
+  PASS H08
+  RESULT closure_s3 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-6a3396a8281a4e62a728e8e021118555
+  
+  
+=== closure_s4.tests.ps1 ===
+CHILD-CONTEXT test=closure_s4.tests.ps1 pid=37196 nonce=b9b6f36862a743b69cfd957b25af3fd5 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  PASS T01
+  PASS T02
+  PASS T03
+  PASS T04
+  PASS T05
+  PASS T06
+  True
+  PASS T07
+  True
+  True
+  True
+  PASS T08
+  RESULT closure_s4 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-adf0241201924991bb8f2fe3dd1ca53d
+  
+  
+=== closure_g1.tests.ps1 ===
+CHILD-CONTEXT test=closure_g1.tests.ps1 pid=35060 nonce=c0e27f6fda6c4e34a5aaa530a0363e8f verified=True contexts=4 exit=0
+  PASS G01
+  PASS G02
+  PASS G03
+  RESULT closure_g1 pass=3 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-88692012da6f4fa6926dc1fbe13143b5
+  
+  
+
+TEST-SUMMARY: layer=Offline files=53 failedFiles=18 pass=2501 fail=89
+LogicTests=FAIL files=53 failedFiles=18 pass=2501 fail=89
+  failed files: contact_redline.tests.ps1, dimension_guidance.tests.ps1, message_order.tests.ps1, review_fixes.tests.ps1, second_fix_contact.tests.ps1, second_fix_policy.tests.ps1, reply_chain.tests.ps1, rule_registry.tests.ps1, send_result.tests.ps1, third_fix_g1_guard.tests.ps1, third_fix_time_binding.tests.ps1, amazon_destination.tests.ps1, human_pause.tests.ps1, human_tasks.tests.ps1, new_message_cooldown.tests.ps1, reception_facts.tests.ps1, review_fixes_entry.tests.ps1, third_fix_tasks_evidence.tests.ps1
+IsolationChecks=PASS checked=53 issues=0
+ProductionPathAudit=UNRESOLVED changes=4 writerRunning=True reason=concurrent change inside the live writer's output roots; the source is NOT proven (process existence is not write attribution)
+  attribution-clues(before): {"capturedAtUtc":"2026-10-05T11:47:27.8192722Z","lockHolderPid":"","monitorWatchdog":["2344","34196"],"chromeProcesses":["3248","6588","6760","7968","8264","8856","10220","11716","13004","16512","17572","19608","20428","22712","22968","26632","27796","28244","29772","30724","31776","33752","34728","35344","37872","38024","38684"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-05T11:50:44.6844055Z","lockHolderPid":"","monitorWatchdog":["2344","34196"],"chromeProcesses":["3248","6588","6760","7968","8264","8856","10220","11716","13004","16512","17572","19608","20428","21528","22712","22968","26632","27796","28244","29772","30724","31776","33752","34728","35344","37872","38024","38684"],"chromeProfilePath":""}
+  PRODUCTION-CHANGE-DETAILS (path | change | kind | before -> after):
+    C:\path\to\alibaba-auto-reply-runtime\data | changed | dir-metadata | DIR|2026-10-05T11:47:26.0957723Z|metadata-only -> DIR|2026-10-05T11:50:40.3163315Z|metadata-only
+    C:\path\to\alibaba-auto-reply-runtime\logs\monitor.log | changed | file-time | FILE|3305458|2026-10-05T11:47:25.6500208Z|sha256:no-hash -> FILE|3306424|2026-10-05T11:50:39.8296583Z|sha256:no-hash
+    C:\path\to\alibaba-auto-reply-runtime\logs\health.log | changed | file-content | FILE|209584|2026-10-05T11:33:09.0450573Z|sha256:a7be56fdd41d97f10629f881299fa42d61754f5ecd1b005c2c772ae7c1d192a9 -> FILE|209751|2026-10-05T11:48:10.9434830Z|sha256:81f6f8436769d74554103f0cca9baad09af2c545197870e24f8839e72f2c9df9
+    C:\path\to\alibaba-auto-reply-runtime\data\health_state.json | changed | file-time | FILE|1492|2026-10-05T11:33:09.0776810Z|sha256:7f934add8106d31e8da55bb164e611a9a75d3cceb6d786a19a3bbf93c9b12a34 -> FILE|1492|2026-10-05T11:48:10.9754329Z|sha256:7f934add8106d31e8da55bb164e611a9a75d3cceb6d786a19a3bbf93c9b12a34
+  NOTE: concurrent changes with no independent write-provenance evidence are UNRESOLVED; a running writer is a clue, not proof.
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\data","Change":"changed","Kind":"dir-metadata","Before":"DIR|2026-10-05T11:47:26.0957723Z|metadata-only","After":"DIR|2026-10-05T11:50:40.3163315Z|metadata-only"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\monitor.log","Change":"changed","Kind":"file-time","Before":"FILE|3305458|2026-10-05T11:47:25.6500208Z|sha256:no-hash","After":"FILE|3306424|2026-10-05T11:50:39.8296583Z|sha256:no-hash"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\logs\\health.log","Change":"changed","Kind":"file-content","Before":"FILE|209584|2026-10-05T11:33:09.0450573Z|sha256:a7be56fdd41d97f10629f881299fa42d61754f5ecd1b005c2c772ae7c1d192a9","After":"FILE|209751|2026-10-05T11:48:10.9434830Z|sha256:81f6f8436769d74554103f0cca9baad09af2c545197870e24f8839e72f2c9df9"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\data\\health_state.json","Change":"changed","Kind":"file-time","Before":"FILE|1492|2026-10-05T11:33:09.0776810Z|sha256:7f934add8106d31e8da55bb164e611a9a75d3cceb6d786a19a3bbf93c9b12a34","After":"FILE|1492|2026-10-05T11:48:10.9754329Z|sha256:7f934add8106d31e8da55bb164e611a9a75d3cceb6d786a19a3bbf93c9b12a34"}
+Overall=FAIL exitCode=1

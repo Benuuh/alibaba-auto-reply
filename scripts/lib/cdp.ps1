@@ -1,6 +1,17 @@
 ﻿# lib/cdp.ps1 - CDP 桥接统一封装:执行 JS / 健康探测。
 # 依赖: config.ps1(Get-SkillPath "cdp")。WS 超时保护在 cdp.ps1 内(连接 15s/接收 20s)。
+function Test-AarIsolationDeniedForEgress {
+    # [2026-10-05 spec §6.3] Memoized isolation probe used by the CDP egress. Fails closed to
+    # "not isolated" when the config stub throws, so existing callers keep their behaviour and only
+    # an explicitly marked isolated runtime is refused.
+    if(-not(Get-Command Assert-AarSendAllowed -ErrorAction SilentlyContinue)){. (Join-Path $PSScriptRoot 'paths.ps1')}
+    return (Test-AarOfflineRequired)
+
+}
+$script:__aarIsoEgressDenied = $null
+
 function Invoke-CdpEval([string]$js) {
+    if (Test-AarIsolationDeniedForEgress) { throw 'ISOLATION-VIOLATION: Invoke-CdpEval refused while running under an isolated runtime root' }
     $cdp = Get-SkillPath "cdp"
     # 防碎参:JS 先 Base64 再传子进程(-ScriptB64),避免文本含双引号/特殊字符时
     # powershell -File -Script <内联参数> 在命令行层被拆碎导致 eval 失败(cdp.ps1 内解码)

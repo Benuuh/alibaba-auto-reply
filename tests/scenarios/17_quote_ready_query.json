@@ -19,7 +19,7 @@
   "fakeModel": {
     "mode": "violation_then_compliant",
     "violationReply": "Your rate is ready - it is $1,850 USD, all in.",
-    "compliantReply": "I am still working on your rate and I do not want to send you a rough number. I will come back to you as soon as it is ready."
+    "compliantReply": "I am still working on your rate and I do not want to send you a rough number. I can't confirm it is ready yet."
   },
   "expectedDecision": {
     "needHumanTodo": true,

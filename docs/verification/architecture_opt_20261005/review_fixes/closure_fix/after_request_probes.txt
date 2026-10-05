@@ -1,0 +1,65 @@
+﻿RESULT|field-name-only-contact-authorized|Ok=False|Codes=CONTACT_ASK_UNAUTHORIZED_FIELD|Text=Could you share the recipient's name for delivery?
+ITEMS|field-name-only-contact-authorized|recipient:recipient_name:share:the recipient's name
+RESULT|explicit-new-verb-inherited-role|Ok=False|Codes=CONTACT_ASK_UNAUTHORIZED_FIELD,CONTACT_ASK_NO_ROLE|Text=Please share the recipient's name and provide phone number so we can reach you.
+ITEMS|explicit-new-verb-inherited-role|recipient:recipient_name:share:the recipient's name|none::provide:provide phone number so we can reach you.
+RESULT|tight-role-list-name-last|Ok=False|Codes=CONTACT_ASK_ALREADY_PROVIDED|Text=Could you share the recipient's phone number and name for delivery?
+ITEMS|tight-role-list-name-last|recipient:recipient_contact:share:the recipient's phone number|recipient:recipient_name:share:name
+RESULT|purpose-only-no-role|Ok=True|Codes=|Text=Could you share the delivery phone number?
+ITEMS|purpose-only-no-role|recipient:recipient_contact:share:delivery phone number
+RESULT|separate-role-and-generic-same-clause|Ok=True|Codes=|Text=Could you share the supplier's contact details as well as contact details so we can reach you?
+ITEMS|separate-role-and-generic-same-clause|supplier:supplier_contact:share:the supplier's contact details|supplier:supplier_contact:share:contact details
+RESULT|same-clause-role-before-generic|Ok=True|Codes=|Text=Please provide the supplier's contact details together with contact details so we can reach you.
+ITEMS|same-clause-role-before-generic|supplier:supplier_contact:provide:the supplier's contact details|supplier:supplier_contact:provide:contact details
+RESULT|empty-ask-still-authorized-by-purpose|Ok=False|Codes=CONTACT_ROLE_UNCLEAR|Text=Please share the recipient's phone number for delivery.
+ITEMS|empty-ask-still-authorized-by-purpose|recipient:recipient_contact:share:the recipient's phone number
+RESULT|provided-authorized-weight|Ok=False|Codes=ASK_ALREADY_PROVIDED|Text=Could you share the total weight?
+ITEMS|provided-authorized-weight|:weight:share:Could you share the total weight?
+RESULT|count-original-bad|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED|Text=Which carton count is correct - 999 or 1000?
+ITEMS|count-original-bad|:carton_count:which:Which carton count is correct - 999
+RESULT|count-original-good|Ok=True|Codes=|Text=Could you confirm whether the carton count is 20 or 24?
+ITEMS|count-original-good|:carton_count:confirm:Could you confirm whether the carton count is 20
+RESULT|count-kg-split|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED|Text=Which carton count is correct - 20 or 24 kg?
+ITEMS|count-kg-split|:carton_count:which:Which carton count is correct - 20|:weight:which:24 kg?
+RESULT|count-written-invented|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED|Text=Which carton count is correct - nine hundred ninety-nine or one thousand?
+ITEMS|count-written-invented|:carton_count:which:Which carton count is correct - nine hundred ninety-nine
+RESULT|count-collection-tail-inherited|Ok=False|Codes=ASK_OUT_OF_SCOPE|Text=Could you confirm whether the carton count is 20 or 24 and dimensions?
+ITEMS|count-collection-tail-inherited|:carton_count:confirm:Could you confirm whether the carton count is 20|:dimension:confirm:dimensions?
+RESULT|dim-unit-change|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED|Text=Could you confirm whether the dimensions per carton are 50x40x30 inches or 60x50x40 inches?
+ITEMS|dim-unit-change|:dimension:confirm:Could you confirm whether the dimensions per carton are 50x40x30 inches
+RESULT|dim-scope-change|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED,ASK_OUT_OF_SCOPE|Text=Could you confirm whether the dimensions of the full shipment are 50x40x30 cm or 60x50x40 cm?
+ITEMS|dim-scope-change|:dimension:confirm:Could you confirm whether the dimensions of the full shipment are 50x40x30 cm|:dimension:confirm:60x50x40 cm?
+RESULT|weight-scope-change|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED,ASK_OUT_OF_SCOPE|Text=Could you confirm whether the weight per carton is 20 kg or 24 kg?
+ITEMS|weight-scope-change|:weight:confirm:Could you confirm whether the weight per carton is 20 kg|:weight:confirm:24 kg?
+RESULT|destination-invented|Ok=False|Codes=ASK_OUT_OF_SCOPE|Text=Could you confirm which delivery destination we should use - London or Paris?
+ITEMS|destination-invented|:address:confirm:Could you confirm which delivery destination we should use - London
+CLARIFICATIONS|count|{"Id":"clarify-carton_count","FieldKey":"carton_count","ReasonKind":"conflict","Candidates":[{"Value":"20","Unit":"cartons","Scope":"cartons","SourceRefs":["message:buyer|2F5F1B3DFD766B40382CEF893F6549DC|1791172800000","source:buyer","index:0"]},{"Value":"24","Unit":"cartons","Scope":"cartons","SourceRefs":["message:buyer|2F5F1B3DFD766B40382CEF893F6549DC|1791172801000","source:buyer","index:1"]}],"SourceRefs":["message:buyer|2F5F1B3DFD766B40382CEF893F6549DC|1791172800000","source:buyer","message:buyer|2F5F1B3DFD766B40382CEF893F6549DC|1791172801000","index:0","index:1"],"AllowedOpenClarification":true,"AllowedQuestionForms":["Which 件数（箱/托盘） is correct - 20 or 24?","Could you confirm whether the 件数（箱/托盘） is 20 or 24?","Could you confirm which 件数（箱/托盘） we should use?"]}
+CLARIFICATIONS|dim|{"Id":"clarify-unit_dimensions","FieldKey":"unit_dimensions","ReasonKind":"conflict","Candidates":[{"Value":"50x40x30","Unit":"cm","Scope":"unit","SourceRefs":["message:buyer|BD176FC7278B3A9906E5DEA447A4066F|1791172800000","source:buyer","index:0"]},{"Value":"60x50x40","Unit":"cm","Scope":"unit","SourceRefs":["message:buyer|F0CCEA0C670097FB0F9658E6AF55756D|1791172801000","source:buyer","index:1"]}],"SourceRefs":["message:buyer|BD176FC7278B3A9906E5DEA447A4066F|1791172800000","source:buyer","message:buyer|F0CCEA0C670097FB0F9658E6AF55756D|1791172801000","index:0","index:1"],"AllowedOpenClarification":true,"AllowedQuestionForms":["Which 单件尺寸 is correct - 50x40x30 or 60x50x40?","Could you confirm whether the 单件尺寸 is 50x40x30 or 60x50x40?","Could you confirm which 单件尺寸 we should use?"]}
+CLARIFICATIONS|weight|{"Id":"clarify-total_weight","FieldKey":"total_weight","ReasonKind":"conflict","Candidates":[{"Value":"20","Unit":"kg","Scope":"total","SourceRefs":["message:buyer|2A464E8378F25E45BDDC0B88CEC0EC32|1791172800000","source:buyer","index:0"]},{"Value":"24","Unit":"kg","Scope":"total","SourceRefs":["message:buyer|2A464E8378F25E45BDDC0B88CEC0EC32|1791172801000","source:buyer","index:1"]}],"SourceRefs":["message:buyer|2A464E8378F25E45BDDC0B88CEC0EC32|1791172800000","source:buyer","message:buyer|2A464E8378F25E45BDDC0B88CEC0EC32|1791172801000","index:0","index:1"],"AllowedOpenClarification":true,"AllowedQuestionForms":["Which 总重量 is correct - 20 or 24?","Could you confirm whether the 总重量 is 20 or 24?","Could you confirm which 总重量 we should use?"]}
+CLARIFICATIONS|destination|
+RESULT|no-inherited-dimension-check|Ok=False|Codes=ASK_OUT_OF_SCOPE|Text=Please share the total weight and packed dimensions.
+ITEMS|no-inherited-dimension-check|:weight:share:Please share the total weight|:dimension:share:packed dimensions.
+RESULT|count-unrecognized-unit|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED|Text=Which carton count is correct - 20 bags or 24 bags?
+ITEMS|count-unrecognized-unit|:carton_count:which:Which carton count is correct - 20 bags
+RESULT|real-destination-invented|Ok=False|Codes=CLARIFY_CANDIDATE_UNSUPPORTED|Text=Could you confirm which delivery destination we should use - London or Paris?
+ITEMS|real-destination-invented|:address:confirm:Could you confirm which delivery destination we should use - London
+CLARIFICATIONS|real-destination|{"Id":"clarify-delivery_address","FieldKey":"delivery_address","ReasonKind":"destination","Candidates":[{"Value":"Amazon ONT8","Unit":"","Scope":"destination","SourceRefs":[]},{"Value":"Amazon FTW1","Unit":"","Scope":"destination","SourceRefs":[]}],"SourceRefs":[],"AllowedOpenClarification":true,"AllowedQuestionForms":["Which destination should I quote for - Amazon ONT8 or Amazon FTW1?","Which delivery destination should I quote for?"]}
+RESULT|recipient-name-real-clarify|Ok=True|Codes=|Text=Could you confirm whether the recipient's name is Alex or Bob?
+ITEMS|recipient-name-real-clarify|recipient:recipient_name:confirm:the recipient's name
+RESULT|recipient-name-invented-clarify|Ok=True|Codes=|Text=Could you confirm whether the recipient's name is Nobody or Stranger?
+ITEMS|recipient-name-invented-clarify|recipient:recipient_name:confirm:the recipient's name
+GEN|generic-contact-reaches-generation|Source=FALLBACK|Calls=2|Rewrites=1|Ask=supplier,carton_count|Text=Could you share your supplier's contact details so we can confirm the packing information? Could you share the number of cartons or pallets?
+GEN|name-provided-reaches-generation|Source=FALLBACK|Calls=2|Rewrites=1|Ask=recipient_contact|Text=Could you share the consignee's contact number for delivery?
+GEN|dimensions-inches-reaches-generation|Source=BLOCKED|Calls=2|Rewrites=1|Ask=weight,address|Text=
+GEN|explicit-verb-redline-reaches-generation|Source=FALLBACK|Calls=2|Rewrites=1|Ask=recipient_contact|Text=Could you share the consignee's contact number for delivery?
+GEN|contact-authorizes-name-reaches-generation|Source=FALLBACK|Calls=2|Rewrites=1|Ask=recipient_contact|Text=Could you share the consignee's contact number for delivery?
+GEN|weight-scope-reaches-generation|Source=BLOCKED|Calls=2|Rewrites=1|Ask=dimension,address|Text=
+GEN|inherited-dimensions-reaches-generation|Source=FALLBACK|Calls=2|Rewrites=1|Ask=weight|Text=Could you share the total weight?
+GEN|real-destination-invented-reaches-generation|Source=FALLBACK|Calls=2|Rewrites=1|Ask=address|Text=Could you confirm which delivery destination we should use?
+GEN|refusal-no-ask-ignored|Source=FALLBACK|Calls=2|Rewrites=1|Ask=weight|Text=Could you share the total weight?
+RESULT|original-contact-after-and-blocked|Ok=False|Codes=CONTACT_ASK_NO_ROLE|Text=Please share the supplier's contact details for packing and contact details so we can reach you.
+ITEMS|original-contact-after-and-blocked|supplier:supplier_contact:share:the supplier's contact details|none::share:contact details so we can reach you.
+RESULT|R4-good-phone-name-provided|Ok=True|Codes=|Text=Please share the recipient's phone number for delivery.
+ITEMS|R4-good-phone-name-provided|recipient:recipient_contact:share:the recipient's phone number
+RESULT|R4-direct-already-provided-name-blocked|Ok=False|Codes=CONTACT_ASK_ALREADY_PROVIDED|Text=Could you share the recipient's name for delivery?
+ITEMS|R4-direct-already-provided-name-blocked|recipient:recipient_name:share:the recipient's name
+CHILD_EXIT=0

@@ -1,0 +1,10 @@
+﻿tests\reception_facts.tests.ps1            exit=0    RESULT pass=391 fail=0
+tests\reply_chain.tests.ps1                exit=0    ALL PASS
+tests\reply_engine.tests.ps1               exit=0    ALL PASS
+tests\msg_source.tests.ps1                 exit=0    ALL PASS
+tests\message_order.tests.ps1              exit=0    ALL PASS
+tests\new_message_cooldown.tests.ps1       exit=0    RESULT pass=80 fail=0
+tests\amazon_destination.tests.ps1         exit=0    RESULT pass=80 fail=0
+tests\dimension_guidance.tests.ps1         exit=0    ALL PASS
+tests\docs_consistency.tests.ps1           exit=0    ALL PASS
+tests\should_reply.tests.ps1               exit=0    ALL PASS
