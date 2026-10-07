@@ -1,9 +1,9 @@
-﻿# Program-owned sensitive content. BusinessBody is a separate input with finite admission.
+﻿# Program-owned sensitive content, with natural model-written business explanations.
 function Get-BusinessBodyAdmission([string]$Text) {
     if(-not $Text){return [pscustomobject]@{Kind='ordinary';Allowed=$true}}
-    $catalog=@('Thanks for your message.','Happy to help with this.','Got it, thanks.','Thanks for letting me know.','No problem at all.','I understand.','Supplier contact details help us verify packing.','The chargeable weight is the higher of the actual gross weight and the volumetric weight.','Accurate packing information helps us assess freight requirements.')
-    $remaining=$Text.Trim()
-    while($remaining){$hit=$false;foreach($sentence in $catalog){if($remaining.StartsWith($sentence,[StringComparison]::OrdinalIgnoreCase)){$remaining=$remaining.Substring($sentence.Length).Trim();$hit=$true;break}};if(-not $hit){$kind='unknown';if($remaining -match '(?i)\b(share|provide|send|confirm|name|contact|time|today|tomorrow|received|stored|replied|called|price|weight|dimensions)\b'){$kind='sensitive'};return [pscustomobject]@{Kind=$kind;Allowed=$false}}}
+    # Ordinary explanations have no sentence catalogue. Protected claims stay with code.
+    $protected='(?i)\?|\b(?:could|can|would)\s+you\b|\b(?:please|kindly)\s+(?:share|send|give|provide|furnish|confirm)\b|\b(?:we|our team|I)\s+(?:have\s+|already\s+)?(?:received|stored|contacted|called|emailed|notified|will|shall)\b|\bsupplier\s+(?:has\s+)?(?:confirmed|replied)\b|\b(?:our company|my name|our name)\s+is\b|\b(?:today|tomorrow|current time|private correspondence|off.platform)\b'
+    if($Text -match $protected -or $Text -match '(?i)\b(?:midnight|noon|half\s+past|quarter\s+(?:past|to))\b'){return [pscustomobject]@{Kind='sensitive';Allowed=$false}}
     return [pscustomobject]@{Kind='ordinary';Allowed=$true}
 }
 # [独立复核 R07] 运输包装名词来自确认记录本身的单位（pallets 不得被渲染成 cartons）。
@@ -122,14 +122,22 @@ function Invoke-ReplyGeneration {
     $plan=New-ResponsePlan $Decision;$body='';$admission=Get-BusinessBodyAdmission ''
     if(-not $Decision.FactOnly -and (Get-Command Invoke-LLM -ErrorAction SilentlyContinue)){
         $context=New-ReplyContextBlock -Conversation $Conversation -Decision $Decision -RuntimeContext $RuntimeContext;$r.ContextChars=$context.Length
-        $prompt=(Get-ReplySystemPrompt $PromptPath)+"`nOnly choose ordinary business explanations or polite acknowledgements. Program code owns every request, fact, clarification and action."
+        $prompt=(Get-ReplySystemPrompt $PromptPath)+"`nWrite natural, relevant business explanations in your own words. Program code owns collection requests, verified identity/time, received facts and action claims. Do not repeat those fragments."
         if($ScenarioPath){$prompt+="`n"+(Get-ScenarioGuidance -Path $ScenarioPath -Key $Decision.GuidanceKey)}
         $user=$context;if($AttachmentText){$user+="`n[UNTRUSTED ATTACHMENT]`n"+$AttachmentText}
         $content=$user;if($ImageDataUrls -and (Get-Command New-VisionContentParts -ErrorAction SilentlyContinue)){$content=@(New-VisionContentParts $ImageDataUrls $user)}
         $messages=@(@{role='system';content=$prompt},@{role='user';content=$content})
         $r.ModelCalls++;try{$body=[string](Invoke-LLM $messages $Temperature $MaxTokens $LogFile)}catch{$body='';$r.FallbackReason='llm-failed'}
         $admission=Get-BusinessBodyAdmission $body
-        if(-not $admission.Allowed -and $MaxRewrites -gt 0){$r.Rewrites=1;$messages[0].content+="`nRewrite using only registered ordinary business wording, with no requests, facts, prices, actions or times.";$r.ModelCalls++;try{$body=[string](Invoke-LLM $messages $Temperature $MaxTokens $LogFile)}catch{$body='';$r.FallbackReason='llm-failed'};$admission=Get-BusinessBodyAdmission $body}
+        $draft=Compose-Reply $plan $body
+        $draftCheck=Test-ReplyCompliance -Text $draft.Text -Rules $Rules -Decision $Decision
+        if((-not $admission.Allowed -or -not $draftCheck.Ok) -and $MaxRewrites -gt 0){
+            $r.Rewrites=1
+            $messages[0].content+="`nRewrite the business explanation naturally. Remove protected requests/facts/actions and these violations: " + (@($draftCheck.Violations|ForEach-Object {$_.Code}) -join ', ')
+            $r.ModelCalls++
+            try{$body=[string](Invoke-LLM $messages $Temperature $MaxTokens $LogFile)}catch{$body='';$r.FallbackReason='llm-failed'}
+            $admission=Get-BusinessBodyAdmission $body
+        }
     }
     if(-not $body){$r.FallbackReason='llm-failed'}
     if(-not(Get-Command Invoke-LLM -ErrorAction SilentlyContinue)){$r.FallbackReason='llm-unavailable'}
@@ -137,6 +145,12 @@ function Invoke-ReplyGeneration {
     $composition=Compose-Reply $plan $body
     $check=Test-ReplyCompliance -Text $composition.Text -Rules $Rules -Decision $Decision;$r.Violations=$check.Violations
     if($check.Ok){$r.Text=$composition.Text;$r.Composition=$composition;$r.Source=$(if($Decision.FactOnly){'DIRECT_FACT'}elseif($body){if($r.Rewrites){'LLM_REWRITE'}else{'LLM'}}else{'FALLBACK'})}
-    else{$r.FallbackReason+='|controlled-plan-noncompliant'}
+    else{
+        $r.FallbackReason+='|business-body-noncompliant'
+        $composition=Compose-Reply $plan ''
+        $fallbackCheck=Test-ReplyCompliance -Text $composition.Text -Rules $Rules -Decision $Decision
+        if($fallbackCheck.Ok){$r.Text=$composition.Text;$r.Composition=$composition;$r.Source='FALLBACK'}
+        else{$r.FallbackReason+='|controlled-plan-noncompliant'}
+    }
     return $r
 }

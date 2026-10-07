@@ -186,6 +186,12 @@ function Get-SkillPath([string]$name) {
         "remind"  { return $remind }
         # 已确认发送记录（spec §2.2 的来源证据）：与其它运行态文件同根，便于隔离测试。
         "sent_records" { return (Join-Path $data "sent_records.json") }
+        # [2026-10-07 消息来源三类判定与接待恢复修复] 新增运行态存储，一律由 $data 派生：
+        #   隔离分支与生产分支各自派生同一具名路径，脚本不得自行 Join-Path 拼运行态路径。
+        #   两者都落在 data 目录内，已被 Get-AarProductionPaths 的 data 目录指纹覆盖
+        #   （不需要新增配置键，因此也不进 config.json / config.json.example）。
+        "investigations" { return (Join-Path $data "investigations.json") }
+        "send_attempts"  { return (Join-Path $data "send_attempts.json") }
         "rules"   { if ($cfg.reply_rules_file) { return [string]$cfg.reply_rules_file } else { return (Join-Path $scripts "reply_rules.json") } }
         "registry" { if ($cfg.rule_registry_file) { return [string]$cfg.rule_registry_file } else { return (Join-Path $scripts "reply_rules.registry.json") } }
         default   { return $root }

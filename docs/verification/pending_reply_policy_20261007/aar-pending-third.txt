@@ -1,0 +1,27 @@
+TEST-LAYER=Offline files=1 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder= processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== pending_reply_policy.tests.ps1 ===
+CHILD-CONTEXT test=pending_reply_policy.tests.ps1 pid=39920 nonce=a21af36f183141d59f3002f3c3848368 verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  FAIL natural-model-body-survives natural unregistered body must reach send: Could you share the total weight? logs: PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False | Latest buyer msg: I need to ship furniture. | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1472 violations=[ASK_OUT_OF_SCOPE] fallback=|business-body-noncompliant ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=pending+identity+input+ledger | ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? | QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor) | ROUND-DONE Virtual Buyer ms=1906 budget=180s
+  PASS protected-body-one-rewrite
+  PASS final-pending-gate
+  PASS changed-input-discards-draft
+  PASS read-failure-rereads-once-then-human
+  PASS stale-pending-task-is-idempotent
+  PASS one-read-failure-does-not-stop-other-buyers
+  PASS task-store-failure-does-not-throw
+  RESULT pass=7 fail=1
+  
+  
+
+TEST-SUMMARY: layer=Offline files=1 failedFiles=1 pass=7 fail=1
+LogicTests=FAIL files=1 failedFiles=1 pass=7 fail=1
+  failed files: pending_reply_policy.tests.ps1
+IsolationChecks=PASS checked=1 issues=0
+ProductionPathAudit=PASS changes=0 writerRunning=False reason=no production path changed during this run
+  attribution-clues(before): {"capturedAtUtc":"2026-10-07T01:31:57.3097512Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-07T01:32:12.8948606Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+Overall=FAIL exitCode=1

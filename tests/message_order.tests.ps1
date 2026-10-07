@@ -7,6 +7,10 @@ $scripts = Join-Path $repo 'scripts'
 . (Join-Path $scripts 'lib/msg_norm.ps1')
 . (Join-Path $scripts 'lib/reply_policy.ps1')
 . (Join-Path $scripts 'lib/reply_gen.ps1')
+# [2026-10-07 spec §3.1 / 复核 R1] 生产抽取器的逐条抽取与行序列化现在只有一份实现
+#   （libmsg_extract_js.ps1）；本测试 AST 抽取 Open-ConvoAndGetMessages 后必须把这份共享
+#   脚本一起装上，否则它内部的 $rowJs 取不到值。
+. (Join-Path $scripts 'lib/msg_extract_js.ps1')
 $script:pass = 0
 $script:fail = 0
 function Check([string]$name, [bool]$value) {

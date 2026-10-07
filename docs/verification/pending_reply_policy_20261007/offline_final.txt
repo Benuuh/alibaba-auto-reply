@@ -1,0 +1,68 @@
+TEST-LAYER=Offline files=7 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder= processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== conversation_scope.tests.ps1 ===
+CHILD-CONTEXT test=conversation_scope.tests.ps1 pid=1732 nonce=f260379ed94b47f6a736272837c580f7 verified=True contexts=2 exit=0
+  PASS conversation_scope DOM regressions=24
+  RESULT pending_list pass=8 fail=0
+  RESULT conversation_scope: PASS (production DOM scripts + pending list + unreadable snapshot guard)
+  
+  
+=== message_order.tests.ps1 ===
+CHILD-CONTEXT test=message_order.tests.ps1 pid=10340 nonce=64abf5ffc5c14ac5b4c89c3b19d78386 verified=True contexts=2 exit=0
+  RESULT: pass=35 fail=0
+  ALL PASS
+  
+  
+=== reply_chain.tests.ps1 ===
+CHILD-CONTEXT test=reply_chain.tests.ps1 pid=13440 nonce=de4b83f0f9d6483eb5416eab40c4b7ee verified=True contexts=2 exit=0
+  == reply_chain tests ==
+  RESULT: pass=156 fail=0
+  ALL PASS
+  
+  
+=== msg_source_three_class.tests.ps1 ===
+CHILD-CONTEXT test=msg_source_three_class.tests.ps1 pid=18476 nonce=f76a7c4288ec4d2faa13feb9fde47ab5 verified=True contexts=3 exit=0
+  RESULT: pass=51 fail=0
+  ALL PASS
+  
+  
+=== msg_source_consumers.tests.ps1 ===
+CHILD-CONTEXT test=msg_source_consumers.tests.ps1 pid=3572 nonce=72e3d267ae8944b5ba8abd828e55af9f verified=True contexts=2 exit=0
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== pending_reply_policy.tests.ps1 ===
+CHILD-CONTEXT test=pending_reply_policy.tests.ps1 pid=12956 nonce=e8e6a94793c74870bd31651f923ce5fb verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  PASS natural-model-body-survives
+  PASS protected-body-one-rewrite
+  PASS final-pending-gate
+  PASS changed-input-discards-draft
+  PASS read-failure-rereads-once-then-human
+  PASS stale-pending-task-is-idempotent
+  PASS one-read-failure-does-not-stop-other-buyers
+  PASS task-store-failure-does-not-throw
+  PASS retry-uses-pending-not-me-tail
+  PASS buyer-word-is-not-ui-noise
+  PASS unknown-direction-is-read-failure-not-source-wait
+  PASS trigger-identity-is-persisted
+  RESULT pass=12 fail=0
+  
+  
+=== source_recovery_schedule.tests.ps1 ===
+CHILD-CONTEXT test=source_recovery_schedule.tests.ps1 pid=35508 nonce=4d58e1bd828c4891b2bf75bb1d0103cd verified=True contexts=2 exit=0
+  RESULT: pass=59 fail=0
+  ALL PASS
+  
+  
+
+TEST-SUMMARY: layer=Offline files=7 failedFiles=0 pass=344 fail=0
+LogicTests=PASS files=7 failedFiles=0 pass=344 fail=0
+IsolationChecks=PASS checked=7 issues=0
+ProductionPathAudit=PASS changes=0 writerRunning=False reason=no production path changed during this run
+  attribution-clues(before): {"capturedAtUtc":"2026-10-07T01:59:15.7301410Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-07T02:00:16.3367768Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+Overall=PASS exitCode=0

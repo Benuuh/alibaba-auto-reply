@@ -29,6 +29,19 @@ $scripts = Join-Path $repo "scripts"
 . (Join-Path $scripts "lib\paths.ps1")
 . (Join-Path $scripts "lib\msg_norm.ps1")
 . (Join-Path $scripts "lib\facts_engine.ps1")
+# [2026-10-07 spec §3.2 第 3 条] 无发送者证据的 [ME] 行现在是 unknown，不再外推为人工。
+#   本套夹具用逐条已验证的发送者字段提供人工来源证据（字段在 @@META 载荷里，正文无法伪造）。
+. (Join-Path $scripts 'lib\msg_events.ps1')
+[void](Set-MessageSourceContext -Rules (New-MessageSourceRuleSet -VerifiedFields ([pscustomobject]@{ 'sender=owner' = 'human' }) -Provenance 'fixture-verified-owner-field'))
+function New-OwnerMeta([string]$text, [long]$ts) {
+    return (ConvertTo-MessageMetaMarker ([pscustomobject]@{
+        v = 'msgevent-2026-10-07.1'; t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        dir = 'out'; dirsrc = 'layout'; mid = ''; ts = $ts; tprec = 'second'; st = 'message'
+        src = @(); f = @('sender=owner'); at = '2026-10-05T00:00:00Z'; idq = 'composite'
+    }))
+}
+function OwnerLine([string]$text, [long]$ts) { return ('[ME] ' + $text + ' @@MT:' + $ts + ' ' + (New-OwnerMeta $text $ts)) }
+
 
 $script:pass = 0
 $script:fail = 0
@@ -59,7 +72,7 @@ function BuyerLine([string]$t, [long]$ts, [string]$markers = '') {
     return ('[BUYER] ' + $t + ' ' + $markers + ' @@TS:' + $ts + ' @@MT:' + $ts + ' @@OT:' + (B64 $t))
 }
 function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts) }
-function HumanLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts) }
+function HumanLine([string]$t, [long]$ts) { return (OwnerLine $t $ts) }
 function Conv([string[]]$lines) { return (ConvertTo-MessageList ($lines -join $LF) 'Test Buyer') }
 function Facts([string[]]$lines, $sent = $null) { return (Get-CargoFacts -Conversation (Conv $lines) -SentMatches $sent) }
 function Field($facts, [string]$key) { return $facts.ByKey[$key] }
@@ -354,7 +367,7 @@ Assert-Eq 'C23-human-confirmation-source' (Field $c23 'carton_count').Source 'hu
 
 $c24lines = @(
     (BuyerLine 'Hello, we want to ship some goods.' (NextTs)),
-    ('[ME] The total weight is 200 kg. @@MT:' + (NextTs))
+    (OwnerLine 'The total weight is 200 kg.' (NextTs))
 )
 $c24a = Facts $c24lines @{ 1 = $true }
 Assert-True 'C24-confirmed-send-record-is-our-message' ((Field $c24a 'total_weight').Status -ne 'provided')

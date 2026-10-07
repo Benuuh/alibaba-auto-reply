@@ -37,7 +37,7 @@
 
 - **现象**：自决策 D2（企微告警以新通道 dsh-im 为准、停掉 watchdog 对旧通道 19886 的保活）落地后，走旧通道的告警发送**恒返回 `SERVICE_DOWN`**，`health.log` 也会持续 `SERVICE_DOWN`。
 - **原因**：旧通道被有意停用/不再保活；`tools\wecom-connector` 不再常驻监听 `127.0.0.1:19886`。
-- **证据**：本仓 spec `告警通道交接固化_20260926.md` §1.1（`wecom-connector.ps1 -Action status ⇒ SERVICE_DOWN`）、§2 D2、§8 R5/R6；`config.json` 的 `exit_on_kicked_offline: true` 与新旧通道**同一个 bot**（`wecom_7ffc7620be27735ce1ec4cf3`）的互踢逻辑见 §1.4。
+- **证据**：本仓 spec `告警通道交接固化_20260926.md` §1.1（`wecom-connector.ps1 -Action status ⇒ SERVICE_DOWN`）、§2 D2、§8 R5/R6；`config.json` 的 `exit_on_kicked_offline: true` 与新旧通道**同一个 bot**（`<private-identifier>`）的互踢逻辑见 §1.4。
 - **影响**：**在 A8 完成（新通道业务级验证）之前，告警仍是"哑"的**——`alert_active.json` 里会出现"全是 `SERVICE_DOWN`/`local-only`、没有一项真推出去"。这是**决策的代价，不是新故障**。
 - **不要误判为**：① "告警链路修好了"（`SERVICE_DOWN` 消失≠能到达人，唯一硬证据是 A8：用户发消息后 `dsh-wecom` 的 `state.json` 时间戳推进）；② "`SERVICE_DOWN` ⇒ 赶紧把旧通道再拉起来"（那会与 dsh-im 抢同一个 bot，回到互踢状态）。
 - **下游处置**：把 7 处告警调用点从 `Send-WecomMessage` 改走 dsh-im（spec 附录 D 第 1 条，**下一份 spec**）。**不许**为让告警变绿改阈值或关任务。

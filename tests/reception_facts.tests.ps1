@@ -673,7 +673,7 @@ Assert-True 'R3-mixed-correct-zone-clock-allowed' ($chk.Ok)
 $tokens = $null; $astErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $scripts 'monitor.ps1'), [ref]$tokens, [ref]$astErrors)
 if ($astErrors.Count) { throw 'scripts\monitor.ps1 failed to parse' }
-foreach ($fnName in @('Invoke-ConvoItem','Generate-Reply-LLM','Update-PendingSeen','Set-StateHash','Test-RepliedStateUsable','Get-RepliedStateFileSize','Resolve-UnknownSendResult','Test-PendingReplyObsolete','Get-TaskContextForConvo','Get-LedgerHealth','Reset-LedgerHealthCache','Get-CachedDocumentRead','Test-LedgerShape','Get-ReplyEntryCount')) {
+foreach ($fnName in @('Invoke-ConvoItem', 'Get-MonitorSourceGate', 'Get-MonitorSourceRules', 'Get-MonitorSourceConfirmed', 'New-MonitorInvestigation', 'New-SourceUnknownInvestigation', 'Invoke-MonitorInvestigationSweep', 'Invoke-MonitorInvestigationRetention','Generate-Reply-LLM','Update-PendingSeen','Set-StateHash','Test-RepliedStateUsable','Get-RepliedStateFileSize','Resolve-UnknownSendResult','Test-PendingReplyObsolete','Get-TaskContextForConvo','Get-LedgerHealth','Reset-LedgerHealthCache','Get-CachedDocumentRead','Test-LedgerShape','Get-ReplyEntryCount','Test-PageConfirmedSendResult','Test-ReconciledDeliveryEvidence','Complete-ReconciledDelivery')) {
     $fnAst = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $fnName }, $true)
     if (-not $fnAst) { throw ('monitor.ps1 does not define ' + $fnName) }
     Invoke-Expression $fnAst.Extent.Text
@@ -755,7 +755,7 @@ function Send-OneTalkMessage($name, $text) { $script:sends++; $script:sentText =
 # stub models BOTH halves: the page action ($script:sendResult) and the outbound receipt
 # ($script:sendConfirm = 'confirmed' | 'absent' | 'unverified').
 function Send-OneTalkMessageEx {
-    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation)
+    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation, [string]$AttemptId = '')
     $raw = Send-OneTalkMessage $buyer $text
     $st = 'FAILED'; $confirmed = $false; $detail = 'send-not-confirmed'
     if ($raw -match 'ABORT_WRONG_CONVO') { $detail = 'wrong-conversation' }
@@ -819,6 +819,7 @@ function New-OrUpdate-SupplierVerificationTask {
 function Add-HumanTaskNotification { param([string]$Id, [bool]$Delivered = $false, [string]$Detail = '') return $true }
 
 $item = [pscustomobject]@{ name = 'Virtual Buyer'; preview = 'unchanged'; unread = $true }
+function Get-Snapshot { return '[{"name":"Virtual Buyer","preview":"unchanged"}]' }
 function ResetEntry {
     $script:logs = @(); $script:sends = 0; $script:modelCalls = 0; $script:reads = 0; $script:writes = 0
     $script:modelQueue.Clear(); $script:modelInputs.Clear(); $script:modelInput = ''
@@ -956,7 +957,7 @@ Assert-Eq 'C20-whitelist-blocks-model' $script:modelCalls 0
 $ctx = ResetEntry
 $script:raw = (BLine "What's the name of your company" $ts) + $LF + (HumanLine 'Owner answered directly.' ($ts + 1000))
 Invoke-ConvoItem $ctx $item
-Assert-Eq 'C20-human-already-answered-blocks' $script:sends 0
+Assert-Eq 'C20-current-pending-processes-despite-me-tail' $script:sends 1
 Assert-Eq 'C20-human-already-answered-no-model' $script:modelCalls 0
 $ctx = ResetEntry
 $script:raw = (BLine 'hello' $ts) + $LF + (BLine 'What time is it now' ($ts + 2000)) + $LF + (BLine "What's ur name" ($ts + 1000))

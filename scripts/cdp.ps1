@@ -13,14 +13,28 @@ function Send-Json([System.Net.WebSockets.ClientWebSocket]$ws, [string]$json) {
     $ws.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).Wait()
 }
 
-function Recv-Json([System.Net.WebSockets.ClientWebSocket]$ws) {
-    $buffer = New-Object byte[] 67108864
+function Recv-Json([System.Net.WebSockets.WebSocket]$ws) {
+    # [FIX-WSRECV 2026-10-07] 必须循环收到 EndOfMessage 为止。
+    #   旧实现只取**第一帧**就返回，而 CDP 的响应超过约 16KB 时会被拆成多个 WebSocket 帧
+    #   ⇒ 返回的 JSON 被截断 ⇒ 下游 ConvertFrom-Json 抛
+    #     "Unterminated string passed in. (16380)" ⇒ 本脚本输出单行 CDP ERROR ⇒
+    #     调用方（monitor / send）按"CDP 失败"处理，会话永远打不开。
+    #   实测（同一页面，同一把锁）：请求 16000 字符正常返回；请求 20000/40000/200000 一律
+    #   在 16380 处截断。长会话每行都带 @@OT/@@META，因此最容易撞上这个上限 ——
+    #   这正是历史日志里 PARSE_FAIL / cannot open convo 累计 966 次的成因。
+    $ms = New-Object System.IO.MemoryStream
+    $buffer = New-Object byte[] 65536
     $recvSeg = [ArraySegment[byte]]::new($buffer)
-    # 超时保护:20 秒收不到任何数据即判定连接僵死(曾出现 navigate 挂起 8 分钟)
-    $recvTask = $ws.ReceiveAsync($recvSeg, [Threading.CancellationToken]::None)
-    if (-not $recvTask.Wait(20000)) { throw "WS RECV TIMEOUT (no data for 20s)" }
-    $result = $recvTask.Result
-    return [System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count)
+    while ($true) {
+        # 超时保护:20 秒收不到任何数据即判定连接僵死(曾出现 navigate 挂起 8 分钟)
+        $recvTask = $ws.ReceiveAsync($recvSeg, [Threading.CancellationToken]::None)
+        if (-not $recvTask.Wait(20000)) { throw "WS RECV TIMEOUT (no data for 20s)" }
+        $result = $recvTask.Result
+        if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) { break }
+        if ($result.Count -gt 0) { $ms.Write($buffer, 0, $result.Count) }
+        if ($result.EndOfMessage) { break }
+    }
+    return [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
 }
 
 function Cmd([System.Net.WebSockets.ClientWebSocket]$ws, [int]$id, [string]$method, [string]$paramsJson) {

@@ -1,0 +1,775 @@
+TEST-LAYER=Offline files=63 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder= processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== alert_dedup.tests.ps1 ===
+CHILD-CONTEXT test=alert_dedup.tests.ps1 pid=36816 nonce=f35995fba3044775ba32dd4e4ad24c55 verified=True contexts=2 exit=0
+  == alert_dedup tests (table-driven) ==
+    dedup source = C:\path\to\alibaba-auto-reply\scripts\lib\alert_dedup.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== cargo_facts.tests.ps1 ===
+CHILD-CONTEXT test=cargo_facts.tests.ps1 pid=7056 nonce=8da782d52f9f4bac830c63af856824a6 verified=True contexts=2 exit=0
+  == cargo_facts tests ==
+  
+  RESULT: pass=159 fail=0
+  ALL PASS
+  
+  
+=== contact_redline.tests.ps1 ===
+CHILD-CONTEXT test=contact_redline.tests.ps1 pid=11352 nonce=4439e8e07db5491da4a26135e4ed849f verified=True contexts=2 exit=0
+  == contact_redline tests ==
+  
+  RESULT: pass=57 fail=0
+  ALL PASS
+  
+  
+=== conversation_scope.tests.ps1 ===
+CHILD-CONTEXT test=conversation_scope.tests.ps1 pid=38248 nonce=439b39b0941748ac941ffa3ba7bfa70a verified=True contexts=2 exit=0
+  PASS conversation_scope DOM regressions=24
+  RESULT conversation_scope: PASS (production DOM scripts + unreadable snapshot guard)
+  
+  
+=== dedup_order.tests.ps1 ===
+CHILD-CONTEXT test=dedup_order.tests.ps1 pid=30144 nonce=89fd1bd581ea4f11a9fa2148f156e32e verified=True contexts=2 exit=0
+  == dedup_order tests ==
+    锚点已退出判定: 2 种顺序 × 3 种账本 key = 6 种组合, 结论全部 = True|IN_PENDING_LIST
+    防哑巴: 会话在待回复列表里(连续 2 轮) ⇒ 必回, 与账本条数是否增长无关
+  RESULT: pass=50 fail=0
+  ALL PASS
+  
+  
+=== dimension_guidance.tests.ps1 ===
+CHILD-CONTEXT test=dimension_guidance.tests.ps1 pid=29680 nonce=d5711d18edf64a3aa04fee5a5209706f verified=True contexts=2 exit=0
+  == dimension_guidance tests ==
+  RESULT: pass=44 fail=0
+  ALL PASS
+  
+  
+=== docs_consistency.tests.ps1 ===
+CHILD-CONTEXT test=docs_consistency.tests.ps1 pid=11168 nonce=a9b437a6657447f18ab9d0aa42eedc2c verified=True contexts=2 exit=0
+  == docs_consistency tests ==
+    ok   health_check.ps1 能派生出检查项
+    ok   README_部署说明.md 有检查项声明行
+    ok   检查项【数量】一致
+    ok   检查项【名单】无遗漏
+    ok   检查项【名单】无多余
+    ok   config.json.example 存在
+    ok   config.json.example 是合法 JSON
+    ok   模板键集 ⊇ 现役键集
+    ok   config.json.example 含 reply_min_gap_min = 5
+    ok   config.json 含 reply_min_gap_min = 5
+    ok   config.json.example 含 reply_post_send_cooldown_min = 5
+    ok   config.json 含 reply_post_send_cooldown_min = 5
+    ok   发送后冷却 ≥ 最小间隔（§0.1 硬要求）
+    ok   README.md 未写死测试数字
+    ok   README_部署说明.md 未写死测试数字
+    ok   docs\KNOWN_EXCEPTIONS.md 未写死测试数字
+    ok   SKILL.md 未写死测试数字
+  RESULT: pass=17 fail=0
+  ALL PASS
+  
+  
+=== gonghai_chrome_isolation.tests.ps1 ===
+CHILD-CONTEXT test=gonghai_chrome_isolation.tests.ps1 pid=17044 nonce=5a81f3a98e8a4abc810ade0a1abe5fa6 verified=True contexts=2 exit=0
+  == gonghai_chrome_isolation tests ==
+  
+  RESULT: pass=124 fail=0
+  ALL PASS
+  
+  
+=== goods_engine.tests.ps1 ===
+CHILD-CONTEXT test=goods_engine.tests.ps1 pid=13396 nonce=e56b64766eba425580097f71a23f3c7a verified=True contexts=2 exit=0
+  == goods_engine tests ==
+  
+  RESULT: pass=27 fail=0
+  ALL PASS
+  
+  
+=== heartbeat.tests.ps1 ===
+CHILD-CONTEXT test=heartbeat.tests.ps1 pid=17928 nonce=f3993262c9cf44938a37a5ca158ba6a0 verified=True contexts=2 exit=0
+  == heartbeat tests (table-driven) ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== log_maintenance.tests.ps1 ===
+CHILD-CONTEXT test=log_maintenance.tests.ps1 pid=28072 nonce=259ad1da9271449aa46bc81baad07e26 verified=True contexts=2 exit=0
+  == log_maintenance tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== message_order.tests.ps1 ===
+CHILD-CONTEXT test=message_order.tests.ps1 pid=1716 nonce=8162808ff8d94ee9b49be09392c53fda verified=True contexts=2 exit=0
+  RESULT: pass=35 fail=0
+  ALL PASS
+  
+  
+=== msg_source.tests.ps1 ===
+CHILD-CONTEXT test=msg_source.tests.ps1 pid=27868 nonce=69286804f2514cd1a5f140a1611a7fe2 verified=True contexts=2 exit=0
+  == msg_source tests ==
+  RESULT: pass=58 fail=0
+  ALL PASS
+  
+  
+=== no_reply_write.tests.ps1 ===
+CHILD-CONTEXT test=no_reply_write.tests.ps1 pid=36884 nonce=deb23877a09c4a729d609a015e0ce1ef verified=True contexts=2 exit=0
+  == no_reply_write tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_write_938691b7a8074a31bc643669307620cb\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== no_reply.tests.ps1 ===
+CHILD-CONTEXT test=no_reply.tests.ps1 pid=24268 nonce=a21f6c378c734532b517d8ed5a2566f6 verified=True contexts=2 exit=0
+  == no_reply tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_tests_514e5fca18c3472b9414908eca31fa04\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=29 fail=0
+  ALL PASS
+  
+  
+=== review_fixes.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes.tests.ps1 pid=38948 nonce=b43b12144a9049388e2b6e973ec0647f verified=True contexts=2 exit=0
+  == review_fixes tests (pure layer) ==
+    A1 done
+    A4 done
+    A6 done
+    T1/T2 done
+    ledger states done
+  
+  RESULT: pass=123 fail=0
+  ALL PASS
+  
+  
+=== second_fix_contact.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_contact.tests.ps1 pid=16092 nonce=7b57ef29da6345ddab18f76bae25cecd verified=True contexts=3 exit=0
+  == second_fix contact tests (F1) ==
+  
+  RESULT: pass=64 fail=0
+  ALL PASS
+  
+  
+=== second_fix_policy.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_policy.tests.ps1 pid=24448 nonce=898b0d15e9bf42e580693a41f0945f63 verified=True contexts=2 exit=0
+  == second_fix policy tests (F5 / F6 / F8) ==
+  
+  RESULT: pass=94 fail=0
+  ALL PASS
+  
+  
+=== page_heal_throttle.tests.ps1 ===
+CHILD-CONTEXT test=page_heal_throttle.tests.ps1 pid=20876 nonce=26d608654db64f08995f505bfb7c456f verified=True contexts=2 exit=0
+  == page_heal_throttle tests ==
+  RESULT: pass=15 fail=0
+  ALL PASS
+  
+  
+=== page_health_verdict.tests.ps1 ===
+CHILD-CONTEXT test=page_health_verdict.tests.ps1 pid=24940 nonce=c24eb78378624fb385aa4f3a203e9ad6 verified=True contexts=2 exit=0
+  == page_health_verdict tests (table-driven) ==
+    verdict source = C:\path\to\alibaba-auto-reply\scripts\lib\cdp.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== reply_chain.tests.ps1 ===
+CHILD-CONTEXT test=reply_chain.tests.ps1 pid=30672 nonce=4e07f700cfd1488392b201bae5f7a0c6 verified=True contexts=2 exit=0
+  == reply_chain tests ==
+  RESULT: pass=156 fail=0
+  ALL PASS
+  
+  
+=== reply_engine.tests.ps1 ===
+CHILD-CONTEXT test=reply_engine.tests.ps1 pid=22924 nonce=0d2117c2d5e04040988f9a75d28fc230 verified=True contexts=2 exit=0
+  == reply_engine tests ==
+  RESULT: pass=75 fail=0
+  ALL PASS
+  
+  
+=== reply_gate_dupskip.tests.ps1 ===
+CHILD-CONTEXT test=reply_gate_dupskip.tests.ps1 pid=2944 nonce=ee5418deaee2451a9992b8ab9a948ee3 verified=True contexts=2 exit=0
+  == reply_gate_dupskip tests ==
+  
+  RESULT: pass=42 fail=0
+  ALL PASS
+  
+  
+=== report_push.tests.ps1 ===
+CHILD-CONTEXT test=report_push.tests.ps1 pid=19404 nonce=fa943552c6e4481ca9face5500b1fb9a verified=True contexts=2 exit=0
+  == report_push tests ==
+  
+    RESULT: pass=33 fail=0
+    ALL PASS
+  
+  
+=== rule_registry.tests.ps1 ===
+CHILD-CONTEXT test=rule_registry.tests.ps1 pid=2148 nonce=dbefc09005714ede82f607927fdf7f5f verified=True contexts=2 exit=0
+  == rule_registry tests ==
+  
+  RESULT: pass=14 fail=0
+  ALL PASS
+  
+  
+=== send_result.tests.ps1 ===
+CHILD-CONTEXT test=send_result.tests.ps1 pid=4076 nonce=f574d03c70e84fa4bf81f6f5f9074510 verified=True contexts=2 exit=0
+  == send_result tests ==
+  
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== should_reply_v2.tests.ps1 ===
+CHILD-CONTEXT test=should_reply_v2.tests.ps1 pid=27836 nonce=24c742e08ef84adb841cff2b32003d1f verified=True contexts=2 exit=0
+  == should_reply_v2 tests ==
+    §2 判定表: 5 行(行 2 两种形态)逐行断言, Reason 逐字
+    §4.1 裁决: 方案甲(保守) —— 账本不可读 ⇒ 判据行 1 fail-closed, 且整轮门禁 P6 保持
+  
+  RESULT: pass=90 fail=0
+  ALL PASS
+  
+  
+=== suggestions.tests.ps1 ===
+CHILD-CONTEXT test=suggestions.tests.ps1 pid=24408 nonce=8f5c4c999b6b4081938af143f5c94b00 verified=True contexts=2 exit=0
+  == suggestions tests ==
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== third_fix_clarify.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_clarify.tests.ps1 pid=16140 nonce=2d2ab7dcbb59451da3d9359843e7bdca verified=True contexts=2 exit=0
+  == third_fix clarification tests (R7) ==
+  
+  RESULT: pass=24 fail=0
+  ALL PASS
+  
+  
+=== third_fix_contact_fields.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_contact_fields.tests.ps1 pid=33224 nonce=440ffc08d6164f8ba9ec1a40f73dc372 verified=True contexts=2 exit=0
+  == third_fix contact/field tests (R1 / R4) ==
+  
+  RESULT: pass=42 fail=0
+  ALL PASS
+  
+  
+=== third_fix_g1_guard.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_g1_guard.tests.ps1 pid=36484 nonce=0a9306b9889f466e9bd4eb2491081fd8 verified=True contexts=2 exit=0
+  == third_fix G1 production-path guard tests ==
+  
+  RESULT: pass=34 fail=0
+  ALL PASS
+  
+  
+=== third_fix_time_binding.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_time_binding.tests.ps1 pid=18680 nonce=26c5c1c6e14146408c75116c97fb7e7b verified=True contexts=2 exit=0
+  == third_fix time binding tests (R6) ==
+  
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== vision.tests.ps1 ===
+CHILD-CONTEXT test=vision.tests.ps1 pid=24192 nonce=fd8a51841f144ec2ac5355f35a1e726a verified=True contexts=2 exit=0
+  == vision tests ==
+  
+    RESULT: pass=43 fail=0
+    ALL PASS
+  
+  
+=== msg_source_three_class.tests.ps1 ===
+CHILD-CONTEXT test=msg_source_three_class.tests.ps1 pid=29032 nonce=00129f9185594ebd837756cdc5a53e40 verified=True contexts=3 exit=0
+  RESULT: pass=51 fail=0
+  ALL PASS
+  
+  
+=== msg_source_consumers.tests.ps1 ===
+CHILD-CONTEXT test=msg_source_consumers.tests.ps1 pid=8056 nonce=2d5f5a81e0ca445fb1ca23db749469ec verified=True contexts=2 exit=0
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== amazon_destination.tests.ps1 ===
+CHILD-CONTEXT test=amazon_destination.tests.ps1 pid=15212 nonce=5cb24e5b10ce40039643699f02db1d0e verified=True contexts=3 exit=0
+  PASS B1 quote destination fact
+  PASS B1 no address ask
+  PASS B1 goods to quote candidate
+  PASS B1 warehouse is not postal address
+  PASS B1 model context distinguishes warehouse and street
+  PASS B1 source evidence is buyer original
+  PASS B3 unavailable model real generation fallback
+  PASS B2 real model chain bounded rewrite then compliant fallback
+  PASS B2 deterministic address request [Please send the delivery address.]
+  PASS B2 deterministic address request [What is the zip code?]
+  PASS B2 deterministic address request [Could you confirm the warehouse code?]
+  PASS B2 deterministic address request [I need the destination city and state.]
+  PASS B2 deterministic address request [Delivery address is required.]
+  PASS B2 deterministic address request [Please confirm Amazon FTW1.]
+  PASS B2 deterministic address request [Should I quote to FTW1?]
+  PASS B2 acknowledgment allowed
+  PASS B2 excessive caller rewrite budget still bounded to one
+  PASS B2 price prohibition retained
+  PASS B4 positive expression [DDP to amazon: ftw1.]
+  PASS B4 positive expression [deliver to FBA warehouse FTW1]
+  PASS B4 positive expression [亚马逊 FTW1 仓]
+  PASS B4 positive expression [送到亚马逊：ftw1]
+  PASS B4 positive expression [Amazon LGB8]
+  PASS B4 decoded original over translation
+  PASS B5 buyer Amazon context bare answer
+  PASS B5 bot question provides context only
+  PASS B6 unsupported source [Our model is FTW1]
+  PASS B6 unsupported source [SKU FTW1]
+  PASS B6 unsupported source [order number FTW1]
+  PASS B6 unsupported source [https://example.invalid/Amazon/FTW1]
+  PASS B6 unsupported source [Amazon FTW1.pdf]
+  PASS B6 unsupported source [FTW1]
+  PASS B6 robot repetition not buyer evidence
+  PASS B6 goods also ignores bot destination
+  PASS B6 explicit owner confirmation has human source
+  PASS B6 bot cannot forge owner confirmation
+  PASS B7 exact code question [Deliver to Amazon warehouse]
+  PASS B7 exact code question [FBA]
+  PASS B7 exact code question [DDP to Amazon X123456]
+  PASS B8 non receiving location [not FTW1]
+  PASS B8 non receiving location [we used FTW1 before]
+  PASS B8 non receiving location [pickup from Amazon FTW1]
+  PASS B8 non receiving location [Our model is FTW1]
+  PASS B8 trusted explicit revocation drops warehouse
+  PASS B8 trusted negation drops selected warehouse
+  PASS B8 unrelated text retains destination
+  PASS B9 trusted switch updates current warehouse
+  PASS B9 context current quote destination updated
+  PASS B9 goods current destination updated
+  PASS B10 ambiguous Amazon FTW1 or TEST2
+  PASS B10 ambiguous goods not complete
+  PASS B10 ambiguous Amazon FTW1/Amazon TEST2
+  PASS B10 ambiguous goods not complete
+  PASS B10 ambiguous Amazon FTW1/Delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  PASS B10 ambiguous Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  PASS B10 associated same message address retained
+  PASS B10 known plus unsupported alternative remains ambiguous
+  PASS B11 required cargo missing [53 x 41 x 32 cm, Amazon FTW1]
+  PASS B11 required cargo missing [216 kg, Amazon FTW1]
+  PASS B12 ordinary postal address usable
+  PASS B12 ordinary missing destination still asks address
+  PASS B12 address ownership clarification retained
+  PASS B12 explicit switch to private address
+  PASS B13 actual goods quote reminder success
+  PASS B13 same content suppressed
+  PASS B13 failed changed notification not success
+  PASS B13 changed destination hash permits reminder
+  PASS B14 manual takeover excluded without notification
+  PASS B14 system card cannot provide destination or generate
+  PASS B14 legacy conflict cannot use DOM to switch
+  PASS B14 legacy single declaration conservatively useful for goods
+  PASS B15 split messages keep complete facts
+  PASS B15 chasing quote requires human fact and no invented rate
+  PASS B16 report label uses warehouse without false postal claim
+  PASS B16 real quotable metric uses same destination status
+  PASS B16 real report table displays current quote destination
+  PASS B17 fallback [attachment_parse_failed] no repeated destination
+  PASS B17 fallback [dimension_missing] no repeated destination
+  RESULT pass=80 fail=0
+  
+  
+=== atomic_state.tests.ps1 ===
+CHILD-CONTEXT test=atomic_state.tests.ps1 pid=2408 nonce=3c4f703d6eb14a47977aa87777516488 verified=True contexts=3 exit=0
+  == atomic_state tests ==
+  
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== daemon_launch.tests.ps1 ===
+CHILD-CONTEXT test=daemon_launch.tests.ps1 pid=4308 nonce=24afb0d00df94e24a2cf47f6e25d54b9 verified=True contexts=2 exit=0
+  == daemon_launch tests ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== env_block.tests.ps1 ===
+CHILD-CONTEXT test=env_block.tests.ps1 pid=30124 nonce=ff94de6a0de241dc9472770736449161 verified=True contexts=2 exit=0
+  == env_block tests ==
+    NOTE: parent process has no case-insensitive duplicate env keys, skipping the folding assertions (environment-dependent, not a regression)
+  RESULT: pass=11 fail=0
+  ALL PASS
+  
+  
+=== human_pause.tests.ps1 ===
+CHILD-CONTEXT test=human_pause.tests.ps1 pid=25444 nonce=0657059480fc4174bcac467a5fc4c773 verified=True contexts=3 exit=0
+  == human_pause tests ==
+  
+  RESULT: pass=77 fail=0
+  ALL PASS
+  
+  
+=== human_tasks.tests.ps1 ===
+CHILD-CONTEXT test=human_tasks.tests.ps1 pid=8356 nonce=26d8763a1d914a84b69a84186fea97eb verified=True contexts=3 exit=0
+  == human_tasks tests ==
+  
+  RESULT: pass=49 fail=0
+  ALL PASS
+  
+  
+=== isolation.tests.ps1 ===
+CHILD-CONTEXT test=isolation.tests.ps1 pid=18396 nonce=86260ad8dcbd49fd839f19f4766d011c verified=True contexts=2 exit=0
+  == isolation tests (spec §6.3) ==
+    ok   I01a explicit ConfigPath is honoured
+    ok   I01b code root follows the explicit config
+    ok   I01c runtime root defaults to the code root
+    ok   I01d not isolated without an explicit runtime root
+    ok   I02a runtime paths resolve inside the explicit RuntimeRoot
+    ok   I02b code paths still come from the config
+    ok   I02c isolated flag is on
+    ok   I03 unmarked isolated runtime fails closed
+    ok   I04a marker exists after New-AarIsolationRoot
+    ok   I04b Test-AarIsolatedRuntime is true with marker
+    ok   I04c production path list is non-empty
+    ok   I04d writing a production path is refused
+    ok   I05a writing inside the isolated root is allowed
+    ok   I05b -WithinRuntimeRoot refuses an outside path
+    ok   I10 isolation root inside a production path is refused
+    ok   I08 Invoke-CdpEval is refused while isolated
+    ok   I09 Send-OneTalkMessage is refused while isolated
+    ok   I11a isolated writes create no production file
+    ok   I11b the isolated files really were written
+    ok   I12a importing the modules has no runtime error
+    ok   I12b import does not create the runtime root
+    ok   I07 unmarked runtime root is not "isolated"
+    ok   I07b a marker with isolated=false does not count
+    ok   I06a default resolution is production (not isolated)
+    ok   I06b the guard is a no-op in production mode
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock_scope.tests.ps1 ===
+CHILD-CONTEXT test=lock_scope.tests.ps1 pid=39604 nonce=5cef5b373c054bb3a27a79e51f59b08e verified=True contexts=3 exit=0
+  == lock_scope tests ==
+  
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock.tests.ps1 ===
+CHILD-CONTEXT test=lock.tests.ps1 pid=36424 nonce=ae84e7ea6b9a4813b4489c9cfd02af0c verified=True contexts=3 exit=0
+  == lock tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== new_message_cooldown.tests.ps1 ===
+CHILD-CONTEXT test=new_message_cooldown.tests.ps1 pid=15464 nonce=46606e48064e4b26b3a2939a7141f24c verified=True contexts=2 exit=0
+  RESULT pass=84 fail=0
+  
+  
+=== reception_facts.tests.ps1 ===
+CHILD-CONTEXT test=reception_facts.tests.ps1 pid=28072 nonce=00a63b77a8304676a31d5c75e10ce81a verified=True contexts=2 exit=0
+  == reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+  RESULT pass=506 fail=0
+  
+  
+=== review_fixes_entry.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes_entry.tests.ps1 pid=34088 nonce=a4eb62f123fb49058f932cb5c8b90b18 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  RESULT: pass=201 fail=0
+  ALL PASS
+  
+  
+=== second_fix_summary.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_summary.tests.ps1 pid=9788 nonce=64fb47e33e0748c98e97183ee73096eb verified=True contexts=3 exit=0
+  == second_fix summary tests (actual summarize.ps1 subprocess, isolated runtime root) ==
+  ISOLATED-ROOT: C:\Users\<local-user>\AppData\Local\Temp\aar-secondfix-summary-06d3341fea9049cfafc4eea9c6da29f7
+  
+  RESULT pass=95 fail=0
+  ALL PASS
+  
+  
+=== send_page_param.tests.ps1 ===
+CHILD-CONTEXT test=send_page_param.tests.ps1 pid=21740 nonce=bb50e1a840d24c9cad613a44f865363f verified=True contexts=2 exit=0
+  == send_page_param tests ==
+    child output lines = 16
+    child2 output lines = 15
+  
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== third_fix_pause_source.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_pause_source.tests.ps1 pid=23316 nonce=405fca6a138a48c485b4ced9acc9c819 verified=True contexts=3 exit=0
+  == third_fix pause source tests (R5) ==
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== third_fix_tasks_evidence.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_tasks_evidence.tests.ps1 pid=1076 nonce=c6ea69efca184a5e86e6daacbe044e1f verified=True contexts=3 exit=0
+  == third_fix task/evidence tests (R2 / R3) ==
+  
+  RESULT: pass=61 fail=0
+  ALL PASS
+  
+  
+=== closure_s1.tests.ps1 ===
+CHILD-CONTEXT test=closure_s1.tests.ps1 pid=21844 nonce=0557e801f85044719c2555494c5bd861 verified=True contexts=3 exit=0
+  PASS D01
+  PASS D02
+  PASS D02-phone-flow
+  PASS D03
+  PASS D04
+  PASS D04-truncated-contact
+  PASS D05
+  PASS D06
+  PASS D07
+  PASS D08
+  PASS D09
+  PASS D10
+  PASS D11
+  PASS D12
+  PASS D12-full-email
+  PASS D13
+  PASS D14
+  PASS D15
+  PASS D16
+  RESULT closure_s1 pass=19 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-4865371a9ca94491bb2a765240d3da2c
+  
+  
+=== closure_s2.tests.ps1 ===
+CHILD-CONTEXT test=closure_s2.tests.ps1 pid=25460 nonce=3b73498a739247fa86b4194f8ac4dcbf verified=True contexts=2 exit=0
+  PASS P01
+  PASS P02
+  PASS P03
+  PASS P04
+  PASS P05
+  PASS P06
+  PASS P07
+  PASS P08
+  PASS P09
+  PASS P10
+  PASS P11
+  RESULT closure_s2 pass=11 fail=0
+  
+  
+=== closure_s3.tests.ps1 ===
+CHILD-CONTEXT test=closure_s3.tests.ps1 pid=32460 nonce=82feb50dc67a496dba3d985afd7e8498 verified=True contexts=3 exit=0
+  PASS H01
+  PASS H02
+  PASS H03
+  PASS H04
+  PASS H05
+  PASS H06
+  PASS H07
+  PASS H08
+  RESULT closure_s3 pass=8 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-f351a1d1066445da96481302440e7aeb
+  
+  
+=== closure_s4.tests.ps1 ===
+CHILD-CONTEXT test=closure_s4.tests.ps1 pid=37328 nonce=9fe7fabde5164f628f31e70c15723c02 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  PASS T01
+  PASS T02
+  PASS T02-appointment-source
+  PASS T03
+  PASS T04
+  PASS T05
+  PASS T06
+  True
+  PASS T07
+  True
+  True
+  True
+  PASS T08
+  RESULT closure_s4 pass=9 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-015bff8a4cb5491d8abba29bd8caa7c3
+  
+  
+=== closure_g1.tests.ps1 ===
+CHILD-CONTEXT test=closure_g1.tests.ps1 pid=38816 nonce=7893806cce2544558b9da5a67c16d97d verified=True contexts=6 exit=0
+  PASS G01
+  PASS G02
+  PASS G03
+  PASS G01-root-tamper
+  PASS G02-config-marker-root
+  EXIT-PROPAGATION pid=23084 exit=3 verified=True LogicTests=PASS ProductionPathAudit=UNRESOLVED Overall=BLOCKED-UNRESOLVED
+  PASS G03-child-exit3
+  RESULT closure_g1 pass=6 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-3307f2076e51445a93aa8ec192a69468
+  
+  
+=== closure_s5.tests.ps1 ===
+CHILD-CONTEXT test=closure_s5.tests.ps1 pid=35692 nonce=f3a5c5132e2040eb8fcb73d91d491bc7 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-b99cec37f221440b85a7013a01922ef7\data\manual_override.json 不存在,按空名单处理
+  PASS P03-program-source-send
+  PASS D04-awaiting-conditional-send
+  PASS X01
+  PASS X02
+  PASS X03
+  PASS X04
+  PASS X05
+  PASS X05-invalid-success-claim
+  PASS X05-reconciled-positive
+  PASS X06-read-guard-preserves-not-attempted
+  RESULT closure_s5 pass=9 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-b99cec37f221440b85a7013a01922ef7
+  
+  
+=== closure_edges.tests.ps1 ===
+CHILD-CONTEXT test=closure_edges.tests.ps1 pid=21052 nonce=37fb02d19ee940a4b2da485b4d8cc983 verified=True contexts=4 exit=0
+  PASS D06-buyer-negative
+  PASS P03-corresponding-source
+  PASS H08-legacy-no-anchor
+  CONCURRENT-CHILD pid=1436 nonce=5d22eb296a9b432790b4d6e8f0a20d22 verified=True exit=0
+  CONCURRENT-CHILD pid=29052 nonce=14ef2ad1ad5a44e1a9841a2769d4005f verified=True exit=0
+  PASS D10-concurrent
+  RESULT closure_edges pass=4 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-edges-84863214ca374d68a074334e1d0458b1
+  
+  
+=== independent_review_20261006.tests.ps1 ===
+CHILD-CONTEXT test=independent_review_20261006.tests.ps1 pid=10492 nonce=f85336a7221e4cdaa8a21d116eb3a5dd verified=True contexts=2 exit=0
+  == independent review 20261006 regression (R01-R10) ==
+    ok   probe-present aar_closure_s1_independent_assertions_20261006.ps1
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_distinct_new_batch_cannot_reuse_prior_flow_or_quote
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_product_each_item_weight_cannot_satisfy_packed_weight
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: POS_explicit_outer_carton_weight_remains_ready
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_current_buyer_conflict_prevents_verified_completion
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_explicit_added_verification_item_is_preserved_and_gates_completion
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_valid_pallet_confirmation_keeps_unit_and_generates_legal_reply
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_waiting_note_does_not_authorize_supplier_reply_claim
+    ok   probe-present aar-review-closure-source-formal-20261006.ps1
+    ok   assertion-present aar-review-closure-source-formal-20261006.ps1 :: C1-remaining-collision-must-still-hold
+    ok   assertion-present aar-review-closure-source-formal-20261006.ps1 :: C2-invalid-stored-deadline-fails-closed
+    ok   assertion-present aar-review-closure-source-formal-20261006.ps1 :: C3-unattested-current-root-change-cannot-pass
+    ok   probe-present aar_closure_s2_monitor_20261006.ps1
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: legal-weight-clarification-preserved
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: legal-supplier-clarification-preserved
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: ordinary-business-body-still-sends
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: unknown-business-body-controlled-fallback
+    ok   probe-present aar_closure_independent_pallet_monitor_20261006.ps1
+    ok   assertion-present aar_closure_independent_pallet_monitor_20261006.ps1 :: confirmation-preserved
+    ok   assertion-present aar_closure_independent_pallet_monitor_20261006.ps1 :: foreach($packageUnit in @(
+    ok   probe-present aar_closure_independent_c05_20261006.ps1
+    ok   assertion-present aar_closure_independent_c05_20261006.ps1 :: missing-evidence-must-block-
+    ok   assertion-present aar_closure_independent_c05_20261006.ps1 :: ordinary-contact-explanation-positive
+    ok   assertion-present aar_closure_independent_c05_20261006.ps1 :: generic-contact-redline-negative
+    ok   probe-present aar_closure_independent_time_20261006.ps1
+    ok   probe-reports-all-pass aar_closure_s1_independent_assertions_20261006.ps1
+    ok   probe-reports-all-pass aar-review-closure-source-formal-20261006.ps1
+    ok   probe-reports-all-pass aar_closure_s2_monitor_20261006.ps1
+    ok   probe-reports-all-pass aar_closure_independent_pallet_monitor_20261006.ps1
+    ok   probe-reports-all-pass aar_closure_independent_c05_20261006.ps1
+    ok   probe-reports-all-pass aar_closure_independent_time_20261006.ps1
+  RESULT: pass=31 fail=0
+  ALL PASS
+  
+  
+=== send_reconcile_closure.tests.ps1 ===
+CHILD-CONTEXT test=send_reconcile_closure.tests.ps1 pid=20136 nonce=2a0ee74f26a342b19261ecbf0267a8df verified=True contexts=3 exit=0
+  == send reconcile closure tests ==
+    ok   P1-real-production-reason-is-page-confirmed
+    ok   P2-abort-is-not-page-confirmed
+    ok   P3-cdp-error-is-not-page-confirmed
+    ok   P4-clicked-but-not-sent-is-not-confirmed
+    ok   P5-empty-is-not-confirmed
+    ok   E1-full-evidence-pass
+    ok   E2-no-dedup-key-blocked
+    ok   E3-not-page-confirmed-blocked
+    ok   E4-reason-not-page-confirmed-blocked
+    ok   T1-evidence-persisted
+    ok   T2-reason-updated
+    ok   T3-evidence-preserved-on-requeue
+    ok   T4-tries-incremented-once-per-requeue
+    ok   T5-repeated-requeue-keeps-evidence
+    ok   L1-ledger-advanced
+    ok   L2-ledger-value-is-the-send-time-key
+    ok   L3-no-fabricated-receipt
+    ok   L4-no-op-without-key
+    ok   L5-unwritten-ledger-is-not-success
+    ok   L6-failure-logged
+    ok   W1-not-in-list-branch-uses-evidence
+    ok   W2-not-in-list-branch-advances-ledger
+    ok   W3-failure-site-records-evidence
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== send_attempt_receipt.tests.ps1 ===
+CHILD-CONTEXT test=send_attempt_receipt.tests.ps1 pid=38716 nonce=2176486a397a457cb651eb75389ec9e2 verified=True contexts=2 exit=0
+  RESULT: pass=120 fail=0
+  ALL PASS
+  
+  
+=== send_attempt_restart.tests.ps1 ===
+CHILD-CONTEXT test=send_attempt_restart.tests.ps1 pid=39736 nonce=4d72cdbd61e7446fa86804b5a6575289 verified=True contexts=2 exit=0
+  RESULT: pass=53 fail=0
+  ALL PASS
+  
+  
+=== source_recovery_schedule.tests.ps1 ===
+CHILD-CONTEXT test=source_recovery_schedule.tests.ps1 pid=7460 nonce=f62eb1a7331a41e1bf60259e1a486af8 verified=True contexts=2 exit=0
+  RESULT: pass=59 fail=0
+  ALL PASS
+  
+  
+
+TEST-SUMMARY: layer=Offline files=63 failedFiles=0 pass=3396 fail=0
+LogicTests=PASS files=63 failedFiles=0 pass=3396 fail=0
+IsolationChecks=PASS checked=63 issues=0
+ProductionPathAudit=UNRESOLVED changes=3 writerRunning=False reason=production changes have unknown provenance; source is NOT proven (process existence or absence is not write attribution)
+  attribution-clues(before): {"capturedAtUtc":"2026-10-07T00:10:34.6361314Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-07T00:20:08.1919988Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  PRODUCTION-CHANGE-DETAILS (path | change | kind | before -> after):
+    C:\path\to\alibaba-auto-reply-runtime\chrome-profile | changed | dir-metadata | DIR|2026-10-06T23:46:14.1410162Z|metadata-only -> DIR|2026-10-07T00:13:40.3891959Z|metadata-only
+    C:\path\to\alibaba-auto-reply-runtime\chrome-profile\Local State | changed | file-content | FILE|11094|2026-10-06T23:46:14.1361720Z|sha256:7799adab6ac50119cb46b2a1c6156d9e1729088d7e0aef4bfff2ebca07922b2c -> FILE|11094|2026-10-07T00:13:40.3854610Z|sha256:e4a495695dfbcaa46aee1bf8b78f34be590ea378cbfdbbdd6d426e41bf478201
+    C:\path\to\alibaba-auto-reply-runtime\chrome-profile\VariationsSeedV2 | changed | file-content | FILE|42685|2026-10-06T23:42:31.3702567Z|sha256:6140e62ce523168af3cbfe1311f81fec387a66eba3bc438a72abf35dc51f2d9e -> FILE|42685|2026-10-07T00:12:31.3197132Z|sha256:2cd14145c2aa5fe30e6aa0350a4a32ad0edeedb6a75d83559b052436cfc784e7
+  NOTE: concurrent changes with no independent write-provenance evidence are UNRESOLVED; a running writer is a clue, not proof.
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\chrome-profile","Change":"changed","Kind":"dir-metadata","Before":"DIR|2026-10-06T23:46:14.1410162Z|metadata-only","After":"DIR|2026-10-07T00:13:40.3891959Z|metadata-only"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\chrome-profile\\Local State","Change":"changed","Kind":"file-content","Before":"FILE|11094|2026-10-06T23:46:14.1361720Z|sha256:7799adab6ac50119cb46b2a1c6156d9e1729088d7e0aef4bfff2ebca07922b2c","After":"FILE|11094|2026-10-07T00:13:40.3854610Z|sha256:e4a495695dfbcaa46aee1bf8b78f34be590ea378cbfdbbdd6d426e41bf478201"}
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply-runtime\\chrome-profile\\VariationsSeedV2","Change":"changed","Kind":"file-content","Before":"FILE|42685|2026-10-06T23:42:31.3702567Z|sha256:6140e62ce523168af3cbfe1311f81fec387a66eba3bc438a72abf35dc51f2d9e","After":"FILE|42685|2026-10-07T00:12:31.3197132Z|sha256:2cd14145c2aa5fe30e6aa0350a4a32ad0edeedb6a75d83559b052436cfc784e7"}
+Overall=BLOCKED-UNRESOLVED exitCode=3

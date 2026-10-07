@@ -34,7 +34,7 @@ Check 'M-short-prefix-not-enough' (-not (Test-TextMatchesSent -Expected 'Yes' -A
 # ---- Confirm-OneTalkOutboundMessage：页面返回解析（Invoke-SendEval 桩） ----
 $script:probe = ''
 function Invoke-SendEval([string]$js) { return $script:probe }
-function Get-OutboundSnapshot { $p=$script:probe|ConvertFrom-Json;if($p.lastIsMine){return @([pscustomobject]@{MessageId='new-event';MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$p.lastText;IsMine=$true})};return @()}
+function Get-OutboundSnapshot {param([string]$Buyer = '')  $p=$script:probe|ConvertFrom-Json;if($p.lastIsMine){return @([pscustomobject]@{MessageId='new-event';MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$p.lastText;IsMine=$true})};return @()}
 $script:probe = '{"rows":4,"lastIsMine":true,"lastText":"Could you share the consignee name and delivery address?"}'
 $c1 = Confirm-OneTalkOutboundMessage -Before @() -buyer 'Buyer A' -text 'Could you share the consignee name and delivery address?'
 Eq 'P-confirmed-status' $c1.Status 'confirmed'
@@ -53,9 +53,10 @@ $script:probe = ''
 Eq 'P-empty-is-unverified' (Confirm-OneTalkOutboundMessage -Before @() -buyer 'Buyer A' -text 'Hello').Status 'unverified'
 
 # ---- Send-OneTalkMessageEx 状态映射（Send-OneTalkMessage 桩） ----
+function Prepare-OneTalkConversation { param([string]$Buyer, [switch]$AlreadyOpen) return [pscustomobject]@{name=$Buyer} }
 $script:rawResult = 'FILLED | CLICKED | SENT_OK';$script:sendSnapshotPhase=0
 function Send-OneTalkMessage([string]$buyer, [string]$text, $Page = $null, [switch]$AlreadyOpen) { $script:sendSnapshotPhase=1;return $script:rawResult }
-function Get-OutboundSnapshot {if(-not $script:sendSnapshotPhase){return @()};$p=$script:probe|ConvertFrom-Json;if($p.lastIsMine){return @([pscustomobject]@{MessageId='new-event';MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$p.lastText;IsMine=$true})};return @()}
+function Get-OutboundSnapshot {param([string]$Buyer = '') if(-not $script:sendSnapshotPhase){return @()};$p=$script:probe|ConvertFrom-Json;if($p.lastIsMine){return @([pscustomobject]@{MessageId='new-event';MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$p.lastText;IsMine=$true})};return @()}
 
 $script:probe = '{"rows":2,"lastIsMine":true,"lastText":"Your cartons are booked for Friday pickup."}'
 $e1 = Send-OneTalkMessageEx -buyer 'Buyer A' -text 'Your cartons are booked for Friday pickup.'

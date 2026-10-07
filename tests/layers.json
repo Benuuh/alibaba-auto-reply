@@ -5,6 +5,7 @@
     "alert_dedup.tests.ps1",
     "cargo_facts.tests.ps1",
     "contact_redline.tests.ps1",
+    "conversation_scope.tests.ps1",
     "dedup_order.tests.ps1",
     "dimension_guidance.tests.ps1",
     "docs_consistency.tests.ps1",
@@ -33,7 +34,9 @@
     "third_fix_contact_fields.tests.ps1",
     "third_fix_g1_guard.tests.ps1",
     "third_fix_time_binding.tests.ps1",
-    "vision.tests.ps1"
+    "vision.tests.ps1",
+    "msg_source_three_class.tests.ps1",
+    "msg_source_consumers.tests.ps1"
   ],
   "isolated": [
     "amazon_destination.tests.ps1",
@@ -47,6 +50,7 @@
     "lock.tests.ps1",
     "new_message_cooldown.tests.ps1",
     "reception_facts.tests.ps1",
+    "pending_reply_policy.tests.ps1",
     "review_fixes_entry.tests.ps1",
     "second_fix_summary.tests.ps1",
     "send_page_param.tests.ps1",
@@ -59,7 +63,11 @@
     "closure_g1.tests.ps1",
     "closure_s5.tests.ps1",
     "closure_edges.tests.ps1",
-    "independent_review_20261006.tests.ps1"
+    "independent_review_20261006.tests.ps1",
+    "send_reconcile_closure.tests.ps1",
+    "send_attempt_receipt.tests.ps1",
+    "send_attempt_restart.tests.ps1",
+    "source_recovery_schedule.tests.ps1"
   ],
   "live": [
     "accio.tests.ps1",

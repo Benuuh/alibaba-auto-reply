@@ -114,6 +114,8 @@ function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [
     #    "在别人的浏览器上点会话"本身就是不该发生的副作用(spec §1.3 的事故形态)。
     # ⚠️ 不传 `-Page` 时**整块跳过** ⇒ monitor 的行为与改动前逐字一致(spec §3.4 / §4-P3~P9)。
     if ($Page) { Assert-SendPageNotSharedPort $Page }
+    $scopeJs = Get-ConversationScopeJs
+    $targetJs = ConvertTo-Json -InputObject $buyer -Compress
 
     # 1) 打开会话(按买家名匹配列表项)
     #    [FIX-ALREADYOPEN 2026-09-27] `-AlreadyOpen` ⇒ 整块跳过(人已经开在面板里,且 cardId 已核对)。
@@ -123,15 +125,10 @@ function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [
     $esc = $buyer.Replace("\","\\").Replace("'","\'").Replace('"','\"')
     $js1 = @"
 (function(){
-  var el = Array.from(document.querySelectorAll('.contact-item-container')).find(function(e){
-    var nameEl = e.querySelector('.contact-info .name');
-    var nameTxt = (nameEl && nameEl.innerText) || '';
-    var full = (e.innerText || '') + '|' + nameTxt;
-    return full.indexOf('$esc') >= 0;
-  });
-  if (!el) return 'NOT_FOUND';
-  el.click();
-  return 'CLICKED';
+  // AAR-SEND:open
+$scopeJs
+  try { __aarFindContact($targetJs).click(); return 'CLICKED'; }
+  catch (error) { return error.message; }
 })()
 "@
     $r1 = Invoke-SendEval $js1
@@ -142,21 +139,9 @@ function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [
     # 2) 身份校验:当前会话名必须与目标一致(防串台/防错发;排除客户详情卡片)
     $jsName = @"
 (function(){
-  var cands = [];
-  var hdr = document.querySelector('.content-header');
-  if (hdr) {
-    var t = (hdr.innerText || '').trim().split('\n')[0].trim();
-    if (t && t.length < 60 && /[A-Za-z]/.test(t)) cands.push(t);
-  }
-  Array.from(document.querySelectorAll('[class*=header] [class*=name], [class*=Title], h1,h2,h3,[class*=contact-name]')).forEach(function(e){
-    if (e.closest && e.closest('.alicrm-customer-detail-card')) return;
-    var t = (e.innerText || '').trim();
-    if (t && t.length < 60 && /[A-Za-z]/.test(t)) cands.push(t);
-  });
-  if (!cands.length) return '';
-  var best = cands[0];
-  cands.forEach(function(c){ if (c.length > best.length) best = c; });
-  return best.split('\n')[0].trim();
+  // AAR-SEND:name
+$scopeJs
+  try { return __aarScope('').name; } catch (error) { return ''; }
 })()
 "@
     $current = (Invoke-SendEval $jsName).Trim()
@@ -172,7 +157,7 @@ function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [
     $nB = (([string]$buyer) -replace '[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]', '' -replace '\s+', ' ').Trim().ToLowerInvariant()
     $nC = (([string]$current) -replace '[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]', '' -replace '\s+', ' ').Trim().ToLowerInvariant()
     $match = ($curKey -and $curKey -eq $key) -or
-             ($nB -and $nC -and ($nC -eq $nB -or $nC.Contains($nB) -or $nB.Contains($nC)))
+             ($nB -and $nC -and $nC -eq $nB)
     #   ⚠️ 返回串必须**逐字保持** `ABORT_WRONG_CONVO (expected=.., current=..)` ——
     #     测试 `send_page_param.tests.ps1` 的 C-wrong-convo-verbatim / C-alreadyopen-still-verifies-name
     #     把这条格式钉成契约（monitor/nudge 兼容）。归一化诊断**不进返回串**。
@@ -183,17 +168,24 @@ function Send-OneTalkMessageCore([string]$buyer, [string]$text, $Page = $null, [
     # 3+4+5) 合并:填值 + 点击发送 + 输入框清空校验 一次 eval(JS 内等待,P2.1a)
     $js2 = @"
 (async function(){
-  var ta = document.querySelector('textarea.send-textarea');
+  // AAR-SEND:send
+$scopeJs
+  var scope;
+  try { scope = __aarScope($targetJs); } catch (error) { return 'ABORT_READ_GUARD:' + error.message; }
+  var ta = scope.panel.querySelector('textarea.send-textarea');
   if (!ta) return 'NO_TEXTAREA';
   var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
   setter.call(ta, '$esc2');
   ta.dispatchEvent(new Event('input', {bubbles:true}));
   await new Promise(function(r){ setTimeout(r, 1000); });
-  var btns = Array.from(document.querySelectorAll('button')).filter(function(b){ return (b.innerText||'').trim() === '发送'; });
-  if (!btns.length) return 'FILLED|NO_BTN';
+  var checked;
+  try { checked = __aarScope($targetJs); } catch (error) { return 'ABORT_READ_GUARD:' + error.message; }
+  if (checked.panel !== scope.panel || checked.header !== scope.header) return 'ABORT_READ_GUARD:SCOPE_CHANGED';
+  var btns = Array.from(scope.panel.querySelectorAll('button')).filter(function(b){ return __aarVisible(b) && (b.innerText||'').trim() === '发送'; });
+  if (btns.length !== 1) return 'FILLED|NO_UNIQUE_BTN';
   btns[0].click();
   await new Promise(function(r){ setTimeout(r, 2000); });
-  var ta2 = document.querySelector('textarea.send-textarea');
+  var ta2 = scope.panel.querySelector('textarea.send-textarea');
   return ta2 ? ('FILLED|CLICKED|LEN:' + ta2.value.length) : 'FILLED|CLICKED|NO_TA';
 })()
 "@
@@ -244,33 +236,72 @@ function Get-OutboundConfirmScript {
 
 # 页面核对：最新一条消息必须是我方且内容与刚发送的文本一致。
 # 返回 @{ Status = 'confirmed' | 'absent' | 'unverified'; Evidence; Detail }
-function Confirm-OneTalkOutboundMessage([string]$buyer,[string]$text,$Before=$null) {
-    $r=[pscustomobject]@{Status='unverified';Evidence='';Detail='before-snapshot-required';Receipt=$null}
+# [2026-10-07 spec §4-4 / 复核 R1] 发送后快照同样走共享真实事件抽取（Get-OutboundSnapshot）。
+#   -After 允许调用方复用**同一次发送前后对**的快照（Send-OneTalkMessageEx 就是这么做的）：
+#   前后必须同口径，不能一边是点击前读取、另一边是点击后另一次不同实现。
+function Confirm-OneTalkOutboundMessage([string]$buyer,[string]$text,$Before=$null,$After=$null) {
+    $r=[pscustomobject]@{Status='unverified';Evidence='';Detail='before-snapshot-required';Receipt=$null;AfterSnapshot=$null}
     if($null -eq $Before){return $r}
-    try{$after=@(Get-OutboundSnapshot);$receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text -Before $Before -After $after;$r.Receipt=$receipt
+    try{
+        if($null -ne $After){$after=@($After)}else{$after=@(Get-OutboundSnapshot -Buyer $buyer)}
+        $r.AfterSnapshot=$after
+        $receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text -Before $Before -After $after;$r.Receipt=$receipt
         if($receipt.Valid){$r.Status='confirmed';$r.Evidence=$receipt.ConfirmationType;$r.Detail='unique-exact-new-outbound-event'}else{$r.Detail=$receipt.Error}
     }catch{$r.Detail=$_.Exception.Message};return $r
 }
 
 # 结构化发送：Status = SENT_OK（已核对）| UNKNOWN（页面动作完成但核对不到，需对账）| FAILED。
+function Prepare-OneTalkConversation {
+    param([string]$Buyer, [switch]$AlreadyOpen)
+    $raw = Invoke-SendEval (Get-ConversationReadJs -Buyer $Buyer -AlreadyOpen ([bool]$AlreadyOpen))
+    try {
+        $result = $raw | ConvertFrom-Json
+        if ($result.name -and $result.scope -and -not $result.error) { return $result }
+    } catch {}
+    throw ('SEND-CONVERSATION-UNVERIFIED:' + [string]$raw)
+}
+
 function Send-OneTalkMessageEx {
     param(
         [Parameter(Mandatory = $true)][string]$buyer,
         [Parameter(Mandatory = $true)][string]$text,
         $Page = $null,
         [switch]$AlreadyOpen,
+        [string]$AttemptId = '',
         # 页面核对需要真实页面读取；模拟适配器可显式跳过，此时状态降级为 UNKNOWN（不得当作已确认）。
         [switch]$SkipConfirmation
     )
     $oldPage=$script:SendPageOverride
-    if($Page){Assert-SendPageNotSharedPort $Page;$script:SendPageOverride=$Page}
+    if($Page){Assert-SendPageNotSharedPort $Page}
+    $script:SendPageOverride=$Page
     try {
     $before=$null
-    try{$before=@(Get-OutboundSnapshot)}catch{}
-    $raw = Send-OneTalkMessage -buyer $buyer -text $text -Page $Page -AlreadyOpen:$AlreadyOpen
+    try {
+        # Opening and binding the target must precede the baseline. Never send without it.
+        $null = Prepare-OneTalkConversation -Buyer $buyer -AlreadyOpen:$AlreadyOpen
+        $before = @(Get-OutboundSnapshot -Buyer $buyer)
+    } catch {
+        return [pscustomobject]@{Status='FAILED';Raw='ABORT_READ_GUARD';Buyer=$buyer;Text=$text;Confirmed=$false;ConfirmEvidence='';Detail=$_.Exception.Message;Receipt=$null;BeforeSnapshot=$null;AfterSnapshot=$null;NotAttempted=$true}
+    }
+    if ($AttemptId) {
+        try {
+            $bound = Set-SendAttemptBeforeSnapshot -AttemptId $AttemptId -Buyer $buyer -Text $text -BeforeEvents $before
+            if (-not $bound.Ok) { throw $bound.Error }
+            $dispatch = Start-SendAttemptSideEffect -AttemptId $AttemptId -Detail 'target-bound before snapshot persisted'
+            if (-not $dispatch.Ok) { throw $dispatch.Error }
+        } catch {
+            # No input or send click has been attempted. A partially persisted dispatch
+            # marker stays conservative; the monitor must not overwrite it as page:FAILED.
+            return [pscustomobject]@{Status='FAILED';Raw='ABORT_ATTEMPT_GUARD';Buyer=$buyer;Text=$text;Confirmed=$false;ConfirmEvidence='';Detail=$_.Exception.Message;Receipt=$null;BeforeSnapshot=$before;AfterSnapshot=$null;NotAttempted=$true}
+        }
+    }
+    $raw = Send-OneTalkMessage -buyer $buyer -text $text -Page $Page -AlreadyOpen
     $res = [pscustomobject]@{
         Status = 'FAILED'; Raw = [string]$raw; Buyer = $buyer; Text = $text
         Confirmed = $false; ConfirmEvidence = ''; Detail = ''; Receipt=$null; BeforeSnapshot=$before
+        # [复核 R1] 发送前/后的**真实出站快照**（共享抽取 + 共享身份）随结果返回：调用方（monitor）
+        #   用它做尝试级确认（Confirm-SendAttemptFromSnapshots），不再另建一套 DOM 采集。
+        AfterSnapshot = $null
     }
     if ($raw -match 'ABORT_WRONG_CONVO') { $res.Detail = 'wrong-conversation'; return $res }
     if ($raw -match 'SENT_OK') {
@@ -279,7 +310,10 @@ function Send-OneTalkMessageEx {
             $res.Detail = 'page-action-only'
             return $res
         }
-        $c = Confirm-OneTalkOutboundMessage -buyer $buyer -text $text -Before $before
+        $after = $null
+        try { $after = @(Get-OutboundSnapshot -Buyer $buyer) } catch { $after = $null }
+        $res.AfterSnapshot = $after
+        $c = Confirm-OneTalkOutboundMessage -buyer $buyer -text $text -Before $before -After $after
         $res.ConfirmEvidence = $c.Evidence
         $res.Receipt=$c.Receipt
         if ($c.Status -eq 'confirmed') {

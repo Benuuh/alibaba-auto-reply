@@ -35,6 +35,20 @@ $env:AAR_RUNTIME_ROOT = $isoRoot
 . (Join-Path $scripts 'lib/sent_records.ps1')
 . (Join-Path $scripts 'lib\msg_norm.ps1')
 . (Join-Path $scripts 'lib\msg_source.ps1')
+# [2026-10-07 spec §3.2 第 3 条] 无发送者证据的 [ME] 行现在是 unknown，不再外推为人工。
+#   本套夹具用逐条已验证的发送者字段提供人工来源证据（字段在 @@META 载荷里，正文无法伪造）。
+. (Join-Path $repo 'scripts/lib/msg_events.ps1')
+[void](Set-MessageSourceContext -Rules (New-MessageSourceRuleSet -VerifiedFields ([pscustomobject]@{ 'sender=owner' = 'human' }) -Provenance 'fixture-verified-owner-field'))
+$scripts = Join-Path $repo 'scripts'
+function New-OwnerMeta([string]$text, [long]$ts) {
+    return (ConvertTo-MessageMetaMarker ([pscustomobject]@{
+        v = 'msgevent-2026-10-07.1'; t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        dir = 'out'; dirsrc = 'layout'; mid = ''; ts = $ts; tprec = 'second'; st = 'message'
+        src = @(); f = @('sender=owner'); at = '2026-10-05T00:00:00Z'; idq = 'composite'
+    }))
+}
+function OwnerLine([string]$text, [long]$ts) { return ('[ME] ' + $text + ' @@MT:' + $ts + ' ' + (New-OwnerMeta $text $ts)) }
+
 . (Join-Path $scripts 'lib\reply_policy.ps1')
 . (Join-Path $scripts 'lib\reply_gen.ps1')
 . (Join-Path $scripts 'lib\lock.ps1')
@@ -43,7 +57,7 @@ $env:AAR_RUNTIME_ROOT = $isoRoot
 $tk = $null; $errs = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $scripts 'monitor.ps1'), [ref]$tk, [ref]$errs)
 if ($errs.Count) { throw 'monitor.ps1 failed to parse' }
-foreach ($fn in @('Invoke-ConvoItem', 'Update-PendingSeen', 'Generate-Reply-LLM', 'Set-StateHash', 'Test-RepliedStateUsable', 'Get-RepliedStateFileSize', 'Get-LedgerHealth', 'Reset-LedgerHealthCache', 'Get-CachedDocumentRead', 'Test-LedgerShape', 'Get-ReplyEntryCount', 'Get-TaskContextForConvo')) {
+foreach ($fn in @('Get-MonitorSourceGate', 'Get-MonitorSourceRules', 'Get-MonitorSourceConfirmed', 'New-MonitorInvestigation', 'New-SourceUnknownInvestigation', 'Invoke-MonitorInvestigationSweep', 'Invoke-MonitorInvestigationRetention', 'Invoke-ConvoItem', 'Update-PendingSeen', 'Generate-Reply-LLM', 'Set-StateHash', 'Test-RepliedStateUsable', 'Get-RepliedStateFileSize', 'Get-LedgerHealth', 'Reset-LedgerHealthCache', 'Get-CachedDocumentRead', 'Test-LedgerShape', 'Get-ReplyEntryCount', 'Get-TaskContextForConvo')) {
     $n = $ast.Find({ param($x) $x -is [Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq $fn }, $true)
     if (-not $n) { throw ('monitor.ps1 does not define ' + $fn) }
     Invoke-Expression $n.Extent.Text
@@ -113,6 +127,7 @@ function Test-AccioLinesOverlap { return $true }
 Check 'L0-runtime-is-isolated' (Test-AarIsolatedRuntime) 'the isolation marker is missing'
 function Invoke-CdpEval { throw 'Browser access forbidden' }
 function Start-Sleep { param([int]$Seconds = 1, [int]$Milliseconds = 0) $script:sleeps++ }
+function Get-Snapshot {if($script:pendingNow){return '[{"name":"Virtual Buyer"}]'};return '[]'}
 # 边界：暂停/任务/发送记录/发送适配器全部桩化（页面锁是**真实**的，本测试就是要验它）
 function Update-HumanPauseFromLines { param([string]$Buyer, [string[]]$Lines, $SentMatches = $null, [datetime]$Now) return [pscustomobject]@{ Started = $false; Changed = $false; Until = $null; Reason = 'stub'; HumanIndex = -1; Identity = '' } }
 # [2026-10-05 spec §2.2 第 5 条] The pause is now checked TWICE: once before deciding whether to
@@ -148,7 +163,7 @@ function New-OrUpdate-HumanTask { param([string]$Buyer, [string]$Kind, [string]$
 function New-OrUpdate-SupplierVerificationTask { param([string]$Buyer, [string[]]$MissingFields = @(), [string]$SupplierContact = '', [string]$TriggerMessage = '', $FactsSnapshot = $null) return [pscustomobject]@{ Task = [pscustomobject]@{ id = 't'; status = 'pending_human' }; Created = $true; Updated = $false; StoreOk = $true } }
 function Add-HumanTaskNotification { param([string]$Id, [bool]$Delivered = $false, [string]$Detail = '') return $true }
 function Send-OneTalkMessageEx {
-    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation)
+    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation, [string]$AttemptId = '')
     $script:sends++
     $script:lockHeldAtSend = (Test-AppLockOwned 'onetalk-write')
     $receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text -Before @() -After @([pscustomobject]@{MessageId=('fixture-send-'+[guid]::NewGuid().ToString('N'));MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$text;IsMine=$true})
@@ -168,6 +183,7 @@ function Reset {
     $script:pageName = 'Virtual Buyer'
     $script:raw = Line 'Can you quote 10 cartons to Hamburg?' 1791170000000
     $script:raw2 = $script:raw
+    $script:pendingNow = $true
     $script:externalLockProbe = ''
     $ctx = @{
         state = [pscustomobject]@{ replied = [pscustomobject]@{} }
@@ -221,11 +237,12 @@ try {
 
     # ---------------- L5: a human replied during generation ----------------
     $ctx = Reset
-    $script:raw2 = (Line 'Can you quote 10 cartons to Hamburg?' 1791170000000) + $LF + '[ME] I will take this one myself @@MT:1791170009000'
+    $script:raw2 = (Line 'Can you quote 10 cartons to Hamburg?' 1791170000000) + $LF + (OwnerLine 'I will take this one myself' 1791170009000)
     Invoke-ConvoItem $ctx $item
     $log = ($script:logs -join $LF)
-    Check 'L5-human-interjection-discards-draft' ($log -match 'STALE-DRAFT-DISCARD' -and $log -match 'human-or-unknown:human-last')
-    Eq 'L5-nothing-sent' $script:sends 0
+    Check 'L5-current-pending-is-not-delayed-by-me-tail' ($log -match 'PAGE-LOCK-REACQUIRED phase=send')
+    Eq 'L5-current-pending-sent-once-under-lock' $script:sends 1
+    Check 'L5-send-still-held-real-lock' ([bool]$script:lockHeldAtSend)
 
     # L5b: a hand-typed line with no per-message clock leaves the order unverifiable - also stale.
     $ctx = Reset
@@ -235,12 +252,12 @@ try {
     Check 'L5b-unverifiable-order-discards-draft' ($log -match 'STALE-DRAFT-DISCARD' -and $log -match 'order-unverified')
     Eq 'L5b-nothing-sent' $script:sends 0
 
-    # ---------------- L6: a human pause started during generation ----------------
+    # ---------------- L6: target no longer in pending at send-time ----------------
     $ctx = Reset
-    $script:pauseActive = $true
+    $script:pendingNow = $false
     Invoke-ConvoItem $ctx $item
     $log = ($script:logs -join $LF)
-    Check 'L6-human-pause-discards-draft' ($log -match 'STALE-DRAFT-DISCARD' -and $log -match 'human-pause-active')
+    Check 'L6-leaving-pending-discards-draft' ($log -match 'STALE-DRAFT-DISCARD' -and $log -match 'no longer in pending list')
     Eq 'L6-nothing-sent' $script:sends 0
 
     # ---------------- L7: another process holds the lock ----------------

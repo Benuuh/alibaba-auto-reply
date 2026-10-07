@@ -46,9 +46,9 @@ $script:Mode = "ok"
 $script:Order = New-Object System.Collections.ArrayList
 
 function Invoke-CdpEval([string]$js) {
-    if ($js -match "contact-item-container") { [void]$script:Order.Add("open"); if ($script:Mode -eq "notfound") { return "NOT_FOUND" }; return "CLICKED" }
-    if ($js -match "content-header") { [void]$script:Order.Add("name"); if ($script:Mode -eq "wrongconvo") { return "Someone Else Entirely" }; return "Acme Trading Co Ltd" }
-    if ($js -match "send-textarea") {
+    if ($js -match "AAR-SEND:open") { [void]$script:Order.Add("open"); if ($script:Mode -eq "notfound") { return "NOT_FOUND" }; return "CLICKED" }
+    if ($js -match "AAR-SEND:name") { [void]$script:Order.Add("name"); if ($script:Mode -eq "wrongconvo") { return "Someone Else Entirely" }; return "Acme Trading Co Ltd" }
+    if ($js -match "AAR-SEND:send") {
         [void]$script:Order.Add("send")
         if ($script:Mode -eq "nosend") { return "FILLED|CLICKED|LEN:7" }
         if ($script:Mode -eq "nota") { return "NO_TEXTAREA" }
@@ -174,18 +174,18 @@ function Invoke-GonghaiEvalOnPage {
     param([Parameter(Mandatory = $true)]$Page, [Parameter(Mandatory = $true)][string]$Script)
     $script:UsedOnPage = $true
     [void]$script:SharedOrder.Add("ONPAGE")
-    if ($Script -match "contact-item-container") { return "CLICKED" }
-    if ($Script -match "content-header") { return "Acme Trading Co Ltd" }
-    if ($Script -match "send-textarea") { $script:SendStageReached = $true; return "NO_TEXTAREA" }
+    if ($Script -match "AAR-SEND:open") { return "CLICKED" }
+    if ($Script -match "AAR-SEND:name") { return "Acme Trading Co Ltd" }
+    if ($Script -match "AAR-SEND:send") { $script:SendStageReached = $true; return "NO_TEXTAREA" }
     return ""
 }
 function Invoke-CdpEval([string]$js) {
     # 传了 -Page 时**不得**走这条路(一旦走到就落到 monitor 的浏览器里)
     $script:UsedShared = $true
     [void]$script:SharedOrder.Add("SHARED")
-    if ($js -match "contact-item-container") { return "CLICKED" }
-    if ($js -match "content-header") { return "Acme Trading Co Ltd" }
-    if ($js -match "send-textarea") { return "NO_TEXTAREA" }
+    if ($js -match "AAR-SEND:open") { return "CLICKED" }
+    if ($js -match "AAR-SEND:name") { return "Acme Trading Co Ltd" }
+    if ($js -match "AAR-SEND:send") { return "NO_TEXTAREA" }
     return ""
 }
 

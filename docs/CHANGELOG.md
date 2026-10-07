@@ -1,5 +1,49 @@
 # CHANGELOG - alibaba-auto-reply
 
+## 0.1.2 - 2026-10-08
+
+汇总待回复优先、会话读取、自然回复与持久发送恢复修复；以下各轮记录保留当时验证结果。标签 v0.1.2，预发布，发布不重启生产。验证及限制见 [发布记录](verification/release_0.1.2.md)。
+
+### 2026-10-07 待回复优先与自然回复
+
+- 待回复出现一次即处理，取消当前自动回复入口的五分钟来源/发送等待、20 秒新消息下限、两轮确认及冷启动只观察；显式人工接管名单与送达对账保护保留。
+- 发送尝试保存确切触发身份，以确认收据防同一次答复重发；历史账本兼容。发送锁内重新读取待回复成员、精确会话名和买家输入，防列表未刷新或旧草稿发送。
+- 待回复读取失败重试一次后落人工任务，单会话错误不再终止其他客户处理；待回复列表必须来自已确认的可见活动标签，不再从预览猜姓名。
+- 模型自然生成业务解释，取消九句登记表；敏感内容仍走程序证据与完整合规检查，最多改写一次。修正请求动词跨句继承，保留结构噪声排除且不按正文关键词丢掉真实消息。
+- 默认隔离测试入口支持按文件选择用例，仍执行隔离认证及生产路径审计。本轮未启动生产或执行客户发送。详见 verification/pending_reply_policy_20261007/report.md。
+
+### 2026-10-07 第二轮独立复核整改（R8–R10）
+
+- **R8 送达已证明 ≠ 持久化完成**：`lib/send_attempts.ps1` 新增 `Test-SendAttemptHasValidReceipt` / `Test-SendAttemptPersistenceComplete` / `Test-SendAttemptPersistencePending` / `Test-SendAttemptSettled` / `Test-SendAttemptBlocksConversation`，并成为**所有消费者**的唯一口径：`Get-SendAttempts -ActiveOnly` 只排除真正闭环的尝试；`Remove-ExcessSendAttempts` 只淘汰闭环的（顺带修正旧写法用 `.Item1/.Item2` 取值恒空、保留上限从未真正生效的缺陷）；`Test-SendAttemptBlocksResend` / `Test-SendAttemptRetryAllowed` / `Resume-SendAttemptPersistence` / `Invoke-SendAttemptPersistenceRecovery` 全部按"是否闭环"判断。**收据已保存但 sent_records/账本未提交的尝试不再解除会话保护，也不再被恢复扫描漏掉。**
+- **R8 对账接通真实提交**：`Invoke-SendAttemptReconciliation` 取得收据后用**生产写入器**提交 `sent_records` 与去重账本并回读；返回值把送达结论（`DeliveryState`）与持久化/闸门结论（`PersistenceOk` / `PersistenceComplete` / `SentRecord` / `Ledger` / `PersistError` / `Blocked`）分开；提交失败保持 `persistence_pending` + 调查 + 会话保护。monitor 新增 `SEND-ATTEMPT-RECONCILE-PERSIST` 日志。
+- **R9 无 rich 节点的真实附件气泡不再被删除**：`lib/msg_extract_js.ps1` 的判定顺序改为「结构类型 → 附件证据（`img` 阿里域 src/data-src、图片/文件结构选择器；无 rich 时文件卡用行文本）→ 正文 → 方向」，删除 `if (!rich) return null`；只有"既无正文、也无附件/文件证据"的 wrapper 才不是真实气泡。收据因此看得到这条气泡，而不是在缺失气泡的假快照上成立。
+- **R10 已核实的左右结构优先于显示名与翻译标记**：`item-right` / `item-left` 先定方向；两者同现 ⇒ `dir='unknown' + dirsrc='conflict'`；两者都缺 ⇒ 仅在存在观测性依据时推断（`name-field` / `translation-marker`），否则 `dirsrc='missing'`。`lib/msg_events.ps1` 区分"逐条元数据显式声明方向"与"旧行无元数据"：前者保持 `unknown` 并保留依据，只有后者才回退到角色标记。方向冲突事件没有可用身份，既不是买家诉求也不是出站证明。
+- **测试（无新增文件，全部在册）**：`send_attempt_receipt.tests.ps1` 73→112、`send_attempt_restart.tests.ps1` 23→53（新增两条**真实子进程中断**：收据保存后/账本提交前、以及 sent_records 已提交/账本写入中，均由新进程恢复并回读）、`msg_source_three_class.tests.ps1` 41→51、`review_fixes_entry.tests.ps1` 195→201（到期积压**主动回读**的消费者覆盖）。修复前反例与修复后证据分别保存在 `docs/verification/message_source_recovery_20261007/round3_targeted_before.txt` / `round3_targeted_after.txt`。
+- **完整 Offline**：改动冻结前 `offline_final6.txt`、全树（代码+测试+文档+规则清单）冻结后 `offline_final7.txt` **逐字相同** —— 62 文件 / 3387 通过 / 0 失败；LogicTests/IsolationChecks/ProductionPathAudit/Overall 全 PASS，原生退出码 0。逐文件对比上一版权威运行（`offline_final5.txt`）：只有上述 4 个文件的断言数变化（+85），其余 58 个一字未动。
+- 未启停进程/任务、未改生产配置或账本、未发送消息或通知、未提交/推送；**代码尚未上线**。真实页面来源样本、真实送达、真实通知与生产重载仍未验收，详见[交付报告](verification/message_source_recovery_20261007/implementation_report.md)。
+
+### 2026-10-07 消息来源三类判定与接待恢复修复
+
+- **消息来源四态与统一事件**：新增 `scripts/lib/msg_events.ps1`，抽取层逐条保存真实消息边界、方向依据、逐条时间及精度、平台 MessageId（页面确实给出时）、结构类型、逐条原始来源字段/标签、采样时刻与规则版本；`@@META`（行尾 base64 JSON）是唯一可信的逐条元数据载体，正文里伪造的同类文本不会被当作元数据，也不进入正文哈希与去重键。我方来源分为 `platform / project / human / unknown`，标签在取得来源真值对照（S0）前**不参与判定**（默认规则集为空）。
+- **旧入口全部委托共享判定**：`Get-MessageSourceClass`、`Get-HumanInterjectionGateEx`、`lib/msg_norm.ps1` 的 `Source` 都改为委托共享判定；移除“有时间就是 bot”的旁路，并移除“无标记即人工”的外推（无证据 ⇒ `unknown`）。`msg_norm` 另暴露权威字段 `SourceClass` / `SourceEvidence`。
+- **来源不明的持久保护**：无标记、无时间的我方消息现在同样进入持久等待窗口（此前只收 `timer-marker-only`，正是“尾部之后又来买家消息即失去保护”的成因）；`Sync-ConversationInterventionState` 接受按买家读取的确切事件来源更正。
+- **真实收据与持久发送尝试**：新增 `scripts/lib/send_attempts.ps1`。发送前先落盘唯一 AttemptId、目标会话、完整正文/哈希、发送前快照证明与阶段，落盘失败即不发送；发送后按同口径快照确认唯一新增事件；送达状态另记 `not_attempted / pending_confirmation / receipt_verified / not_delivered_verified / delivery_ambiguous / persistence_pending`。`sent_records` 或账本写入失败 ⇒ 保留已送达证明 + `persistence_pending` + 调查，不重发已送达正文。待确认发送对同一触发不再重发。
+- **事件级调查与独立提醒**：新增 `scripts/lib/investigations.ps1`。幂等键 = 会话 + 调查类型 + 确切事件/尝试，不同事件不因同买家或同正文合并，身份无法唯一建立时创建显式歧义调查；先持久化调查再独立于“买家回复成功”分支提醒；一次成功提醒不重复，通道失败/响应不明分开记录并支持人工显式重试；关闭调查按类型核验真实证据，只改状态或给出来源猜测一律拒绝；活跃调查与其证据不被保留策略剪枝。
+- **操作入口**：新增 `scripts/investigate.ps1`（list / detail / claim / confirm-source / confirm-delivery / retry-notify / sweep / audit / retention / attempts / recover）。人工确认只授权**确切事件**的来源更正，不制造机器人发送收据，也不解除其他人工暂停。
+- **存档与路径**：`Get-SkillPath` 新增 `investigations`、`send_attempts` 具名路径，均落在运行数据根的 data 目录内（不新增配置键）。
+
+#### 2026-10-07 独立复核整改（R1–R7）
+
+- **R1 收据接入真实发送**：新增 `scripts/lib/msg_extract_js.ps1`，浏览器侧逐条抽取与行序列化只有一份实现，monitor 会话读取与发送前后快照（`Get-OutboundSnapshot`）共用它；flow/总结卡与身份不确定的真实气泡**保留**在快照里，收据判定据此拒绝（新增 `new-unidentified-event` / `new-event-identity-not-usable`），不再靠过滤获取有效收据。`Confirm-SendAttemptFromSnapshots` 接入 monitor 发送路径，成为生产调用点；`Send-OneTalkMessageEx` 返回同口径前后快照。
+- **R2 外部副作用前持久化**：发送尝试保存**完整正文**与**可恢复基线**；点击前新增 `Start-SendAttemptSideEffect` 落盘 `dispatching`/`pending_confirmation` 并回读核验，失败即不发送。重启后 `Invoke-SendAttemptReconciliation` 用持久化基线 + 同口径重读判断"这条正文是否真的成了新事件"：唯一新增且正文一致 ⇒ 收据（`recovered-from-persisted-baseline`，绑定确切事件）；没有新增 ⇒ 保持待确认（"看不到"不等于未送达）；多条或存在无法识别的新出站气泡 ⇒ 歧义 + 调查。
+- **R3 会话级不重发**：`Test-SendAttemptBlocksResend` 不再按触发过滤——同一会话里任何未确认/待持久化/歧义尝试都阻断新增发送，去重键不同也不放行；只有对账结论才解除。monitor 传入 `-ConvoKey`。
+- **R4 恢复闭环与真实入口**：`confirm-delivery` 变成可恢复的完整操作（核验真实收据 → 更新尝试 → 用**真实写入器**补齐 `sent_records` 与账本 → 回读尝试状态与持久化结论 → 才关闭调查）；`Complete-SendAttemptPersistence -UseProductionWriters` 与 `Invoke-SendAttemptPersistenceRecovery` 由 monitor 每轮扫描和 CLI `-Action recover` 调用，不再出现 `no-sent-record-writer`/`no-ledger-writer`。
+- **R5 证据核验收紧**：证据必须是结构化出处 `<source>:<detail>`（来源集合与未送达集合分开），`handled`/"已处理"这类无出处备注被拒；来源更正必须绑定**确切事件身份**；送达确认必须找到**真实收据对象**（尝试存储或 `sent_records`）且正文哈希匹配，不再把 `ReceiptId` 与 `AttemptId` 做子串比较；来源更正**先落盘再关闭**调查（幂等），写失败保留可重试状态。
+- **R6 通知不盲重发**：新增 `notifyState`（none/sent/unknown/failed）与 `notifyAttempts`；周期扫描只提醒"从未尝试过投递"的调查，一次尝试之后一律交给人工 `retry-notify`（显式且单独审计）。响应不明记为 `unknown`，不再被当作未送达。
+- **R7 旧入口与消费者接线**：`Get-MessageSource` 同样委托共享判定（映射 project→`bot`、platform 单独保留、unknown 不外推），移除"有时间就是 bot / 无标记就是 human"的旁路；`lib/human_style.ps1` 只采集有出处的人工消息并剥离 `@@MT/@@META` 等标记；`lib/reply_metrics.ps1` 的安抚语重复与尺寸引导指标改为逐行共享判定（`Get-SnapshotLineSources`），只有 project（含已确认收据）计入我方，`analyze_replies.ps1` 传入 buyer 以启用收据匹配。
+- **测试**：新增 `msg_source_consumers.tests.ps1`（消费者回归）与 `send_attempt_restart.tests.ps1`（**真实子进程中断 + 重启恢复**）；`send_attempt_receipt.tests.ps1` 改为执行真实收据 DOM JavaScript 并跑通完整发送消费者；`new_message_cooldown.tests.ps1` 修正 A9 夹具缺空格并加强验证目标。
+- 未启停进程/任务、未改生产配置或账本、未发送消息或通知、未提交/推送；**代码尚未上线**。真实页面来源样本、真实收据、真实通知投递与端到端时效仍未验收，详见[修复交付报告](verification/message_source_recovery_20261007/implementation_report.md)。
+
 ## 0.1.1 - 2026-10-06
 
 - 汇总接待身份与时间问答、七项架构优化及多轮独立复核整改；保留 0.0.2 的消息顺序、新消息冷却和 Amazon/FBA 目的地修复。

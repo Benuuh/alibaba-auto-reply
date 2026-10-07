@@ -75,33 +75,20 @@ function Get-CodeLines([string]$path) {
     return $out
 }
 $code = Get-CodeLines $monPath
-# 账本事实只算一次, 且必须作为**入参**喂给唯一出口(不是新增第二个出口)
-Assert-Eq "monitor-guard-called-once" (@($code | Where-Object { $_.code -match 'Test-BuyerMsgAlreadyAnswered\s+-' }).Count) 1
-Assert-True "monitor-guard-feeds-seen-rounds" ($monRaw -match 'if \(\$alreadyAnswered\) \{ \$seenRounds = 0 \}')
-Assert-True "monitor-guard-kept-single-exit-arg" ($monRaw -match '-PendingSeenRounds \$seenRounds')
-# 锚定冷却: 每个 skipCooldown 写入点都必须带 until(漏一个就漏一处叠加等待)
-$writers = @($code | Where-Object { $_.code -match 'skipCooldown\[\$key\] = @\{' })
-Assert-True "cooldown-writers-present" ($writers.Count -ge 4)
-Assert-Eq "every-cooldown-writer-has-until" (@($writers | Where-Object { $_.code -notmatch 'until' }).Count) 0
-Assert-True "rate-min-gap-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddMinutes\(\$script:replyMinGapMin\)')
-Assert-True "post-send-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddMinutes\(\$script:replyPostSendCooldownMin\)')
-Assert-True "new-floor-anchored-to-lastsend" ($monRaw -match '\$coolUntil = \$sentAt\.AddSeconds\(\$script:replyNewMsgFloorSec\)')
-Assert-True "minute-data-keeps-fraction" ($monRaw -notmatch '\$gapMin = \[int\]')
-Assert-True "no-second-minute-override" ($monRaw -notmatch '\$gapMin2\s*=')
-Assert-True "periodic-read-scheduler-present" ($monRaw -match 'nextVerifyAt' -and $monRaw -match "'periodic'")
-# 冷却期内"预览变化"的三态 + 连挂告警(全部必须留痕, 否则线上无从判断)
-foreach ($marker in @('COOLDOWN-RECHECK', 'COOLDOWN-HOLD', 'COOLDOWN-LIFT', 'DUP-GUARD-HOLD', 'DUP-GUARD-ALERT', 'dupGuardHolds')) {
-    Assert-True ("monitor-has[{0}]" -f $marker) ($monRaw -match [regex]::Escape($marker))
-}
+# Current pending contract: one decision consumes actual duplicate evidence.
+Assert-Eq 'monitor-event-guard-called-once' (@($code|Where-Object {$_.code -match 'Test-PendingBuyerAlreadyAnswered\s+-'}).Count) 1
+Assert-True 'monitor-guard-feeds-already-answered' ($monRaw -match '-AlreadyAnswered \$alreadyAnswered')
+Assert-True 'monitor-pending-is-authoritative' ($monRaw -match '-PendingListAuthoritative')
+Assert-True 'monitor-no-source-wait-consumer' ($monRaw -notmatch '\$freshSync\s*=|\$interventionSync\s*=')
+Assert-True 'monitor-stale-pending-human-task' ($monRaw -match 'stale-pending-flag')
+Assert-True 'monitor-final-pending-reread' ($monRaw -match '\$pendingRaw = Get-Snapshot')
 # 不变量(与 should_reply.tests.ps1 的 A8 同源, 这里防"改到一半"): 判据调用点唯一 / 发送调用点唯一
 Assert-Eq "single-judge-call-site" (@($code | Where-Object { $_.code -match 'Test-ShouldReply\s+-' }).Count) 1
 # [2026-10-05 spec §5-3] The single production send site is now the STRUCTURED entry point
 # (Send-OneTalkMessageEx), because the page action alone is not a send result any more.
 Assert-Eq "single-send-site" (@($code | Where-Object { $_.code -match '\bSend-OneTalkMessageEx\s+-' }).Count) 1
 Assert-Eq "legacy-send-entry-not-called" (@($code | Where-Object { $_.code -match '\bSend-OneTalkMessage\s+-' }).Count) 0
-# §2.1: 轮数不足那条路仍只等待、不写冷却(否则第 2 轮永远等不到)
-Assert-True "pending-confirm-wait-intact" ($monRaw -match 'PENDING-CONFIRM-WAIT')
-Assert-True "dup-guard-not-on-pending-confirm-path" ($monRaw -match 'DUP-GUARD-HOLD')
+Assert-True 'pending-no-round-wait' ($monRaw -notmatch 'PENDING-CONFIRM-WAIT')
 
 # ---------------------------------------------------------------------------
 Write-Output ""

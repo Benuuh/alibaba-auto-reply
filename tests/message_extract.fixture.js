@@ -2,6 +2,7 @@
 const fs = require('fs');
 const vm = require('vm');
 const assert = require('assert');
+const {documentFor} = require('./conversation_dom.fixture');
 const source = fs.readFileSync(process.argv[2], 'utf8');
 let showTimeReads = 0;
 function row(text, time, buyer = true, extra = {}) {
@@ -21,13 +22,8 @@ function row(text, time, buyer = true, extra = {}) {
     querySelectorAll(selector) { return selector === 'img' ? images : []; }
   };
 }
-async function extract(rows) {
-  const contact = {innerText: 'Buyer A', querySelector: () => ({innerText: 'Buyer A'}), click() {}};
-  const document = {
-    querySelector: selector => selector === '.content-header' ? {innerText: 'Buyer A'} : null,
-    querySelectorAll: selector => selector === '.contact-item-container' ? [contact] :
-      selector === '[class*=message-item-wrapper]' ? rows : []
-  };
+async function extract(rows, opts = {}) {
+  const document = documentFor(rows, opts);
   const result = await vm.runInNewContext(source, {
     document, Date, JSON, Promise, setTimeout: callback => callback(),
     btoa: value => Buffer.from(value, 'binary').toString('base64'), unescape, encodeURIComponent
@@ -59,5 +55,9 @@ function timeOf(line) { const match = line.match(/@@MT:(\d+)/); return match ? N
     {images: ['https://example.alicdn.com/invented-cargo.png']})]);
   assert(image.msgs.startsWith('[BUYER] [IMG] @@IMG:') && timeOf(image.msgs));
   assert.strictEqual(showTimeReads, 0);
+  const scoped = await extract([row('our conversation', '2026-10-4 14:33:39')], {
+    outsideRows: [row('another buyer secret', '2026-10-4 14:33:40')]
+  });
+  assert(!scoped.msgs.includes('another buyer secret'), 'must not read another conversation');
   process.stdout.write(JSON.stringify({reverse, missing, invalid, image, seconds}));
 })().catch(error => { process.stderr.write(error.stack); process.exitCode = 1; });

@@ -27,6 +27,19 @@ $env:AAR_RUNTIME_ROOT = $isoRoot
 . (Join-Path $scripts 'lib\msg_source.ps1')
 . (Join-Path $scripts 'lib\state_store.ps1')
 . (Join-Path $scripts 'lib\human_pause.ps1')
+# [2026-10-07 spec §3.2 第 3 条] 无发送者证据的 [ME] 行现在是 unknown，不再外推为人工。
+#   本套夹具用逐条已验证的发送者字段提供人工来源证据（字段在 @@META 载荷里，正文无法伪造）。
+. (Join-Path $scripts 'lib\msg_events.ps1')
+[void](Set-MessageSourceContext -Rules (New-MessageSourceRuleSet -VerifiedFields ([pscustomobject]@{ 'sender=owner' = 'human' }) -Provenance 'fixture-verified-owner-field'))
+function New-OwnerMeta([string]$text, [long]$ts) {
+    return (ConvertTo-MessageMetaMarker ([pscustomobject]@{
+        v = 'msgevent-2026-10-07.1'; t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        dir = 'out'; dirsrc = 'layout'; mid = ''; ts = $ts; tprec = 'second'; st = 'message'
+        src = @(); f = @('sender=owner'); at = '2026-10-05T00:00:00Z'; idq = 'composite'
+    }))
+}
+function OwnerLine([string]$text, [long]$ts) { return ('[ME] ' + $text + ' @@MT:' + $ts + ' ' + (New-OwnerMeta $text $ts)) }
+
 
 $script:nowUtc = [datetime]::SpecifyKind([datetime]'2026-10-05T04:00:00', [DateTimeKind]::Utc)
 function Get-HumanPauseNowUtc { return $script:nowUtc }
@@ -36,7 +49,8 @@ function Set-FixNow([string]$LocalIso) {
 function B64([string]$s) { return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 function BLine([string]$t, [long]$ts) { return ('[BUYER] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts + ' @@OT:' + (B64 $t)) }
 function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts) }
-function HumanLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts) }
+function PlainMeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts) }
+function HumanLine([string]$t, [long]$ts) { return (OwnerLine $t $ts) }
 $LF = [string][char]10
 $ts0 = [long]1791172800000
 $buyer = 'Virtual Buyer'
@@ -54,7 +68,7 @@ function Sync([string[]]$lines, $matches, $nowUtc) {
 # ---- S01 原 ME 只有 MT、SentMatches[0]=true、后接买家 => 不暂停/不 hold ----
 ClearPause
 Set-FixNow '2026-10-05T12:00:00'
-$s01Lines = @((HumanLine 'Confirmed automated answer' $ts0), (BLine 'New question' ($ts0 + 1000)))
+$s01Lines = @((PlainMeLine 'Confirmed automated answer' $ts0), (BLine 'New question' ($ts0 + 1000)))
 $s01 = Sync $s01Lines @{ 0 = $true } $script:nowUtc
 Check 'S01-confirmed-bot-does-not-pause' (-not [bool]$s01.HumanPauseActive) ([string]$s01.Reason)
 Check 'S01-confirmed-bot-does-not-hold' (-not [bool]$s01.UnknownHoldActive) ([string]$s01.Reason)
@@ -69,7 +83,7 @@ ClearPause
 $s02a = Sync @((MeLine 'bot with ts' $ts0), (BLine 'q' ($ts0 + 1000))) @{ 0 = $true } $script:nowUtc
 Check 'S02-with-ts-confirmed-bot-no-pause' (-not [bool]$s02a.HumanPauseActive) ''
 ClearPause
-$s02b = Sync @((HumanLine 'bot without ts' $ts0), (BLine 'q' ($ts0 + 1000))) @{ 0 = $true } $script:nowUtc
+$s02b = Sync @((PlainMeLine 'bot without ts' $ts0), (BLine 'q' ($ts0 + 1000))) @{ 0 = $true } $script:nowUtc
 Check 'S02-without-ts-confirmed-bot-no-pause' (-not [bool]$s02b.HumanPauseActive) ''
 ClearPause
 $s02c = Sync @('[ME] explicit sender marker @@SRC:bot @@MT:' + $ts0, (BLine 'q' ($ts0 + 1000))) @{} $script:nowUtc
@@ -78,7 +92,7 @@ Check 'S02-explicit-bot-marker-no-pause' (-not [bool]$s02c.HumanPauseActive) ''
 # ---- S03 相同文本在不同位置，一条有发送证据、另一条没有 => 按真实下标分别分类 ----
 ClearPause
 $same = 'identical text from our side'
-$s03Lines = @((HumanLine $same $ts0), (BLine 'mid' ($ts0 + 1000)), (HumanLine $same ($ts0 + 2000)))
+$s03Lines = @((PlainMeLine $same $ts0), (BLine 'mid' ($ts0 + 1000)), (HumanLine $same ($ts0 + 2000)))
 $s03ev = @(Get-InterventionEvents -Lines $s03Lines -SentMatches @{ 0 = $true } -NowUtc $script:nowUtc)
 Eq 'S03-only-the-unmatched-line-is-human' $s03ev.Count 1
 Eq 'S03-human-event-uses-its-own-index' ([int]$s03ev[0].LineIndex) 2
@@ -120,7 +134,7 @@ Eq 'S06-until-unchanged' (ConvertTo-HumanPauseUtc (Get-HumanPause $buyer).untilU
 # 无可靠时间：用首次观察锚点建立有界窗口，同一条重扫不延长。
 ClearPause
 Set-FixNow '2026-10-05T12:00:00'
-$noTs = '[ME] owner typed this without any timestamp'
+$noTs = OwnerLine 'owner typed this without any timestamp' 0
 $s06b = Sync @($noTs, (BLine 'hi' ($ts0))) @{} $script:nowUtc
 Check 'S06-no-reliable-time-creates-bounded-pause' ([bool]$s06b.HumanPauseActive) ''
 $untilNoTs = ConvertTo-HumanPauseUtc (Get-HumanPause $buyer).untilUtc
@@ -146,8 +160,13 @@ Set-Item Function:Read-HumanPauseStore $pauseBody
 # ---- S07 旧误判事件有确切 bot 证据，另有真实人工事件 => 更正误判/有界，不删真实人工暂停、不延长 ----
 ClearPause
 Set-FixNow '2026-10-05T12:00:00'
-$misLine = HumanLine 'this was actually our bot' $ts0
-# 先在没有发送证据时登记成"人工"（模拟旧的误判状态）。
+$misLine = PlainMeLine 'this was actually our bot' $ts0
+# 模拟旧的误判状态：把这条**证据不足**的消息直接登记为人工事件（新规则不会自行这样判定），
+#   再验证确切 bot 证据能把这一条更正掉。
+$misAnchorUtc = [datetime]::SpecifyKind([datetime]'2026-10-05T04:00:00', [DateTimeKind]::Utc)
+$misEv = [pscustomobject]@{ Identity = (Get-InterventionEventIdentity $misLine); LineIndex = 0; AtUtc = $misAnchorUtc
+    TimeTrust = 'reliable'; TimeSource = 'explicit'; Evidence = 'legacy-misclassification'; SourceClass = 'human'; Preview = ''; RawLine = $misLine }
+$null = Invoke-InterventionEventSync -Buyer $buyer -HumanEvents @($misEv) -NowUtc $script:nowUtc
 $s07a = Sync @($misLine) @{} $script:nowUtc
 Check 'S07-misclassified-pause-exists' ([bool]$s07a.HumanPauseActive) ([string]$s07a.Reason)
 # 同一快照现在给出**确切** bot 证据 => 更正分类并按其余真实人工事件重算截止（没有真实人工 => 只解除这一个暂停）。

@@ -12,21 +12,24 @@
 #   调用方**不得**把 Text 写进仓库、REPORT 或对老板的汇报; Get-HumanStyleStats 的输出
 #   只含**聚合统计**(计数/词频/布尔分布)与**通用词块**, 不含买家名、不含整句原文。
 
-# 去掉行尾标记(@@TS / @@OT / @@IMG / @@FILE), 得到可读文本
+# 去掉逐条标记(@@TS/@@MT/@@MID/@@OT/@@IMG/@@FILE/@@META/@@CARD), 得到可读文本
+# [2026-10-07 spec §3.1 / 复核 R7] 旧实现漏了 @@MT 与 @@META，于是"采集到的人工原文"里
+#   带着一整段 base64 元数据（统计出来的根本不是老板打的那句话）。
 function Get-HumanMessageText([string]$line) {
     if (-not $line) { return '' }
     $t = $line
-    $t = $t -replace '^\s*\[ME\]\s*', ''
-    $t = $t -replace '@@TS:[^\s]*', ''
-    $t = $t -replace '@@OT:[A-Za-z0-9+/=]+', ''
-    $t = $t -replace '@@IMG:[^\s]*', ''
-    $t = $t -replace '\s*@@FILE:[^\s]*', ''
+    $t = $t -replace '^\s*\[(ME|BUYER)\]\s*', ''
+    $t = $t -replace '@@[A-Za-z]+:[^\s]*', ''
     return $t.Trim()
 }
 
 # 扫描快照目录, 返回所有"人工发出的"我方消息(依赖 msg_source.ps1 判定, 不自己写正则)
-# 返回: 数组(可能为空), 元素 = @{ Buyer=<买家名>; Text=<原文>; File=<快照名>; Line=<行号> }
+# 返回: 数组(可能为空), 元素 = @{ Buyer=<买家名>; Text=<原文>; File=<快照名>; Line=<行号>; Source=<词表值>; Evidence=<证据引用> }
 # 注意: Buyer 字段属 PII, 仅供本机分析; 不要写入入库文件。
+#
+# [2026-10-07 spec §3.2 / 复核 R7] 判定来源只有一个：Get-MessageSource -> 共享四态判定。
+#   这里**不再**把"没有 @@TS"当成人工；只有带出处的人工证据（已验证发送者字段或确切事件确认）
+#   才会被采集。未知/平台/项目行一律不计入"老板手打"（宁可少采，不可把别人的话算成老板的）。
 function Get-HumanMessages([string]$snapDir) {
     $out = @()
     if (-not $snapDir -or -not (Test-Path $snapDir)) { return @() }
@@ -38,12 +41,19 @@ function Get-HumanMessages([string]$snapDir) {
         foreach ($line in $lines) {
             $ln++
             if ($line -match '^#\s*BUYER:\s*(.+)$') { $buyer = $Matches[1].Trim(); continue }
-            if ((Get-MessageSource $line) -ne 'human') { continue }
+            $cls = $null
+            if (Get-Command Get-MessageSourceClass -ErrorAction SilentlyContinue) { $cls = Get-MessageSourceClass -line $line }
+            $src = if ($cls) { [string]$cls.Class } else { '' }
+            $legacy = Get-MessageSource $line
+            $isHuman = ($src -eq 'human') -or ((-not $src) -and ($legacy -eq 'human'))
+            if (-not $isHuman) { continue }
             $out += [pscustomobject]@{
                 Buyer = $buyer
                 Text  = (Get-HumanMessageText $line)
                 File  = $f.Name
                 Line  = $ln
+                Source = $(if ($src) { $src } else { $legacy })
+                Evidence = $(if ($cls) { [string]$cls.Evidence } else { 'legacy-human' })
             }
         }
     }

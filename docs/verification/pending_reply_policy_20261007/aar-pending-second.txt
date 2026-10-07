@@ -1,0 +1,95 @@
+TEST-LAYER=Offline files=5 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder= processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== new_message_cooldown.tests.ps1 ===
+CHILD-CONTEXT test=new_message_cooldown.tests.ps1 pid=16052 nonce=484de88b07df4cf5ad06944c5cc90b60 verified=True contexts=2 exit=0
+  RESULT pass=31 fail=0
+  
+  
+=== reception_facts.tests.ps1 ===
+CHILD-CONTEXT test=reception_facts.tests.ps1 pid=12388 nonce=d1ea7237aff849849762871033c51f55 verified=True contexts=2 exit=0
+  == reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+  RESULT pass=506 fail=0
+  
+  
+=== pending_reply_policy.tests.ps1 ===
+CHILD-CONTEXT test=pending_reply_policy.tests.ps1 pid=16048 nonce=76da8da3e35749ac8b7dfa3b64eebd8b verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  FAIL natural-model-body-survives natural unregistered body must reach send
+  PASS protected-body-one-rewrite
+  PASS final-pending-gate
+  PASS changed-input-discards-draft
+  PASS read-failure-rereads-once-then-human
+  PASS stale-pending-task-is-idempotent
+  FAIL one-read-failure-does-not-stop-other-buyers other buyer must send: SEND-ATTEMPT-RECOVERY-LOOP-ERR: The term 'Invoke-MonitorSendAttemptRecovery' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | PAGE-LOCK-RELEASED phase=list-done items=2 | PROCESS convo from pending-list: Virtual Buyer |  | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | RETRY-OPEN Virtual Buyer: READ_NOT_READY - switching to pending tab and retry | SKIP Virtual Buyer: cannot open convo (READ_NOT_READY) | PROCESS convo from pending-list: Other Buyer |  | PAGE-LOCK-ACQUIRED phase=read convo=Other Buyer | MSG-SCHEMA Other Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False | Latest buyer msg: I need shipping. | SHOULD-REPLY Other Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey= | ROUND-START Other Buyer attach=none imgs=0 ctx=1 budget=180s | HUMAN-TASK-NO-EXACT-REF Other Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Other Buyer readHoldMs=0 | REPLY-GEN Other Buyer scenario=new_inquiry src=LLM modelCalls=1 rewrites=0 ctxChars=1454 violations=[] fallback= ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: LLM | STALE-DRAFT-DISCARD Other Buyer: no longer in pending list | Scan cycle done
+  PASS task-store-failure-does-not-throw
+  RESULT pass=6 fail=2
+  
+  
+=== review_fixes_entry.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes_entry.tests.ps1 pid=28240 nonce=fcb98607fb8249e0a8372ed98cef9806 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  RESULT: pass=151 fail=0
+  ALL PASS
+  
+  
+=== closure_s5.tests.ps1 ===
+CHILD-CONTEXT test=closure_s5.tests.ps1 pid=21992 nonce=afd9c3b8e1534e6094a60a9e31699db2 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-09fbd2b626184d35bb5c1ffeb3eb8186\data\manual_override.json 不存在,按空名单处理
+  PASS P03-program-source-send
+  PASS D04-awaiting-conditional-send
+  PASS X01
+  PASS X02
+  PASS X03
+  PASS X04
+  PASS X05
+  PASS X05-invalid-success-claim
+  PASS X05-reconciled-positive
+  PASS X06-read-guard-preserves-not-attempted
+  RESULT closure_s5 pass=9 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-09fbd2b626184d35bb5c1ffeb3eb8186
+  
+  
+
+TEST-SUMMARY: layer=Offline files=5 failedFiles=1 pass=703 fail=2
+LogicTests=FAIL files=5 failedFiles=1 pass=703 fail=2
+  failed files: pending_reply_policy.tests.ps1
+IsolationChecks=PASS checked=5 issues=0
+ProductionPathAudit=PASS changes=0 writerRunning=False reason=no production path changed during this run
+  attribution-clues(before): {"capturedAtUtc":"2026-10-07T01:28:31.2372985Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-07T01:31:34.0129650Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+Overall=FAIL exitCode=1

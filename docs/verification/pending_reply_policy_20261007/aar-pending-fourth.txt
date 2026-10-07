@@ -1,0 +1,55 @@
+TEST-LAYER=Offline files=5 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder= processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== contact_redline.tests.ps1 ===
+CHILD-CONTEXT test=contact_redline.tests.ps1 pid=3544 nonce=60ca82a6231a4c46b431e0c074e5d0d9 verified=True contexts=2 exit=0
+  == contact_redline tests ==
+  
+  RESULT: pass=60 fail=0
+  ALL PASS
+  
+  
+=== conversation_scope.tests.ps1 ===
+CHILD-CONTEXT test=conversation_scope.tests.ps1 pid=22156 nonce=d0940916c1fd4378826d7d597545cfd6 verified=True contexts=2 exit=0
+  PASS conversation_scope DOM regressions=24
+  RESULT pending_list pass=8 fail=0
+  RESULT conversation_scope: PASS (production DOM scripts + pending list + unreadable snapshot guard)
+  
+  
+=== reply_gate_dupskip.tests.ps1 ===
+CHILD-CONTEXT test=reply_gate_dupskip.tests.ps1 pid=38264 nonce=1d7464aa4ad4413eb46963636a05e163 verified=True contexts=2 exit=0
+  == reply_gate_dupskip tests ==
+  
+  RESULT: pass=30 fail=0
+  ALL PASS
+  
+  
+=== pending_reply_policy.tests.ps1 ===
+CHILD-CONTEXT test=pending_reply_policy.tests.ps1 pid=15692 nonce=694b6312fae1420ba0a71838cf1a3123 verified=True contexts=3 exit=0
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  PASS natural-model-body-survives
+  PASS protected-body-one-rewrite
+  PASS final-pending-gate
+  PASS changed-input-discards-draft
+  PASS read-failure-rereads-once-then-human
+  PASS stale-pending-task-is-idempotent
+  PASS one-read-failure-does-not-stop-other-buyers
+  PASS task-store-failure-does-not-throw
+  RESULT pass=8 fail=0
+  
+  
+=== source_recovery_schedule.tests.ps1 ===
+CHILD-CONTEXT test=source_recovery_schedule.tests.ps1 pid=9704 nonce=d72163d8868d46fb827f4d81571f822a verified=True contexts=2 exit=0
+  RESULT: pass=59 fail=0
+  ALL PASS
+  
+  
+
+TEST-SUMMARY: layer=Offline files=5 failedFiles=0 pass=165 fail=0
+LogicTests=PASS files=5 failedFiles=0 pass=165 fail=0
+IsolationChecks=PASS checked=5 issues=0
+ProductionPathAudit=PASS changes=0 writerRunning=False reason=no production path changed during this run
+  attribution-clues(before): {"capturedAtUtc":"2026-10-07T01:34:56.7206169Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-07T01:35:28.8783270Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+Overall=PASS exitCode=0

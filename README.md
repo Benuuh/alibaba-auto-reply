@@ -1,12 +1,12 @@
-﻿# Alibaba Auto Reply
+# Alibaba Auto Reply
 
-当前版本：**0.1.1**，对应 Git 标签 `v0.1.1`。版本号记录于 [VERSION](VERSION)。
+当前版本：**0.1.2**，对应 Git 标签 `v0.1.2`。版本号记录于 [VERSION](VERSION)。
 
 阿里巴巴国际站 OneTalk 卖家消息自动接待工具，面向跨境物流与货运代理业务。它读取待回复会话，整理买家提供的货物信息，生成简短英文回复；资料齐全时提醒人工报价。
 
 项目以 Windows PowerShell 为主，通过 Chrome CDP 操作页面，可选用 Accio Desktop 网关增强历史消息读取。通知通过本机 DSH 的 dsh-im 接口发送到企业微信。
 
-> 文档更新：2026-10-06。0.1.1 汇总接待身份与时间问答、统一货物事实、人工任务与介入暂停、程序控制的回复计划及发送收据，并包含 [R01–R10 独立复核整改](docs/业务约束收敛与完整闭环修复整改交付_20261006.md)。更新说明见 [CHANGELOG](docs/CHANGELOG.md)，验证与脱敏范围见 [发布记录](docs/verification/release_0.1.1.md)。代码发布不自动重启生产；真实模型、页面发送与通知仍待验收，生产路径来源未证实的变化保留为 UNRESOLVED。
+> 文档更新：2026-10-08。0.1.2 修复待回复优先、会话读取、自然模型回复与发送恢复闭环。更新说明见 [CHANGELOG](docs/CHANGELOG.md)，验证与脱敏范围见 [发布记录](docs/verification/release_0.1.2.md)。本版本保留预发布标记；发布不自动重启生产，真实模型、页面发送与通知仍待验收。
 
 ## 阅读入口
 
@@ -17,6 +17,7 @@
 | 当前启用状态、未完成项与验收边界 | [当前状态](docs/当前状态.md) |
 | 执行者的操作约束 | [项目操作说明](SKILL.md) |
 | 历史问题与变更原因 | [已知例外](docs/KNOWN_EXCEPTIONS.md)、[变更记录](docs/CHANGELOG.md) |
+| 消息来源三类判定与接待恢复的实施、证据与真实验收边界 | [修复交付报告](docs/verification/message_source_recovery_20261007/implementation_report.md) |
 | 文档之间的职责 | [文档维护约定](docs/文档权威约定.md) |
 
 ## 能力与边界
@@ -31,7 +32,10 @@
 | 多语言输入 | 接收买家原文；提示词要求统一使用美式英文 |
 | 图片与文档 | 图片走多模态，文档转文本或渲染图；只提取明确可见的信息 |
 | 资料收集与报价提醒 | CargoFacts 统一包装数量、包装重量、尺寸与目的地；商品净重不能充当包装重量，Amazon/FBA 仓代码可满足报价目的地 |
-| 人工接管 | 名单跳过自动回复；可信人工介入按事件锚点暂停五分钟，来源不明单独有界等待 |
+| 人工接管 | 显式名单跳过自动回复；待回复按列表处理，来源不明不额外等待；读取或送达不明转人工核查 |
+| 消息来源与送达 | 逐条保存真实消息边界与来源元数据；我方来源分 platform / project / human / unknown 四态，标签在取得来源真值对照前不参与判定；送达状态与来源分开建模。会话读取与发送前后快照共用**同一份**抽取脚本（`lib/msg_extract_js.ps1`）；旧入口 `Get-MessageSource` 及其消费者（human_style / reply_metrics）同样委托共享判定 |
+| 发送收据与持久化 | 发送前先落盘唯一尝试（完整正文 + 可恢复基线），再落盘"即将产生外部副作用"阶段并回读核验；收据要求同口径快照里的唯一新增事件；账本/发送记录写入失败保留待持久化并生成调查，不重发已送达正文。**会话级不重发**：去重键不同也不放行；进程中断/重启后先对账再决定 |
+| 来源与送达调查 | 事件级幂等调查（会话 + 类型 + 确切事件/尝试），先持久化再独立提醒；一次投递尝试之后不再自动重发，人工 `retry-notify` 显式且单独审计；关闭调查按类型核验真实证据（结构化出处、真实收据对象、回读账本与尝试状态）；操作入口为 `scripts\investigate.ps1` |
 | 人工任务 | 持久化同流任务与逐字段证据；通知、认领、联系、供应商回复及完成分别记录，状态标签不证明实际动作 |
 | 历史消息增强 | Accio 读取失败或与页面内容不匹配时回退 CDP |
 | 质量改进 | 分析报告生成建议，经人工接受后单独应用，带基准哈希、备份和回滚 |
@@ -45,7 +49,7 @@
 ~~~mermaid
 flowchart TD
     A[OneTalk 待回复列表] --> B[monitor：页面、人工接管与会话检查]
-    B --> C[reply_engine：待回复确认、去重与时间门禁]
+    B --> C[reply_engine：待回复优先与防重复发送]
     C --> D[msg_norm：消息排序、身份和资料整理]
     D --> E[reply_policy：场景和允许追问的字段]
     E --> F[reply_gen：模型生成与一次可选重写]
@@ -78,7 +82,9 @@ alibaba-auto-reply/
 │  │  ├─ seller_context.ps1 / time_claims.ps1
 │  │  ├─ paths.ps1 / state_store.ps1 / test_context.ps1
 │  │  ├─ llm.ps1 / cdp.ps1 / send.ps1 / lock.ps1
-│  │  ├─ msg_source.ps1 / no_reply.ps1 / accio.ps1
+│  │  ├─ msg_source.ps1 / msg_events.ps1 / msg_extract_js.ps1
+│  │  ├─ investigations.ps1 / send_attempts.ps1
+│  │  ├─ no_reply.ps1 / accio.ps1
 │  │  ├─ goods.ps1 / quote.ps1 / vision.ps1 / doc.ps1
 │  │  ├─ wecom.ps1 / report_push.ps1 / heartbeat.ps1
 │  │  └─ suggestions.ps1 / 日志与告警辅助库
@@ -86,6 +92,7 @@ alibaba-auto-reply/
 │  ├─ review_suggestions.ps1 / apply_suggestion.ps1
 │  ├─ summarize.ps1 / weekly_report.ps1 / nudge.ps1
 │  ├─ whitelist.ps1 / dashboard.ps1 / backup.ps1 / sync.ps1
+│  ├─ investigate.ps1              来源与送达调查操作入口
 │  ├─ okki/                       小满 CRM 扩展
 │  └─ gonghai/                    阿里公海扩展
 ├─ tools/

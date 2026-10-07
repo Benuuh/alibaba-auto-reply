@@ -6,18 +6,47 @@
 # 契约: 本文件是"消息来源"的唯一判定处; 其他文件不得再自行写正则判断来源。
 # 依赖: 无(不 dot-source 任何文件), 可被测试与 monitor 各自独立加载。
 
-# 单行判定: 返回 'buyer' | 'bot' | 'human' | 'unknown'
-function Get-MessageSource([string]$line) {
-    if (-not $line) { return 'unknown' }
-    if ($line -match '^\[BUYER\]') { return 'buyer' }
-    if ($line -match '^\[ME\]') {
-        if ($line -match '@@TS') { return 'bot' }
-        return 'human'
+# 旧词表映射（兼容既有消费者）：四态/买方/噪声 -> 'buyer' | 'bot' | 'human' | 'platform' | 'unknown'
+#   * project（已确认收据 / 已确认本项目发送者证据）= 旧词表的 'bot'（我方自动发送）；
+#   * platform 单独保留：它是**平台**发的，不是我方，不能冒充 'bot' 让我方消费者认领；
+#   * noise（flow 卡 / 总结卡）与无角色行 => 'unknown'。
+function ConvertTo-LegacyMessageSource([string]$Class) {
+    switch ([string]$Class) {
+        'buyer'    { return 'buyer' }
+        'human'    { return 'human' }
+        'project'  { return 'bot' }
+        'bot'      { return 'bot' }
+        'platform' { return 'platform' }
+        default    { return 'unknown' }
     }
+}
+
+# 单行判定: 返回 'buyer' | 'bot' | 'human' | 'platform' | 'unknown'
+#
+# [2026-10-07 spec §3.2 第 3 条 / 复核 R7] 这是**旧入口**，现在同样委托共享判定：
+#   * 共享判定库（lib\msg_events.ps1）在时一律委托，"有时间就是 bot、无标记就是人工"的旁路被移除；
+#   * 共享判定库不可用时（只加载本文件的单元测试）走保守阶梯：买方角色标记 => buyer，
+#     其余一律 unknown —— 仍然不猜发送者。
+function Get-MessageSource([string]$line) {
+    if ([string]::IsNullOrWhiteSpace($line)) { return 'unknown' }
+    if (Get-Command Get-MessageSourceClassForLine -ErrorAction SilentlyContinue) {
+        $cls = Get-MessageSourceClassForLine -Line $line
+        return (ConvertTo-LegacyMessageSource ([string]$cls.Class))
+    }
+    if ($line -match '^\[BUYER\]') { return 'buyer' }
     return 'unknown'
 }
 
-# 判断"最近一条我方消息是否人工发出"(用于防抢话)
+# 消费者专用：这条行是否**已被证明是我方**（project）——用于"只看我方成品话术"的统计口径。
+#   platform（平台自动回复）/ human / unknown 都不是"我方"。
+function Test-MessageSourceIsProject([string]$line) {
+    return ((Get-MessageSource $line) -eq 'bot')
+}
+
+# 判断"最近一条我方消息是否人工发出"(用于防抢话)。
+# [复核 R7] 注意：本函数依赖 Get-MessageSource，而后者现在委托共享判定 ⇒ 只有**有出处的人工证据**
+#   （已验证发送者字段 / 绑定确切事件的人工确认）才会得到 'human'；
+#   带时间戳的老 [ME] 行、以及无任何证据的 [ME] 行都是 'unknown'，不再各自外推。
 # 语义: 只考察"我方尾部"—— 从最新一行往上扫, 一旦遇到买家发言即停(买家发言之后的我方消息才是"抢话"的证据)。
 #   我方尾部第一条我方消息是 'human' ⇒ HasHumanLast=$true (应跳过自动发送)。
 #   是 'bot' ⇒ HasHumanLast=$false, LastMeSource='bot' (可正常发送)。
@@ -87,20 +116,27 @@ function Get-MessageLineFingerprint([string]$Line) {
     } catch { return ([string]$Line.Length).ToString() }
 }
 
-# 单行来源分级。返回 @{ Class = 'buyer'|'bot'|'human'|'unknown'; Evidence = '<reason>' }
-function Get-MessageSourceClass([string]$line, [bool]$SentRecordMatch = $false) {
+# 单行来源分级。返回 @{ Class = 'buyer'|'platform'|'project'|'human'|'unknown'|'noise'; Evidence; ... }
+#
+# [2026-10-07 spec §3.2 第 3 条] 这是**旧入口的委托点**：只要共享判定库（lib\msg_events.ps1）已加载，
+#   一律委托 Get-MessageSourceClassForLine，本文件内不再保留自己的来源阶梯。
+#   只有共享判定库不可用时（单文件测试）才走下面的保守阶梯，且该阶梯已按新规则收紧。
+function Get-MessageSourceClass([string]$line, [bool]$SentRecordMatch = $false, $Rules = $null, $Confirmed = $null, [string]$Buyer = '') {
     if (-not $line) { return @{ Class = 'unknown'; Evidence = 'empty-line' } }
+    if (Get-Command Get-MessageSourceClassForLine -ErrorAction SilentlyContinue) {
+        return (Get-MessageSourceClassForLine -Line $line -SentRecordMatch $SentRecordMatch -Rules $Rules -Confirmed $Confirmed -Buyer $Buyer)
+    }
     if ($line -match '^\[BUYER\]') { return @{ Class = 'buyer'; Evidence = 'explicit-role-marker' } }
     if ($line -notmatch '^\[ME\]') { return @{ Class = 'unknown'; Evidence = 'no-role-marker' } }
-    if ($line -match '@@SRC:(bot|human)\b') {
-        return @{ Class = ([string]$Matches[1]).ToLowerInvariant(); Evidence = 'explicit-sender-marker' }
-    }
-    if ($SentRecordMatch) { return @{ Class = 'bot'; Evidence = 'confirmed-send-record' } }
+    # [spec §3.2 第 2 条 / A06] 行内 @@SRC 文本不是可信元数据（正文里也能写出同样的字符串）。
+    #   只有共享判定库从 @@META 载荷取出的标签，且被规则集确认独占时才算证据。
+    #   共享判定库不可用时，本条阶梯一律不采信行内 @@SRC。
+    if ($SentRecordMatch) { return @{ Class = 'project'; Evidence = 'confirmed-send-record' } }
     # @@TS 是"我方消息带逐条时间"的既有伴随标记（页面抽取对我方消息同时写 @@TS/@@MT）。
     # 它只说明"这条有时间戳"，不足以证明发送者是机器人 ⇒ unknown（既不当作机器人，也不当作人工）。
     if ($line -match '@@(?:TS|MID):') { return @{ Class = 'unknown'; Evidence = 'timer-marker-only' } }
-    # 完全没有机器人标记、也不在本系统发送记录里 ⇒ 人工手打（本机实测形态；不外推为其他结论）。
-    return @{ Class = 'human'; Evidence = 'no-bot-marker-and-not-in-send-records' }
+    # [spec §3.2 第 3 条] 无标签、无时间、无发送记录都不足以自动认定 human：不再外推。
+    return @{ Class = 'unknown'; Evidence = 'no-sender-evidence' }
 }
 
 # 会话里所有**可信人工回复**（spec §2.1 的计时依据）。返回按出现顺序的数组：
@@ -163,7 +199,8 @@ function Get-HumanInterjectionGateEx([string[]]$lines, $SentMatches = $null) {
             $r.HumanIndex = $i; $r.LastMeSource = 'human'
             return $r
         }
-        if ($cls.Class -eq 'bot') {
+        # [2026-10-07 spec §3.2] 我方来源四态：project/platform（我方、非人工）都按"已证明是我方"处理。
+        if ($cls.Class -eq 'project' -or $cls.Class -eq 'platform' -or $cls.Class -eq 'bot') {
             $r.Reason = 'bot-last'; $r.LastMeSource = 'bot'
             return $r
         }

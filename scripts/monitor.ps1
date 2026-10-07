@@ -35,6 +35,9 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\vision.ps1")
 # [2026-09-26 更像真人销售 S1] 消息来源判定(唯一判定处): @@TS = 机器人, 无标记的 [ME] = 人工
 . (Join-Path $PSScriptRoot "lib\msg_source.ps1")
+# [2026-10-07 spec §3.1 / 复核 R1] 浏览器侧逐条抽取与行序列化**唯一**实现：
+#   会话读取与发送前后的收据快照共用同一份 JS，真实消息边界/方向/平台 ID/噪声规则不再各写一套。
+. (Join-Path $PSScriptRoot "lib\msg_extract_js.ps1")
 # [2026-10-05 spec §6.3/§5-2/§5-1] 运行数据根与隔离守卫、运行态 JSON 原子读写。
 #   paths.ps1 让 state/pause/tasks/locks/pid/remind 统一经路径接口定位（显式 RuntimeRoot 下全部落在该根内）；
 #   state_store.ps1 提供"临时写入 → 回读校验 → 备份 → 原子替换"，并区分 missing/empty/corrupt。
@@ -44,6 +47,11 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\sent_records.ps1")
 . (Join-Path $PSScriptRoot "lib\human_pause.ps1")
 . (Join-Path $PSScriptRoot "lib\human_tasks.ps1")
+# [2026-10-07 spec §3/§4/§6] 统一消息事件与四态来源、事件级调查、持久化发送尝试。
+#   加载顺序：msg_events 依赖 msg_source(37 行)；send_attempts 依赖 msg_events + state_store + sent_records(44 行)。
+. (Join-Path $PSScriptRoot "lib\msg_events.ps1")
+. (Join-Path $PSScriptRoot "lib\investigations.ps1")
+. (Join-Path $PSScriptRoot "lib\send_attempts.ps1")
 . (Join-Path $PSScriptRoot "lib\doc.ps1")
 . (Join-Path $PSScriptRoot "lib\accio.ps1")
 . (Join-Path $PSScriptRoot "log_rotate.ps1")
@@ -79,12 +87,7 @@ if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_round_budget_sec'
 }
 if ($script:replyRoundBudgetSec -lt 30) { $script:replyRoundBudgetSec = 30 }
 
-# ===== [SPEC-待回复列表 2026-09-27 §0.1] 观察窗口上限 = 5 分钟: 两个值都必须走配置键, 不得再硬编码 =====
-#   最小发送间隔 reply_min_gap_min: 原 L1073 硬编码 15 ⇒ 新缺省 **5**。
-#     张力(已登记 §0.1/§10-R1b): 同一买家每小时最多可收到 12 条(原 4 条), 这是老板为缩短观察窗口
-#     主动接受的代价; 若日后出现重复打扰投诉, **第一个要调回的就是这个键**。
-#   发送后冷却 reply_post_send_cooldown_min: 原 L1302/L885 里的 3 ⇒ 新缺省 **5**, §0.1 要求不得小于最小间隔。
-#   两者缺省一致(5/5)时, 判据第 3 行(POST_SEND_COOLDOWN)会先于第 4 行(RATE_MIN_GAP)命中。
+# Legacy configuration retained for compatibility; current pending policy never consumes these timers.
 $script:replyMinGapMin = 5
 if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_min_gap_min' -and $script:skillCfg.reply_min_gap_min) {
     $script:replyMinGapMin = [int]$script:skillCfg.reply_min_gap_min
@@ -102,13 +105,9 @@ if ($script:replyPostSendCooldownMin -lt $script:replyMinGapMin) {
     $script:cooldownRaisedToGap = $true
     $script:replyPostSendCooldownMin = $script:replyMinGapMin
 }
-# 连续确认轮数门槛(§0.1: 2 轮 ≈ 9 秒, 唯一的"冷启动延迟", 不可再降; Test-ShouldReply 内还有一道下限)
+# Legacy two-round value; current pending entry passes one occurrence explicitly.
 $script:requiredSeenRounds = 2
-# [SPEC 4.1 2026-10-03] Wall-clock floor for a CONFIRMED NEW message, in seconds (config key
-# reply_new_msg_floor_sec, default 20). This is the only time gate that applies to a new message:
-# the 5-minute min-gap and post-send cooldown exist to suppress repeat answers to an OLD message
-# and must not unconditionally block a new one (spec 4.1). 20s is an engineering floor so two
-# sends cannot happen in the same instant, not a platform rule (spec 9).
+# Legacy seconds floor, not an active pending-reply gate.
 $script:replyNewMsgFloorSec = 20
 if ($script:skillCfg.PSObject.Properties.Name -contains 'reply_new_msg_floor_sec' -and $script:skillCfg.reply_new_msg_floor_sec) {
     $script:replyNewMsgFloorSec = [int]$script:skillCfg.reply_new_msg_floor_sec
@@ -189,31 +188,31 @@ function Get-Snapshot() {
     # 等待 3 秒后重试切换，确保列表来源正确
     if ($tabRes -eq 'NO_TAB') {
         Start-Sleep -Seconds 3
-        Switch-ToPendingTab | Out-Null
+        $tabRes = Switch-ToPendingTab
         Start-Sleep -Seconds 2
     }
-    $js = @"
+    if ($tabRes -notin @('SWITCHED','ALREADY_ACTIVE')) { return 'PENDING_TAB_UNVERIFIED' }
+    $js = $script:ConversationScopeJs + @"
 (function(){
+  var tabs = Array.from(document.querySelectorAll('.list-tab-item')).filter(function(t){
+    return __aarVisible(t) && (t.innerText||'').trim() === '待回复';
+  });
+  if (tabs.length !== 1 || !/(^|\s)active(\s|$)/.test(String(tabs[0].className||''))) return 'PENDING_TAB_UNVERIFIED';
   // 抓取会话列表（优先 innerText，回退 textContent 兼容虚拟滚动）
-  var items = Array.from(document.querySelectorAll('.contact-item-container'));
+  var items = Array.from(document.querySelectorAll('.contact-item-container')).filter(__aarVisible);
   var arr = [];
   items.forEach(function(e){
     var nameEl = e.querySelector('.contact-info .name');
     var name = (nameEl && nameEl.innerText && nameEl.innerText.trim()) || '';
     var txt = (e.innerText || '').replace(/\n+/g,' ').replace(/\s+/g,' ').trim();
-    if (!name && txt.length < 2) return;
-    if (!name) {
-      var lines = txt.split(' ');
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].length >= 3 || /[A-Za-z]{2,}/.test(lines[i])) { name = lines[i].substring(0,30); break; }
-      }
-    }
+    if (!name) { arr.push({error:'PENDING_NAME_UNVERIFIED'}); return; }
     var stable = txt.replace(/\d{1,2}:\d{2}/g,' ').replace(/\d{4}-\d{1,2}-\d{1,2}/g,' ').replace(/\s+/g,' ').trim();
     if (name) arr.push({unread: txt.indexOf('[未读]') >= 0, name: name.trim(), preview: stable.substring(0,80), full: txt.substring(0,200)});
   });
   // 按 name 去重：同一会话只保留一条，避免一次循环处理两次导致重复发送
-  var seen = {};
-  arr = arr.filter(function(it){ if (seen[it.name]) return false; seen[it.name] = true; return true; });
+  if (arr.some(function(it){return !!it.error;})) return 'PENDING_NAME_UNVERIFIED';
+  var seen = Object.create(null);
+  arr = arr.filter(function(it){ var key=__aarName(it.name); if (seen[key]) return false; seen[key] = true; return true; });
   if (arr.length > 0) return JSON.stringify(arr);
   // 列表为空：不在此处 reload（该提示文案常驻易误判），返回空由主循环连续空计数统一处理
   return '[]';
@@ -229,149 +228,15 @@ function Get-Snapshot() {
 # 返回: 'NOT_FOUND' / 'SWITCH_TIMEOUT' / 解析失败标记 / 对象{name, msgs}(msgs 为 [BUYER]/[ME] 行文本)。
 # 将原 5 次子进程调用(Open 1 + 校验 3 + 抓取 1)合并为 1 次,显著缩短扫描周期。
 function Open-ConvoAndGetMessages([string]$keyword) {
-    $esc = $keyword.Replace("\","\\").Replace("'","\'").Replace('"','\"')
-    $js = @"
-(async function(){
-  var el = Array.from(document.querySelectorAll('.contact-item-container')).find(function(e){
-    var nameEl = e.querySelector('.contact-info .name');
-    var nameTxt = (nameEl && nameEl.innerText) || '';
-    var full = (e.innerText || '') + '|' + nameTxt;
-    return full.indexOf('$esc') >= 0;
-  });
-  if (!el) return 'NOT_FOUND';
-  el.click();
-  // 轮询校验会话名(最多 6 秒),防串台
-  var current = '';
-  for (var i = 0; i < 12; i++) {
-    await new Promise(function(r){ setTimeout(r, 500); });
-    var cands = [];
-    var hdr = document.querySelector('.content-header');
-    if (hdr) {
-      var t = (hdr.innerText || '').trim().split('\n')[0].trim();
-      if (t && t.length < 60 && /[A-Za-z]/.test(t)) cands.push(t);
-    }
-    Array.from(document.querySelectorAll('[class*=header] [class*=name], [class*=Title], h1,h2,h3,[class*=contact-name]')).forEach(function(e){
-      if (e.closest && e.closest('.alicrm-customer-detail-card')) return;
-      var t = (e.innerText || '').trim();
-      if (t && t.length < 60 && /[A-Za-z]/.test(t)) cands.push(t);
-    });
-    if (cands.length) {
-      var best = cands[0];
-      cands.forEach(function(c){ if (c.length > best.length) best = c; });
-      current = best.split('\n')[0].trim();
-    }
-    if (current && (current.indexOf('$esc') >= 0 || '$esc'.indexOf(current) >= 0)) break;
-  }
-  if (!current) return 'SWITCH_TIMEOUT';
-  // 抓取消息(保持 DOM 原始顺序)
-  var out = [];
-  document.querySelectorAll('[class*=message-item-wrapper]').forEach(function(w){
-    var cls = (w.className||'').toString();
-    var rich = w.querySelector('.content-with-translation.text-content, .session-rich-content');
-    if (!rich) return;
-    var txt = rich.innerText.replace(/\n+/g,' ').trim();
-    // [FIX-DUP 2026-09-25] 原文节点优先：译文是冗余的，且未渲染时会与原文重复导致 hash 突变
-    var richOrig = w.querySelector('.session-rich-content.text')
-                || w.querySelector('.content-with-translation .session-rich-content')
-                || rich;
-    var otxt = (richOrig.innerText || '').replace(/\n+/g,' ').trim();
-    if (!otxt) { otxt = txt; }
-    var systemCard = /系统自动发送/.test((w.innerText || '') + ' ' + txt + ' ' + otxt)
-                  || (/最小订购量|minimum\s+order|min\.?\s+order/i.test(otxt) && /\$\s*\d/.test(otxt));
-    var clean = txt.replace(/翻译中…|反馈|已读|回复|翻译|Revert|由阿里提供|自动接待发送|系统自动发送/g,'').trim();
-    otxt = otxt.replace(/系统自动发送|自动接待发送/g,'').trim();
-    var hasImg = !!w.querySelector('img[src*="alicdn"], [class*=image] img, [class*=Image] img, [class*=picture]');
-    var nameEl0 = w.querySelector('.item-base-info .name');
-    var buyerName0 = (nameEl0 && nameEl0.innerText.trim()) || '';
-    var isBuyer0 = buyerName0.length > 0 || /由阿里翻译提供|翻译中/.test(txt) || cls.indexOf('item-left') >= 0;
-    // B2 附件标记: 图片 src/data-src(阿里域, 去重, ≤3); 文件卡片兜底特征 "<name>.<ext> <size> K/M"
-    var imgUrls = [];
-    if (isBuyer0) {
-      w.querySelectorAll('img').forEach(function(im){
-        var u = im.getAttribute('src') || im.getAttribute('data-src') || '';
-        if (!u) return;
-        if (!/(alicdn\.com|alibaba\.com|aliimg\.com|data:image)/.test(u)) return;
-        if (imgUrls.indexOf(u) < 0) imgUrls.push(u);
-      });
-      if (imgUrls.length > 3) imgUrls = imgUrls.slice(0, 3);
-    }
-    var fileInfo = null;
-    if (isBuyer0) {
-      var mf = clean.match(/([^\s\/\\]+\.(pdf|xlsx?|csv|docx?|pptx?|zip|rar|txt))\s+(\d+(\.\d+)?\s*[KMG]?B?)/i);
-      if (mf) {
-        var furl = '';
-        var anchors = w.querySelectorAll('a[href]');
-        for (var ai = 0; ai < anchors.length; ai++) {
-          var h = anchors[ai].getAttribute('href') || '';
-          if (/^https?:/.test(h) && (/\.(pdf|xlsx?|csv|docx?|pptx?|zip|rar|txt)($|\?)/i.test(h) || /download/i.test(h))) { furl = h; break; }
-        }
-        if (!furl) {
-          var mUrl = (w.innerHTML || '').match(/https?:\/\/[^"'\s<>]+\.(pdf|xlsx?|csv|docx?|pptx?|zip|rar|txt)(\?[^"'\s<>]*)?/i);
-          if (mUrl) furl = mUrl[0];
-        }
-        fileInfo = { name: mf[1], url: furl };
-      }
-    }
-    // [SPEC 4.1 2026-10-03] NO text-length filter. The previous version dropped every message
-    // whose cleaned text was <= 2 characters unless it carried an image, so "ok", "si" and "no"
-    // never became message events at all - even though spec 4.1 requires short acknowledgements,
-    // refusals, complaints, images and documents to ALL be able to form a new-message event.
-    // Only a genuinely empty body is skipped here, and an empty body WITH an image still becomes
-    // an attachment event. The buyer flag is taken from the same detection as every other message
-    // (the old code hard-coded b:true for image-only rows, which mislabelled our own images).
-    if (clean.length === 0) {
-      if (!hasImg && !fileInfo) return;
-      clean = '[IMG]'; otxt = '[IMG]';
-    }
-    var buyerName = (nameEl0 && nameEl0.innerText.trim()) || '';
-    var isBuyer = isBuyer0;
-    var ts = '';
-    // Only the time printed on THIS message is evidence. data-expinfo.showTime is a
-    // conversation/render clock and must never be used as a fallback for ordering.
-    var baseEl = w.querySelector('.item-base-info');
-    var baseTxt = (baseEl && baseEl.innerText) || '';
-    var m2 = baseTxt.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
-    if (m2) {
-      var y = +m2[1], mo = +m2[2] - 1, d = +m2[3], h = +m2[4], mi = +m2[5], s = +(m2[6] || 0);
-      var dt = new Date(y, mo, d, h, mi, s);
-      if (dt.getFullYear() === y && dt.getMonth() === mo && dt.getDate() === d
-          && dt.getHours() === h && dt.getMinutes() === mi && dt.getSeconds() === s) ts = String(dt.getTime());
-    }
-    out.push({b: isBuyer, t: clean.substring(0,1000), ot: otxt.substring(0,1000), ts: ts, card: isBuyer && systemCard, imgs: isBuyer ? imgUrls : [], file: isBuyer ? fileInfo : null});
-  });
-  // Keep attachments on their own rows. The PS normalizer determines chronology before
-  // selecting the latest attachment or resolving references to earlier images/documents.
-  out.forEach(function(o){
-    if (o.b && o.imgs.length) { o.t += ' @@IMG:' + o.imgs.join('|'); }
-    if (o.b && o.file) { o.t += ' @@FILE:' + encodeURIComponent(o.file.name) + '|' + (o.file.url || ''); }
-  });
-  var lines = [];
-  // Keep @@TS for legacy source classification; @@MT explicitly identifies the per-message clock.
-  // Original text remains base64 UTF-8 in @@OT for the existing ledger key.
-  out.forEach(function(o){
-    var line = (o.b ? '[BUYER] ' : '[ME] ') + o.t + (o.ts ? ' @@TS:' + o.ts + ' @@MT:' + o.ts : '');
-    if (o.card) line += ' @@CARD:system';
-    if (o.b && o.ot) {
-      var otb = (typeof btoa === 'function') ? btoa(unescape(encodeURIComponent(o.ot))) : '';
-      if (otb) { line += ' @@OT:' + otb; }
-    }
-    lines.push(line);
-  });
-  // P3.4 买家档案:抓取客户详情卡片原始文本(国家/注册时间/标签等),PS 侧解析
-  var profile = '';
-  var card = document.querySelector('.alicrm-customer-detail-card');
-  if (card) { profile = (card.innerText || '').replace(/\n+/g,' ').replace(/\s+/g,' ').trim().substring(0, 300); }
-  return JSON.stringify({name: current, msgs: lines.join('\n'), profile: profile});
-})()
-"@
-    $res = Invoke-CdpEval $js
-    $res = ($res -replace '^\s+|\s+$','')
-    if ($res -eq 'NOT_FOUND' -or $res -eq 'SWITCH_TIMEOUT') { return $res }
+    # Exact target + single visible header/container + scoped rows, shared with receipts.
+    $js = Get-ConversationReadJs -Buyer $keyword
+    $res = (Invoke-CdpEval $js).Trim()
     try {
         $obj = $res | ConvertFrom-Json
-        if ($obj -and $obj.name) { return $obj }
+        if ($obj.error) { return ('READ_GUARD:' + [string]$obj.error) }
+        if ($obj -and $obj.name -and $obj.scope) { return $obj }
     } catch {}
-    return "PARSE_FAIL"
+    return 'PARSE_FAIL'
 }
 
 function Get-Rules() {
@@ -946,10 +811,15 @@ function Read-RetryTable {
         $t = @{ version = 1; items = @{} }
         if ($j -and $j.items) {
             foreach ($p in $j.items.PSObject.Properties) {
+                $hasDedup = ($p.Value.PSObject.Properties.Name -contains 'dedupKey')
+                $hasPageOk = ($p.Value.PSObject.Properties.Name -contains 'pageConfirmed')
                 $t.items[$p.Name] = @{
                     key = [string]$p.Value.key; reason = [string]$p.Value.reason
                     firstAt = [string]$p.Value.firstAt; lastAt = [string]$p.Value.lastAt
                     tries = [int]$p.Value.tries; nextAt = [string]$p.Value.nextAt
+                    # [2026-10-06] 对账证据：发送当时算出的去重键 + 页面侧发送动作是否已完成
+                    dedupKey = $(if ($hasDedup) { [string]$p.Value.dedupKey } else { '' })
+                    pageConfirmed = [bool]$(if ($hasPageOk) { $p.Value.pageConfirmed } else { $false })
                 }
             }
         }
@@ -966,7 +836,7 @@ function Save-RetryTable($t) {
         $o = @{}
         foreach ($k in $t.items.Keys) {
             $v = $t.items[$k]
-            $o[$k] = @{ key=$v.key; reason=$v.reason; firstAt=$v.firstAt; lastAt=$v.lastAt; tries=$v.tries; nextAt=$v.nextAt }
+            $o[$k] = @{ key=$v.key; reason=$v.reason; firstAt=$v.firstAt; lastAt=$v.lastAt; tries=$v.tries; nextAt=$v.nextAt; dedupKey=[string]$v.dedupKey; pageConfirmed=[bool]$v.pageConfirmed }
         }
         # [2026-10-05 spec §5-2] 原子替换 + 备份（原来的 WriteAllText 直接覆盖，中断会留下半个 JSON）
         $w = Write-JsonDocumentAtomic -Path $f -Data @{ version = 1; items = $o } -Depth 6
@@ -981,7 +851,7 @@ function Get-RetryBackoffMin([int]$tries) {
     return $seq[$tries]
 }
 
-function Add-PendingRetry([string]$key, [string]$reason) {
+function Add-PendingRetry([string]$key, [string]$reason, [string]$DedupKey = '', [bool]$PageConfirmed = $false) {
     $t = Read-RetryTable
     $sk = $key.ToLower()
     $now = Get-Date
@@ -992,9 +862,13 @@ function Add-PendingRetry([string]$key, [string]$reason) {
         $it.tries = [int]$it.tries + 1
         $it.lastAt = $now.ToString('yyyy-MM-dd HH:mm:ss')
         $it.reason = $r
+        # 已记录过的对账证据不被无参重排覆盖（去重键只在为空时接受新值；页面确认只增不减）
+        if ($DedupKey -and -not [string]$it.dedupKey) { $it.dedupKey = $DedupKey }
+        if ($PageConfirmed) { $it.pageConfirmed = $true }
     } else {
         $it = @{ key=$key; reason=$r; firstAt=$now.ToString('yyyy-MM-dd HH:mm:ss')
-                 lastAt=$now.ToString('yyyy-MM-dd HH:mm:ss'); tries=0; nextAt=$now.ToString('yyyy-MM-dd HH:mm:ss') }
+                 lastAt=$now.ToString('yyyy-MM-dd HH:mm:ss'); tries=0; nextAt=$now.ToString('yyyy-MM-dd HH:mm:ss')
+                 dedupKey=[string]$DedupKey; pageConfirmed=[bool]$PageConfirmed }
     }
     $bk = Get-RetryBackoffMin ([int]$it.tries)
     if ($bk -lt 0) {
@@ -1016,6 +890,179 @@ function Remove-PendingRetry([string]$key) {
         Save-RetryTable $t
         Write-Log "RETRY-CLEARED $key"
     }
+}
+
+# ===== [2026-10-06 生产观察] 补发对账闭环 =====
+# 背景：收据要求"发送前后唯一新增事件"的绑定；当会话消息缺少稳定平台身份（DOM 侧只有打印时间、
+#   且有图片/系统行没有时间）时，收据自证失败，发送被记为 UNKNOWN（账本不推进、补发项排队）。
+#   实测：页面已 SENT_OK 且会话随即离开待回复列表，但补发项只能反复得到 NOT_IN_LIST 直到放弃。
+# 判据（可自证的部分）：页面侧发送动作已完成（FILLED|CLICKED|SENT_OK 三段）+ 会话已不在待回复
+#   列表。两者同时成立才当作"已送达"的对账证据；仅有 NOT_IN_LIST（可能被人工接走/买家撤回）不够。
+# 边界：只推进**去重账本**（发送当时算出的同一把键），**不伪造**已确认收据——缺事件身份时收据保持
+#   未发布（spec §5.1），对账结论只作为日志证据留痕。
+function Test-PageConfirmedSendResult([string]$SendRaw) {
+    if (-not $SendRaw) { return $false }
+    return (($SendRaw -match '(?i)\bFILLED\b') -and ($SendRaw -match '(?i)\bCLICKED\b') -and ($SendRaw -match '(?i)\bSENT_OK\b'))
+}
+function Test-ReconciledDeliveryEvidence([string]$Reason, [bool]$PageConfirmed, [string]$DedupKey) {
+    if (-not $DedupKey) { return $false }
+    if (-not $PageConfirmed) { return $false }
+    return (Test-PageConfirmedSendResult $Reason)
+}
+function Complete-ReconciledDelivery($ctx, [string]$skey, [string]$DedupKey, [string]$Evidence) {
+    if (-not $DedupKey) { return $false }
+    Set-StateHash $ctx $skey $DedupKey
+    $written = ''
+    if ($ctx.state -and $ctx.state.replied) {
+        if ($ctx.state.replied -is [System.Collections.IDictionary]) { $written = [string]$ctx.state.replied[$skey] }
+        elseif ($ctx.state.replied.PSObject.Properties.Name -contains $skey) { $written = [string]$ctx.state.replied.$skey }
+    }
+    if ($written -ne $DedupKey) {
+        Write-Log ("RETRY-RECONCILE-LEDGER-WRITE-FAIL " + $skey + " key=" + $DedupKey + " (ledger not advanced)")
+        return $false
+    }
+    Write-Log ("RETRY-RECONCILED-DELIVERED " + $skey + " key=" + $DedupKey + " evidence=" + $Evidence + " receipt=unpublished(no-event-identity)")
+    return $true
+}
+
+# =============================================================================================
+# [2026-10-07 spec §3.1/§3.2/§5/§6] 统一来源门禁、事件级调查与独立提醒
+#
+# 边界：
+#   * 规则集默认是"空的"（没有任何标签被 S0 证实独占）⇒ 标签单独出现仍是 unknown；
+#     真实规则只能由 config 的 source_rules 段写入。
+#   * 门禁只阻断**当前相关我方尾部**那个确切事件，久远 unknown 不无限封锁（spec §5 未知来源第 4 条）。
+#   * 调查提醒独立于"买家回复成功"分支，页面阻断时也提醒；一次成功提醒不因重复扫描重发。
+#   * 未加载新库（旧测试按 AST 抽取单个函数）时，全部入口退回旧判据，行为逐字不变。
+# =============================================================================================
+$script:monitorSourceRules = $null
+
+function Get-MonitorSourceRules {
+    if ($script:monitorSourceRules) { return $script:monitorSourceRules }
+    $rules = $null
+    # 显式安装的共享判定上下文（配置驱动的生产路径不设置它；夹具/测试用它注入"已验证规则"）。
+    if (Get-Command Get-MessageSourceActiveRules -ErrorAction SilentlyContinue) {
+        try {
+            $active = Get-MessageSourceActiveRules
+            # 只有"确实带了已验证规则"的上下文才覆盖配置（空规则集不算显式安装）。
+            if ($active -and [int]$active.VerifiedCount -gt 0) { $rules = $active }
+        } catch { $rules = $null }
+    }
+    if (-not $rules -and (Get-Command Get-MessageSourceRuleSetFromConfig -ErrorAction SilentlyContinue)) {
+        try { $rules = Get-MessageSourceRuleSetFromConfig -Config $script:skillCfg } catch { $rules = $null }
+    }
+    if (-not $rules -and (Get-Command Get-MessageSourceRuleSet -ErrorAction SilentlyContinue)) { $rules = Get-MessageSourceRuleSet }
+    $script:monitorSourceRules = $rules
+    return $script:monitorSourceRules
+}
+
+function Get-MonitorSourceConfirmed([string]$Buyer) {
+    if (-not (Get-Command Get-InvestigationSourceCorrections -ErrorAction SilentlyContinue)) { return @{} }
+    try { return (Get-InvestigationSourceCorrections -Buyer $Buyer) } catch { return @{} }
+}
+
+# 发送闸门（四态）。新库不可用时退回旧 Get-HumanInterjectionGateEx，调用点无需分别处理。
+function Get-MonitorSourceGate([string[]]$Lines, $SentMatches = $null, [string]$Buyer = '') {
+    if (Get-Command Get-MessageSourceGate -ErrorAction SilentlyContinue) {
+        $confirmed = @{}
+        if ($Buyer) { $confirmed = Get-MonitorSourceConfirmed $Buyer }
+        try {
+            return (Get-MessageSourceGate -Lines $Lines -SentMatches $SentMatches -Rules (Get-MonitorSourceRules) -Confirmed $confirmed)
+        } catch {
+            Write-Log "SOURCE-GATE-ERR: $($_.Exception.Message) - falling back to legacy gate"
+        }
+    }
+    return (Get-HumanInterjectionGateEx -lines $Lines -SentMatches $SentMatches)
+}
+
+# 建立/更新事件级调查。身份无法唯一建立时走显式歧义槽位（不伪造唯一关联）。
+function New-MonitorInvestigation {
+    param(
+        [Parameter(Mandatory = $true)][string]$Buyer,
+        [Parameter(Mandatory = $true)][string]$Kind,
+        [string]$EventRef = '',
+        [string]$EventRefQuality = '',
+        [string]$AttemptId = '',
+        [object[]]$EvidenceRefs = @(),
+        [string]$Detail = '',
+        [string]$AmbiguitySlot = ''
+    )
+    $res = [pscustomobject]@{ Ok = $false; Id = ''; Created = $false; Error = 'no-investigation-store' }
+    if (-not (Get-Command New-OrUpdate-Investigation -ErrorAction SilentlyContinue)) { return $res }
+    try {
+        $r = New-OrUpdate-Investigation -Buyer $Buyer -Kind $Kind -EventRef $EventRef -EventRefQuality $EventRefQuality -AttemptId $AttemptId -EvidenceRefs $EvidenceRefs -Detail $Detail -AmbiguitySlot $AmbiguitySlot
+        $res.Ok = [bool]$r.Ok
+        $res.Created = [bool]$r.Created
+        $res.Error = [string]$r.Error
+        if ($r.Record) { $res.Id = [string]$r.Record.id }
+    } catch {
+        $res.Error = $_.Exception.Message
+    }
+    return $res
+}
+
+# 未知来源等待到期 ⇒ 固定调查（超时不是来源证明，不把 unknown 改成 project）。
+function New-SourceUnknownInvestigation {
+    param(
+        [Parameter(Mandatory = $true)][string]$Buyer,
+        $Gate = $null,
+        [string]$Conflict = ''
+    )
+    $kind = 'source_unverified'
+    $detail = 'five-minute window elapsed without exclusive source evidence'
+    if ($Conflict -or ($Gate -and [string]$Gate.Reason -eq 'source-conflict')) {
+        $kind = 'source_conflict'
+        $detail = 'strong source evidence conflicts for this exact event'
+    }
+    $ref = ''
+    $quality = ''
+    if ($Gate) {
+        $ref = [string]$Gate.HoldEventRef
+        if (-not $ref) { $ref = [string]$Gate.TailIdentity }
+        $quality = [string]$Gate.TailIdentityQuality
+    }
+    if (-not $ref) { $quality = 'ambiguous' }
+    $evidence = @()
+    if ($Gate -and $Gate.SourceEvidence) { $evidence += [string]$Gate.SourceEvidence }
+    if ($Conflict) { $evidence += [string]$Conflict }
+    return (New-MonitorInvestigation -Buyer $Buyer -Kind $kind -EventRef $ref -EventRefQuality $quality -EvidenceRefs $evidence -Detail $detail -AmbiguitySlot 'no-unique-event-ref')
+}
+
+# 独立提醒扫描：不依赖任何一次回复是否成功；通道失败不改写通知状态。
+function Invoke-MonitorInvestigationSweep {
+    param([int]$Max = 5, [switch]$DryRun)
+    if (-not (Get-Command Invoke-InvestigationNotificationSweep -ErrorAction SilentlyContinue)) { return @() }
+    try {
+        return @(Invoke-InvestigationNotificationSweep -Sender { param($Text) Send-WecomMessage $Text } -Max $Max -DryRun:$DryRun)
+    } catch {
+        Write-Log "INVESTIGATION-SWEEP-ERR: $($_.Exception.Message)"
+        return @()
+    }
+}
+
+# [复核 R4/R8] 发送尝试的生产恢复入口：对"收据已证明送达但两段持久化未完成"的尝试重跑真实写入
+#   （sent_records + 去重账本），并回读核验。失败不改写状态、不释放闸门，留待人工。
+#   R8 起扫描范围不再只看 persistence_pending：收据保存后立刻中断留下的 receipt_verified
+#   （persistence.sentRecord/ledger 仍为 pending）同样会被这里补齐，否则那条收据永远不会进账本。
+function Invoke-MonitorSendAttemptRecovery {
+    param([int]$Max = 5)
+    $res = [pscustomobject]@{ Ok = $true; Results = @(); Error = '' }
+    if (-not (Get-Command Invoke-SendAttemptPersistenceRecovery -ErrorAction SilentlyContinue)) { return $res }
+    try {
+        $r = Invoke-SendAttemptPersistenceRecovery -Max $Max
+        if ($r) { $res.Results = @($r.Results); $res.Error = [string]$r.Error }
+    } catch {
+        $res.Ok = $false
+        $res.Error = $_.Exception.Message
+        Write-Log "SEND-ATTEMPT-RECOVERY-ERR: $($_.Exception.Message)"
+    }
+    return $res
+}
+
+# 保留策略：活跃调查与它们依赖的证明不被剪枝丢弃。
+function Invoke-MonitorInvestigationRetention {
+    if (-not (Get-Command Invoke-InvestigationRetention -ErrorAction SilentlyContinue)) { return $null }
+    try { return (Invoke-InvestigationRetention) } catch { Write-Log "INVESTIGATION-RETENTION-ERR: $($_.Exception.Message)"; return $null }
 }
 
 # [2026-10-05 spec §5-4] 发送结果未知时的对账：先读会话，确认"新的我方消息"是否真的出现。
@@ -1179,14 +1226,8 @@ function Test-PendingReplyObsolete([string]$key) {
 #   不在列表内 => 'NOT_IN_LIST', 不发(避免对已人工处理的会话误发)
 # 注意: 本函数自身不发送, 一律经由 Invoke-ConvoItem -> Send-OneTalkMessage(内含会话名校验, D4)。
 function Send-PendingRetry($ctx, [string]$key) {
-    # [2026-10-05 spec §5-4] 先对账再补发：会话里最后一条消息是我方 ⇒ 已经答复过，撤销补发。
-    $recon = Test-PendingReplyObsolete $key
-    if ($recon -eq 'ANSWERED') {
-        Write-Log "RETRY-RECONCILED ${key}: newest message in this conversation is ours - dropping the pending resend (no duplicate send)"
-        return 'RECONCILED'
-    }
-    $nkey = (Get-NormalizedMsgText $key).ToLower()
-    if (-not $nkey) { $nkey = $key.ToLower() }
+    # Pending membership decides eligibility; a platform reception is not a delivery receipt.
+    $nkey = Get-PendingConversationName $key
     $snapRaw = Get-Snapshot
     if ($snapRaw -notmatch '^\[') { return "SNAP_FAIL ($snapRaw)" }
     $snap = $null
@@ -1194,7 +1235,7 @@ function Send-PendingRetry($ctx, [string]$key) {
     $target = $null
     foreach ($it in @($snap)) {
         if (-not $it.name) { continue }
-        $cand = (Get-NormalizedMsgText ([string]$it.name)).ToLower()
+        $cand = Get-PendingConversationName ([string]$it.name)
         if ($cand -eq $nkey) { $target = $it; break }
     }
     if (-not $target) { return 'NOT_IN_LIST' }
@@ -1203,7 +1244,7 @@ function Send-PendingRetry($ctx, [string]$key) {
     return 'PROCESSED'
 }
 
-# 会话处理:处理待办板块中的单个会话(提醒/白名单/冷却/打开/去重/生成/双检/发送/状态/提醒推送)。
+# 会话处理：待回复 -> 精确读取 -> 防重复 -> 自然生成 -> 发送前复核 -> 送达证据。
 # $ctx 为可写上下文引用: state/openCooldown/skipCooldown/noReplyPreview/sendFailCount/failAlertAt/lastActivity
 function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     $key = $item.name.Trim()
@@ -1218,14 +1259,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     $script:lastReplyComposition = $null
     $script:turnRewrites=0
     Write-Log "PROCESS convo from pending-list: $($key) | $($item.preview)"
-    # ===== [SPEC §4.2-G3 2026-09-27] 冷启动只观察: 启动后第 1 个 scan cycle 一律不发送 =====
-    # 依据 §2.1: 本次事故 3 条重复全部落在启动后第 1-3 分钟; 历史 09-27 00:43 事故形态相同
-    #   (停机后重启 ⇒ 老会话被当首次问询)。代价 ≤12 秒延迟(下一轮即可正常发送)。
-    # 位置: 会话处理入口第一步 —— 排在所有"可能走到发送"的分支之前, 包括失败补发/新询盘提醒/LLM 生成。
-    if ($CycleNo -le 1) {
-        Write-Log "COLD-START-SKIP $($key): observe-only cycle=$CycleNo (no send this cycle)"
-        return
-    }
+
     # [2026-10-05 spec §6.2] 页面锁只覆盖"读消息"这一段。生成期间不持锁（见下方 LOCK-RELEASED-FOR-GENERATION），
     #   发送前重新取锁并复核。同进程重入由 lib\lock.ps1 处理，因此上一条会话若在早退路径上仍持锁，这里不会自锁。
     $script:lockHoldStart = Get-Date
@@ -1266,48 +1300,9 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         Write-Log "NO-REPLY-SNAPSHOT $($key): manual-override whitelist, snapshot kept, no auto reply"
         return
     }
-    # 2026-10-05 spec: preview changes only trigger a read; unchanged previews are verified
-    # at most every 20 seconds (subject to scan latency). nextVerifyAt is ONLY a read cache,
-    # never send history. Human/input-failure records retain their original hold.
-    $cooldownRecheck = $false
-    if ($ctx.skipCooldown.ContainsKey($key)) {
-        $co = $ctx.skipCooldown[$key]
-        $pkeyNow = Get-NormalizedMsgText $item.preview   # [FIX-DUP 2026-09-25] 归一化预览仅用于日志留痕
-        $cacheNow = Get-Date
-        $skipMins = ($cacheNow - $co.time).TotalMinutes
-        # Legacy records may have a repeated-hit count; current writers always use count=1.
-        $coolMin = [Math]::Min($script:replyPostSendCooldownMin * [Math]::Pow(2, ([int]$co.count - 1)), 15)
-        # 到期时刻: 优先用记录里的 until(写入时按阻塞条件锚定); 老记录没有该字段时按 time + 冷却值兜底。
-        $holdUntil = ([datetime]$co.time).AddMinutes($coolMin)
-        if ($co.ContainsKey('until') -and $co['until']) { $holdUntil = [datetime]$co['until'] }
-        if ($cacheNow -lt $holdUntil) {
-            # Old records lack a source: known buyer counts came from dedup/time paths;
-            # buyers=-1 is ambiguous and gets periodic READS, still through every guard.
-            $readCache = (-not $co.ContainsKey('reason') -or $co.reason -in @('SENT_OK','ALREADY_ANSWERED','POST_SEND_COOLDOWN','RATE_MIN_GAP','NEW_MESSAGE_FLOOR'))
-            $verifyAt = ([datetime]$co.time).AddSeconds(20)
-            if ($co.ContainsKey('nextVerifyAt') -and $co.nextVerifyAt) { $verifyAt = [datetime]$co.nextVerifyAt }
-            if (-not $readCache -or ($pkeyNow -eq $co.pkey -and $cacheNow -lt $verifyAt)) {
-                Write-Log "TEMP-SKIP $($key): dedup cooldown ${skipMins}m/${coolMin}m pkey=[$($co.pkey) -> $pkeyNow] buyers=$($co.buyers)"
-                return
-            }
-            $cooldownRecheck = $true
-            $co.nextVerifyAt = $cacheNow.AddSeconds(20)
-            $readTrigger = if ($pkeyNow -ne $co.pkey) { 'preview-changed' } else { 'periodic' }
-            Write-Log "COOLDOWN-RECHECK $($key): trigger=$readTrigger source=$($co.reason) nextVerifyAt=$($co.nextVerifyAt.ToString('o')) - reading current messages"
-        } else {
-            $ctx.skipCooldown.Remove($key)
-        }
-    }
-    # 已打开失败的会话缓存在 blacklist 中，3 分钟内不重复尝试
-    if ($ctx.openCooldown.ContainsKey($key)) {
-        $skipMins = [int]((Get-Date) - $ctx.openCooldown[$key]).TotalMinutes
-        if ($skipMins -lt 3) {
-            Write-Log "TEMP-SKIP $($key): open failed recently (cooldown ${skipMins}m)"
-            return
-        } else {
-            $ctx.openCooldown.Remove($key)
-        }
-    }
+    # Pending is authoritative; previous source/time caches cannot postpone its read.
+    if ($ctx.skipCooldown.ContainsKey($key)) { $ctx.skipCooldown.Remove($key) }
+    if ($ctx.openCooldown.ContainsKey($key)) { $ctx.openCooldown.Remove($key) }
     # P2.1a:打开+校验+抓消息合并为一次 eval(原 Open-Convo + 轮询 + Get-AllMessages 共 5 次调用)
     $convo = Open-ConvoAndGetMessages $item.name
     if ($convo -is [string]) {
@@ -1318,16 +1313,15 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         $convo = Open-ConvoAndGetMessages $item.name
     }
     if ($convo -is [string]) {
-        $listCount = Invoke-CdpEval "document.querySelectorAll('.contact-item-container').length"
-        Write-Log "SKIP $($key): cannot open convo ($convo, list items=$listCount)"
-        $ctx.openCooldown[$key] = Get-Date
+        Write-Log "SKIP $($key): cannot open convo ($convo)"
+        $null=New-PendingReplyHumanTask -Buyer $key -Reason ([string]$convo)
         return
     }
     $ctx.openCooldown.Remove($key)
     # The merged opener can return a nonmatching header after its timeout. Refuse that page
     # before normalization/evidence; final send identity and round-halt safeguards remain.
     $openedName = ([string]$convo.name).Trim()
-    if (-not $openedName -or ($openedName.IndexOf($key, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and $key.IndexOf($openedName, [StringComparison]::OrdinalIgnoreCase) -lt 0)) {
+    if (-not $openedName -or (Get-PendingConversationName $openedName) -cne (Get-PendingConversationName $key)) {
         $script:roundHalt = $true
         Write-Log "ABORT_WRONG_CONVO $($key): opened=$openedName round-halt before message evidence"
         return
@@ -1344,10 +1338,12 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     $orderLine = "MSG-SCHEMA $($key) v=$($msgList.Schema) msgs=$(@($msgList.Messages).Count) buyers=$($msgList.BuyerCount) order=$($msgList.Order.Reason) confident=$($msgList.Order.Confident) skipped=$(@($msgList.Skipped).Count) anomaly=$($msgList.Anomaly)"
     Write-Log $orderLine
     if ($msgList.Anomaly) {
+        $null=New-PendingReplyHumanTask -Buyer $key -Reason ('message-order-unverified:'+$msgList.Order.Reason)
         Write-Log "MSG-ORDER-UNVERIFIED $($key) reason=$($msgList.Order.Reason) stamped=$($msgList.Order.TimestampedCount) - this conversation is blocked before generation/send"
         return
     }
     if (-not $msgList.LatestBuyer) {
+        $null=New-PendingReplyHumanTask -Buyer $key -Reason ('no-actionable-buyer:'+$msgList.ReplyBlockReason)
         Write-Log "MSG-INPUT-SKIP $($key) reason=$($msgList.ReplyBlockReason) - no actionable latest buyer message"
         return
     }
@@ -1376,105 +1372,29 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
     $msgLog = Join-Path $script:dataDir ("msgs_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
     Add-Content -Path $msgLog -Value ("# BUYER: " + $key) -Encoding UTF8
     Add-Content -Path $msgLog -Value $msgs -Encoding UTF8
-    $cdpLines = @($msgs -split "`n") | Where-Object { $_ -notmatch '在Alibaba|平台聊天和交易|由阿里翻译提供|翻译提示|已读$|反馈$|举报$|自动接待' }
+    # Structural noise has already been removed; never drop a real message by a body keyword.
+    $cdpLines = @($msgList.Lines)
     $lines = $cdpLines
-    # ===== [2026-09-26 更像真人销售 S2] 防抢话: 老板已亲自回过的会话, 机器人不再插话 =====
-    # 依据: @@TS 只出现在机器人消息上; 人工在 OneTalk 手打的消息不带任何标记(实测 1812/1812)。
-    # 判据方向(spec §4-15): 宁可少发, 不可抢话 —— 尾部我方消息判为人工时一律不自动发送。
-    # [SPEC §4.2 2026-09-27] 位置: 保持在"抓取消息之后" —— 本闸门必须吃**会话行**($cdpLines),
-    #   不能用待回复列表的预览串: 预览串没有 [BUYER]/[ME] 标记, Get-MessageSource 全判 'unknown'
-    #   ⇒ 闸门恒为 SEND, 防抢话静默失效(实测教训)。发送链路真正的会话名校验在 lib\send.ps1 L73。
-    # 证据化来源判定（2026-10-05 spec §2.2）：@@TS 只证明"有时间戳"，不再单独证明发送者身份。
-    #   可信人工回复 = 显式发送者标记，或既无机器人标记、也不在本系统已确认发送记录里。
-    $sentMatches = @{}
-    try { $sentMatches = Get-SentRecordMatchIndexes -Buyer $key -Lines $cdpLines } catch { Write-Log "SENT-RECORDS-READ-FAIL $($key): $($_.Exception.Message)" }
-    # ===== [F2 §4.1 第 1/2 条] 读取后的**第一步**：把整段快照里的新可信人工回复与新的来源不明
-    #   我方消息同步进持久化介入状态，然后才判断"末尾是不是买家"等其它门禁。
-    #   旧编排把同步放在 unknown-me-tail / human-last 分支里，最后一条变成买家时整段更新被跳过，
-    #   于是"人工（或来源不明我方消息）→ 买家补充"这种结尾下等待为 0，紧接着就发送了。
-    #   同步内部用事件身份 + 绝对 UTC 时间去重：同一条重扫/换位置/窗口截断/重启都不延长。
-    $intervention = $null
-    $syncOk = $false
-    try {
-        $intervention = Sync-ConversationInterventionState -Buyer $key -Conversation $msgList -Lines $cdpLines -SentMatches $sentMatches -NowUtc (Get-ReplyClockUtc)
-        $syncOk = [bool]$intervention.SyncOk
-        # 记录只做记录：任何日志格式化失败都不得影响"本轮能不能发送"的结论（安全结论只由 SyncOk 决定）。
+    # ===== [2026-10-07 spec §4-7，复核 R2/R4] 重启对账：这条会话里是否有"点击后中断"的尝试 =====
+    #   用**同口径重读**（共享事件抽取，就是本轮读到的这几行）判断那条正文是否真的成了新事件：
+    #     唯一新增出站事件且正文一致 ⇒ 有效收据（绑定确切事件，不伪造 ID）；
+    #     没有新增出站事件 ⇒ 只是没有证明，保持 pending_confirmation；
+    #     多条新增 / 新增了无法建立身份的气泡 ⇒ delivery_ambiguous + 调查。
+    #   对账结果直接决定本轮会话级闸门能不能放行，因此必须放在门禁之前。
+    if ((Get-Command Invoke-SendAttemptReconciliation -ErrorAction SilentlyContinue) -and (Get-Command Get-SendAttemptsNeedingReconciliation -ErrorAction SilentlyContinue)) {
         try {
-            Write-Log ("INTERVENTION-SYNC $($key) ok=$syncOk pause=$($intervention.HumanPauseActive) hold=$($intervention.UnknownHoldActive) newHuman=$(@($intervention.NewHumanEvents).Count) newUnknown=$(@($intervention.NewUnknownEvents).Count) anomalies=$(@($intervention.Anomalies).Count) legacyAdopted=$($intervention.LegacyAdopted) reason=$($intervention.Reason)")
-            $pauseLocalText = ''
-            if ($intervention.HumanPauseUntilUtc) {
-                if (Get-Command Format-HumanPauseLocal -ErrorAction SilentlyContinue) { $pauseLocalText = [string](Format-HumanPauseLocal $intervention.HumanPauseUntilUtc) }
-                Write-Log "HUMAN-PAUSE-UNTIL $($key) untilUtc=$(([datetime]$intervention.HumanPauseUntilUtc).ToString('o')) local=$pauseLocalText"
+            foreach ($pendingAttempt in @(Get-SendAttemptsNeedingReconciliation -Buyer $key)) {
+                $reconEvents = @(Get-ConversationEventIndex @($cdpLines))
+                $recon = Invoke-SendAttemptReconciliation -AttemptId ([string]$pendingAttempt.attemptId) -Events $reconEvents -ConvoKey $key
+                Write-Log ("SEND-ATTEMPT-RECONCILE " + $key + " attempt=" + [string]$pendingAttempt.attemptId + " applied=" + [string]$recon.Applied + " state=" + [string]$recon.DeliveryState + " err=" + [string]$recon.Error + " investigation=" + [string]$recon.InvestigationId)
+                # [复核 R8] 对账取得收据**不等于**闭环：把两段账本的实际提交结论也写进日志。
+                #   提交失败 ⇒ 保持 persistence_pending + 会话保护（本轮门禁随后会挡住这个会话），
+                #   并由每轮扫描的 Invoke-MonitorSendAttemptRecovery 继续幂等补齐。
+                if ($recon.Applied) {
+                    Write-Log ("SEND-ATTEMPT-RECONCILE-PERSIST " + $key + " attempt=" + [string]$pendingAttempt.attemptId + " ok=" + [string]$recon.PersistenceOk + " complete=" + [string]$recon.PersistenceComplete + " sentRecord=" + [string]$recon.SentRecord + " ledger=" + [string]$recon.Ledger + " blocked=" + [string]$recon.Blocked + " err=" + [string]$recon.PersistError)
+                }
             }
-            if ($intervention.UnknownHoldUntilUtc) {
-                $holdLocalText = ''
-                if (Get-Command Format-HumanPauseLocal -ErrorAction SilentlyContinue) { $holdLocalText = [string](Format-HumanPauseLocal $intervention.UnknownHoldUntilUtc) }
-                Write-Log "SOURCE-UNKNOWN-HOLD-UNTIL $($key) untilUtc=$(([datetime]$intervention.UnknownHoldUntilUtc).ToString('o')) local=$holdLocalText"
-            }
-            foreach ($an in @($intervention.Anomalies)) { Write-Log "INTERVENTION-TIME-ANOMALY $($key) id=$($an.Identity) reason=$($an.Reason) at=$($an.AtUtc)" }
-            if ($intervention.LegacyAdopted) { Write-Log "HUMAN-PAUSE-LEGACY-ADOPTED $($key): kept the stored absolute deadline (no re-base to now+window)" }
-        } catch { }
-    } catch {
-        # [F3 §3.1 第 9 条 / F2 §4.1 第 8 条] 状态读取/保存/事件同步失败不得默认为可发送。
-        Write-Log "HUMAN-PAUSE-ERR $($key): $($_.Exception.Message) - treating the intervention state as active (fail-closed for this round)"
-        $syncOk = $false
-    }
-    if (-not $syncOk) {
-        # [F3 §3.1 第 9 条] 暂停/等待状态的读取或保存失败不得默认为可发送：本轮不发送并留一条明确的失败原因。
-        $syncFailReason = ''
-        if ($intervention) { $syncFailReason = [string]$intervention.Error; if (-not $syncFailReason) { $syncFailReason = [string]$intervention.Reason } }
-        if (-not $syncFailReason) { $syncFailReason = 'intervention state unavailable' }
-        Write-Log "HUMAN-PAUSE-ERR $($key): $syncFailReason - treating the intervention state as active (fail-closed for this round)"
-        Write-Log "INTERVENTION-SYNC-FAIL $($key): intervention state could not be read/saved - no send this round (fail-closed)"
-        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'INTERVENTION_SYNC_FAILED'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
-        return
-    }
-    $hj = Get-HumanInterjectionGateEx -lines $cdpLines -SentMatches $sentMatches
-    if ($hj.Action -eq 'SKIP' -and $hj.Reason -eq 'unknown-me-tail') {
-        # 我方尾部最新一条来源无法证明：既不当作机器人（不发送），也不当作人工回复（不延长暂停）。
-        #   等待窗口本身由上面的同步按**稳定事件身份**建立与去重（不再用"最大行号水位线"：
-        #   位置下标会随窗口截断与换位置漂移，旧实现因此把历史消息当成新介入）。
-        Write-Log "HUMAN-SOURCE-UNKNOWN $($key): newest our-side message has no sender evidence (idx=$($hj.UnknownIndex) evidence=$($hj.SourceEvidence)) - no send, no pause"
-        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'HUMAN_SOURCE_UNKNOWN'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
-        return
-    }
-    if ($intervention.UnknownHoldActive) {
-        # 尾部可能是买家补充消息，但同一会话仍有一条无法证明来源的我方消息在保守等待窗口内
-        #   ⇒ 买家补充、重扫、换位置、重启都不提前解除或延长同一个等待。
-        Write-Log "SOURCE-UNKNOWN-HOLD-ACTIVE-SKIP $($key): an unidentified our-side message is inside the conservative wait window - no auto reply this round"
-        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'SOURCE_UNKNOWN_HOLD'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
-        return
-    }
-    if ($intervention.HumanPauseActive) {
-        # 人工还在 5 分钟让路窗口内（且尾部不是无法证明的我方消息）：本轮一律不发送。
-        #   到期后自然落回下面的正常门禁，且**不会**主动发问候或催促。
-        Write-Log "HUMAN-PAUSE-ACTIVE-SKIP $($key): a trusted human reply is inside the pause window - no auto reply this round (expiry only lifts the temporary wait)"
-        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'HUMAN_PAUSE_ACTIVE'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
-        return
-    }
-    if ($hj.Action -eq 'SKIP') {
-        if (-not $ctx.humanPending[$key]) {
-            # 告警只在"让路开始"时写一次, 避免每轮刷新
-            Write-LocalAlert 'human_interjection' "$($key) 人工已插话, 自动回复已让路" 'local-only' | Out-Null
-        }
-        $ctx.humanPending[$key] = $true
-        Write-Log "HUMAN-REPLIED-SKIP $($key): 人工已回复,本轮不自动发送 (reason=$($hj.Reason) lastMe=$($hj.LastMeSource) idx=$($hj.HumanIndex))"
-        # 该买家若已在补发表中, 一并撤下: 老板已回, 机器人补发等于抢话(同样遵循"宁可少发")
-        try {
-            $rtNow = Read-RetryTable
-            if ($rtNow.items -and $rtNow.items.ContainsKey($key.ToLower())) { Remove-PendingRetry $key }
-        } catch { Write-Log "HUMAN-REPLIED-SKIP $($key): retry-table check failed - $($_.Exception.Message)" }
-        # 短冷却只为省页面负担(不写去重账本): 冷却期内不再重复打开该会话
-        $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'HUMAN_INTERJECTION'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
-        return
-    }
-    $humanWasPending = [bool]$ctx.humanPending[$key]
-    if ($humanWasPending) {
-        # 情形解除: 买家又说新话或机器人重新接管(尾部已是我方非人工) ⇒ 配对清告警(不得只写不清)
-        $ctx.humanPending.Remove($key)
-        $stillPending = @($ctx.humanPending.Keys | Where-Object { $ctx.humanPending[$_] }).Count
-        if ($stillPending -eq 0) { Clear-LocalAlert 'human_interjection' | Out-Null }
-        Write-Log "HUMAN-REPLIED-RESUME $($key): 人工让路已解除(lastMe=$($hj.LastMeSource))"
+        } catch { Write-Log "SEND-ATTEMPT-RECONCILE-ERR $($key): $($_.Exception.Message)" }
     }
     # Accio 影子/读取切换（开关默认关；任何失败自动回退 CDP）。
     # 去重/最新买家消息基准始终取 CDP，避免网关行文本差异导致 hash 突变→重复回复。
@@ -1509,8 +1429,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         $latest = ($latestRaw -replace '^\[BUYER\] ','')
         if ($latest.Trim().Length -eq 0) {
             Write-Log "SKIP $($key): empty latest message"
-            # Explicit input-failure source preserves the original hold; buyers=-1 is no evidence.
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'EMPTY_INPUT'; preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = -1; count = 1 }
+            $null=New-PendingReplyHumanTask -Buyer $key -Reason 'empty-buyer-input'
             return
         }
         # Normalizer owns original text and message identity. Do not reparse a filtered
@@ -1518,126 +1437,33 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
         $lastBuyerOrig = $newestBuyer.Orig
         $latestClean = $newestBuyer.Text
         # [FIX-DUP 2026-09-25] LLM/规则输入必须剥离 @@OT（否则提示词里会出现 B64 垃圾）
-        $lines = $lines | ForEach-Object { $_ -replace '@@(?:TS|MT|CARD):[^\s]+','' -replace '@@OT:[A-Za-z0-9+/=]+','' }
+        # [2026-10-07 spec §3.1] @@META/@@MID 是逐条来源元数据，绝不进入模型上下文。
+                    $lines = $lines | ForEach-Object { $_ -replace '@@(?:TS|MT|MID|CARD):[^\s]+','' -replace '@@OT:[A-Za-z0-9+/=]+','' -replace '@@META:[A-Za-z0-9+/=_-]+','' }
         Write-Log "Latest buyer msg: $latestClean"
         # Keep HASH|count persistence; evidence, attachments and the write use this CDP latest.
         # [SPEC-单出口 2026-09-27] 判据专用 hash: 必须是**该会话最后一条买家消息**的 hash(同口径: 原文优先)。
         $hLastBuyer = Get-StableHash (Get-NormalizedMsgText $lastBuyerOrig)
-        $buyerCount = $msgList.BuyerCount
+        $buyerCount = $msgList.LedgerBuyerCount
         # $newKey 仅用于日志留痕; 真正写账本的是发送成功后下方的 Set-StateHash(同一 hash 与条数)。
         #   条数口径 = 该会话买家消息条数(与 $lastBuyer 同一次抓取), 保证"账本条数 vs 当前条数"可比。
         $newKey = Get-DedupKey (Get-NormalizedMsgText $lastBuyerOrig) $buyerCount
         # ===== [SPEC-待回复列表 2026-09-27 §2] 「是否回复」的唯一出口: Test-ShouldReply =====
-        # Pending list + two consecutive observations remain required. The 2026-10-05 spec
-        # adds positive new-message evidence for time exemption; exact old messages still dedup.
+        # Pending-list membership triggers handling; identity only prevents duplicate sends.
         $ledgerKey = ''
         if ($ctx.state -and $ctx.state.replied) {
-            # Set-StateHash keeps an IDictionary in memory; disk reload returns PSCustomObject.
-            if ($ctx.state.replied -is [System.Collections.IDictionary]) { $ledgerKey = [string]$ctx.state.replied[$skey] }
-            elseif ($ctx.state.replied.PSObject.Properties.Name -contains $skey) { $ledgerKey = [string]$ctx.state.replied.$skey }
+            if ($ctx.state.replied -is [Collections.IDictionary]) { $ledgerKey=[string]$ctx.state.replied[$skey] }
+            elseif ($ctx.state.replied.PSObject.Properties.Name -contains $skey) { $ledgerKey=[string]$ctx.state.replied.$skey }
         }
-        # --- 判定入参的数据面(全部来自本轮快照与既有运行态; 不新增第二套记录, §3.2) ---
-        # §4.1 裁决 = **方案甲**(保守): 账本不可读 ⇒ 一条都不发。整轮开头已挡一道(见 STATE-UNUSABLE),
-        #   此处按 §2 行 1 再挡一道, 避免判据自身在账本异常时仍然放行。
-        $ledgerUsableNow = (Test-RepliedStateUsable $ctx.state).Ok
-        # §2 行 2 的数据面: 由 Update-PendingSeen 在每轮 Get-Snapshot 后整表对齐(命中 +1 / 未命中删键)。
-        $seenRounds = 0
-        if ($ctx.pendingSeen -and $ctx.pendingSeen.ContainsKey($key)) { $seenRounds = [int]$ctx.pendingSeen[$key] }
-        # §2 行 3/4 的**同一个**数据面: 距上次成功发送的分钟数(-1 = 从未发过)。§3.2 明令不得各记一套。
-        $gapMin = -1
-        $gateNow = Get-Date
-        if ($ctx.lastSendAt.ContainsKey($skey)) { $gapMin = ($gateNow - $ctx.lastSendAt[$skey]).TotalMinutes }
-        $inPostSendCooldown = ($gapMin -ge 0 -and $gapMin -lt $script:replyPostSendCooldownMin)
-        # ===== [FIX-DUP-GUARD 2026-09-27] 同一条买家消息不得重复回复(实测 Buyer-A 9 分半被连回 3 次) =====
-        #   证据 = 同一轮抓取里的 (买家条数, 最后一条买家原文 hash) 与账本键**逐字相等** ⇒ 最后这条已回过。
-        #   用法: 把它当作**判据的入参**(连续确认轮数按 0 计 = 没有待回复的新内容), 由唯一出口
-        #   Test-ShouldReply 返回 NOT_IN_PENDING_LIST —— 这里不判"发不发", 不新增第二个出口。
-        #   买家只要再说一句, 条数或 hash 必变 ⇒ $alreadyAnswered=false ⇒ 立刻恢复正常放行。
-        $seenRoundsRaw = $seenRounds
-        $alreadyAnswered = Test-BuyerMsgAlreadyAnswered -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer
-        if ($alreadyAnswered) { $seenRounds = 0 }
-        elseif ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds) { $ctx.dupGuardHolds.Remove($skey) }   # 买家说了新话 ⇒ 连挂结束
-        # ===== [SPEC 4.1 2026-10-03] A confirmed NEW message must not be blocked by the old-message
-        # cooldown. The old code always passed the raw gap/cooldown values, so a buyer who sent a
-        # genuinely new message inside the 5-minute window was held back until it expired (measured:
-        # a real weight message arrived 17:24:47 and was answered 17:33:30, 8m43s later).
-        # The bypass is granted ONLY on positive evidence that the newest buyer message is not the
-        # one we already answered (Test-ConfirmedNewBuyerMessage: ledger key parseable AND buyer
-        # count increased, or equal count with changed original hash). Legacy/unparseable keys grant
-        # nothing. Identity checks, the ledger gate, the 2-round transient defence, the write lock
-        # and the page-health gate all stay in force - only the time gates relax.
-        $evidenceTrusted = ($ledgerUsableNow -and $msgList.Order.Confident -and $newestBuyer.IdConfident -and -not $newestBuyer.IsSystemCard)
-        $confirmedNew = Test-ConfirmedNewBuyerMessage -LedgerKey $ledgerKey -BuyerCount $buyerCount -NormLastBuyerHash $hLastBuyer -MessageEvidenceTrusted $evidenceTrusted
-        if ($cooldownRecheck -and $confirmedNew) { Write-Log "COOLDOWN-LIFT $($key): positive new-message evidence; seconds floor still applies" }
-        $secSinceLastSend = -1
-        if ($ctx.lastSendAt.ContainsKey($skey)) { $secSinceLastSend = ($gateNow - $ctx.lastSendAt[$skey]).TotalSeconds }
-        Write-Log "NEW-MSG-EVIDENCE $($key) confirmedNew=$confirmedNew trusted=$evidenceTrusted alreadyAnswered=$alreadyAnswered secSinceLastSend=$secSinceLastSend floor=$($script:replyNewMsgFloorSec)s"
-        $shouldReply = Test-ShouldReply -LedgerUsable $ledgerUsableNow `
-            -PendingSeenRounds $seenRounds -RequiredSeenRounds $script:requiredSeenRounds `
-            -MinutesSinceLastSend $gapMin -MinGapMinutes $script:replyMinGapMin `
-            -InPostSendCooldown $inPostSendCooldown -PostSendCooldownMinutes $script:replyPostSendCooldownMin `
-            -ConfirmedNewMessage $confirmedNew -NewMessageFloorSeconds $script:replyNewMsgFloorSec -SecondsSinceLastSend $secSinceLastSend `
-            -ConvoLines $cdpLines -LedgerKey $ledgerKey -NormLastBuyerHash $hLastBuyer
-        Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) seen=${seenRoundsRaw}/$($script:requiredSeenRounds) gapMin=$gapMin minGap=$($script:replyMinGapMin)m cooldown=$inPostSendCooldown ledgerUsable=$ledgerUsableNow buyerMsgs=$buyerCount alreadyAnswered=$alreadyAnswered ledgerKey=$ledgerKey lastBuyerHash=$($hLastBuyer.Substring(0,[Math]::Min(8,$hLastBuyer.Length)))"
-        # Time policy is owned only by Test-ShouldReply; no unconditional minute override.
+        $ledgerUsableNow=(Test-RepliedStateUsable $ctx.state).Ok
+        $attempts=@()
+        try { if(Get-Command Get-SendAttempts -ErrorAction SilentlyContinue){$attempts=@(Get-SendAttempts -Buyer $key)} }
+        catch { $null=New-PendingReplyHumanTask -Buyer $key -Reason ('send-history-unreadable:'+ $_.Exception.Message); return }
+        $alreadyAnswered=Test-PendingBuyerAlreadyAnswered -LatestBuyer $newestBuyer -LedgerKey $ledgerKey -BuyerCount $buyerCount -Attempts $attempts
+        $shouldReply=Test-ShouldReply -PendingListAuthoritative -LedgerUsable $ledgerUsableNow -PendingSeenRounds 1 -AlreadyAnswered $alreadyAnswered
+        Write-Log "SHOULD-REPLY $($key): Reply=$($shouldReply.Reply) Reason=$($shouldReply.Reason) buyerMsgs=$buyerCount ledgerKey=$ledgerKey"
         if (-not $shouldReply.Reply) {
-            # ===== [SPEC-待回复列表 2026-09-27 §3.2] 判"不发"时: 冷却原因**按新 Reason 区分** =====
-            # 旧实现的 ALREADY-REPLIED-WAIT(写 skipCooldown 并按 3/6/12/15 递增)是为旧 Reason 设计的 ——
-            #   那批 Reason 全是"已回过这条"(LEDGER_COUNT_MATCH / LEDGER_HASH_MATCH / UNCERTAIN_FAILCLOSED),
-            #   而本次裁决恰恰推翻了它: 那类会话现在**在列表里就该回**(§1.2)。新判据的 Reason 全是
-            #   时间性(POST_SEND_COOLDOWN / RATE_MIN_GAP / NEW_MESSAGE_FLOOR)或异常。
-            #   发送时间等待锚定成功发送时刻；页面缓存另用 nextVerifyAt 做周期性核验。
-            # ⚠️ 唯一的例外, 必须单独处理: NOT_IN_PENDING_LIST(轮数不足) **绝不能**写多分钟冷却 ——
-            #   §2.1/§0.1 明说这条路的代价是"多等 1 轮(约 9 秒)", 且"这是唯一的冷启动延迟"。
-            #   若给它写 5 分钟冷却, 下一轮会在 L879 的 TEMP-SKIP 处就被挡回 ⇒ 第 2 轮永远等不到,
-            #   §0 硬判据 1 与 §7-E1 直接失效(推演: 第 1 轮跳过后 5 分钟内全程 TEMP-SKIP)。
-            #   故只留一行等待日志, **不动**冷却表 ⇒ 下一轮(约 9 秒)即可确认并发出。
-            if ($shouldReply.Reason -eq 'NOT_IN_PENDING_LIST') {
-                if ($alreadyAnswered) {
-                    # [FIX-DUP-GUARD 2026-09-27] 这里的"不在待回复列表"= 账本已证明最后一条买家消息回过
-                    #   (**不是**轮数没攒够)。上面 §2.1 那条"绝不能写多分钟冷却"约束针对的是"轮数不足、
-                    #   但买家确有新消息"的情形; 本分支前提恰恰相反: 买家只要再说一句, 条数或 hash 必变
-                    #   ⇒ $alreadyAnswered=false ⇒ 根本不走这里。故此处写短冷却不会破坏 2 轮确认机制。
-                    $ctx.skipCooldown[$key] = @{ time = Get-Date; until = (Get-Date).AddMinutes($script:replyPostSendCooldownMin); reason = 'ALREADY_ANSWERED'; nextVerifyAt = (Get-Date).AddSeconds(20)
-                                                 preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview)
-                                                 buyers = $buyerCount; count = 1 }
-                    if ($cooldownRecheck) {
-                        # Read (preview-triggered or periodic) still proves an old answered message.
-                        Write-Log "COOLDOWN-HOLD $($key): ledger proves the last buyer msg was already answered (buyers=$buyerCount) - no send; periodic verification continues"
-                    }
-                    # 连挂计数: 同一会话连续 N 轮"在待回复列表里、但账本证明没有新内容" ⇒ 告警交人工判断。
-                    #   不静默、也不拿买家的耐心去试 —— 这是 买家G 事故(无限跳过)与 Buyer-A 事故(重复打扰)
-                    #   之间唯一诚实的落点: 机器人不重复发, 但把"页面待回复标记可能是陈旧的"这件事说出去。
-                    $holds = 0
-                    if ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds -and $ctx.dupGuardHolds.ContainsKey($skey)) { $holds = [int]$ctx.dupGuardHolds[$skey] }
-                    $holds++
-                    if (-not $ctx.ContainsKey('dupGuardHolds') -or -not $ctx.dupGuardHolds) { $ctx.dupGuardHolds = @{} }
-                    $ctx.dupGuardHolds[$skey] = $holds
-                    Write-Log "DUP-GUARD-HOLD $($key): last buyer msg already answered (buyers=$buyerCount ledgerKey=$ledgerKey holds=$holds) - no send"
-                    if ($holds -eq 3) {
-                        try { Send-WecomMessage ("[ALERT] DUP-GUARD: " + $key + " still in the pending list while the ledger proves its last buyer message was already answered (3 consecutive holds). Check whether the page pending flag is stale.") | Out-Null } catch { }
-                        Write-Log "DUP-GUARD-ALERT $($key) holds=$holds (pushed via dsh-im)"
-                    }
-                    return
-                }
-                Write-Log "PENDING-CONFIRM-WAIT $($key) seen=${seenRounds}/$($script:requiredSeenRounds) round(s); waiting for consecutive confirmation (no cooldown written, re-checked next round ~9s)"
-                return
-            }
-            $coolReason = [string]$shouldReply.Reason
-            # [FIX-WAIT-STACK 2026-09-27] 冷却必须锚在**阻塞条件到期的那一刻**, 不得从"此刻"重新计时 ——
-            #   否则 RATE_MIN_GAP 每次被挡都要再等一整段冷却(实测 5 分钟的最小间隔被等成 8 分 43 秒:
-            #   17:28:42 判据说该回 → RATE-SKIP 挡下 → 又装 5 分钟 → 17:33:30 才发出)。
-            $coolUntil = (Get-Date).AddMinutes($script:replyPostSendCooldownMin)
-            if ($ctx.lastSendAt.ContainsKey($skey)) {
-                $sentAt = [datetime]$ctx.lastSendAt[$skey]
-                if ($coolReason -eq 'RATE_MIN_GAP') { $coolUntil = $sentAt.AddMinutes($script:replyMinGapMin) }
-                elseif ($coolReason -eq 'POST_SEND_COOLDOWN') { $coolUntil = $sentAt.AddMinutes($script:replyPostSendCooldownMin) }
-                elseif ($coolReason -eq 'NEW_MESSAGE_FLOOR') { $coolUntil = $sentAt.AddSeconds($script:replyNewMsgFloorSec) }
-            }
-            $ctx.skipCooldown[$key] = @{ time = Get-Date; until = $coolUntil; reason = $coolReason; nextVerifyAt = (Get-Date).AddSeconds(20); preview = $item.preview
-                                         pkey = (Get-NormalizedMsgText $item.preview)
-                                         buyers = $buyerCount; count = 1 }
-            Write-Log "ALREADY-REPLIED-WAIT $($key) reason=$coolReason no send; next check at $($coolUntil.ToString('o')) (anchored on blocking condition; config keys reply_min_gap_min/reply_post_send_cooldown_min/reply_new_msg_floor_sec)"
+            if($alreadyAnswered){$null=New-PendingReplyHumanTask -Buyer $key -Reason 'stale-pending-flag: recorded answer already covers this buyer event'}
+            Write-Log "PENDING-REPLY-HOLD $($key): $($shouldReply.Reason)"
             return
         } else {
             # A1 new inquiry alert (24h throttle)
@@ -1668,6 +1494,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
             Write-Log "ROUND-START $($key) attach=$attFlag imgs=$(@($attImages).Count) ctx=$(@($lines).Count) budget=${roundBudget}s"
             # [2026-10-05 spec §6.2] 附件处理与模型生成移出页面锁：锁只保护页面读取（上面）与发送（下面）。
             #   快照身份与"本轮买家输入"在这里固定下来，发送前复核要用同一份基准。
+            $snapshotLatestIdentity = [string]$replyConversation.LatestBuyer.StableId
             $snapshotLatestText = [string]$replyConversation.LatestBuyer.Orig
             $snapshotBuyerCount = [int]$replyConversation.BuyerCount
             # ===== [2026-10-05 spec §3.2 第 1 条] 编排顺序：事实/业务决策 → **幂等创建或更新本轮任务**
@@ -1820,7 +1647,7 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                 # rewrite sharing the remaining budget, so the rewrite now lives in lib\reply_gen.ps1
                 # (driven by the full violation list) and this gate never calls the model at all.
                 # The guarantee is unchanged: a reply that cannot be made compliant is never sent.
-                # [2026-10-05 spec §6.2] 发送前重新取锁并复核：会话身份、当前买家输入、人工介入/临时暂停。
+                # [2026-10-05 spec §6.2] 发送前重新取锁并复核：待回复成员、精确会话名、当前买家输入与任务证据。
                 #   任何一项变化 ⇒ 丢弃旧草稿（绝不"只换个称呼"把过期内容发出去）。
                 if (-not (Get-AppLock 'onetalk-write' 5)) {
                     Write-Log "SEND-LOCK-BUSY $($key): another writer holds onetalk-write; draft discarded, no send this round"
@@ -1829,46 +1656,32 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                 }
                 $stale = ''
                 try {
+                    $pendingRaw = Get-Snapshot
+                    if ($pendingRaw -notmatch '^\[') { throw 'pending-list-unreadable' }
+                    $pendingNow = $pendingRaw | ConvertFrom-Json
+                    if (-not @($pendingNow | Where-Object { (Get-PendingConversationName ([string]$_.name)) -ceq (Get-PendingConversationName $key) }).Count) {
+                        Write-Log "STALE-DRAFT-DISCARD $($key): no longer in pending list"
+                        Stop-LlmRound
+                        return
+                    }
                     $freshConvo = Open-ConvoAndGetMessages $key
                     if ($freshConvo -is [string]) {
                         $stale = 'reread-failed:' + $freshConvo
                     } else {
                         $freshOpened = ([string]$freshConvo.name).Trim()
-                        if (-not $freshOpened -or ($freshOpened.IndexOf($key, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and $key.IndexOf($freshOpened, [StringComparison]::OrdinalIgnoreCase) -lt 0)) {
+                        if (-not $freshOpened -or (Get-PendingConversationName $freshOpened) -cne (Get-PendingConversationName $key)) {
                             $stale = 'identity-changed'
                         } else {
                             $freshList = ConvertTo-MessageList $freshConvo.msgs $key
                             if ($freshList.Anomaly) { $stale = 'order-unverified' }
                             elseif (-not $freshList.LatestBuyer) { $stale = 'no-actionable-buyer:' + $freshList.ReplyBlockReason }
                             elseif ([string]$freshList.LatestBuyer.Orig -ne $snapshotLatestText) { $stale = 'buyer-input-changed' }
+                            elseif ([string]$freshList.LatestBuyer.StableId -cne $snapshotLatestIdentity) { $stale = 'buyer-identity-changed' }
                             elseif ([int]$freshList.BuyerCount -ne $snapshotBuyerCount) { $stale = 'buyer-count-changed' }
-                            else {
-                                $freshMatches = @{}
-                                try { $freshMatches = Get-SentRecordMatchIndexes -Buyer $key -Lines @($freshList.Lines) } catch { }
-                                $freshGate = Get-HumanInterjectionGateEx -lines @($freshList.Lines) -SentMatches $freshMatches
-                                if ($freshGate.Action -eq 'SKIP') { $stale = 'human-or-unknown:' + $freshGate.Reason }
-                            }
                         }
                     }
                 } catch { $stale = 'reread-error:' + $_.Exception.Message }
-                # [F2 §4.1 第 7 条] 发送锁内重新读取快照后，先调用**同一个**同步接口，再复核门禁：
-                #   生成期间出现 unknown 我方消息或人工回复时，即使紧接着又有买家消息，旧草稿也不能发送。
-                #   同步失败同样按 fail-closed 处理（不是"记一条日志当没有暂停"）。
-                if (-not $stale) {
-                    try {
-                        if ($freshList) {
-                            $freshSync = Sync-ConversationInterventionState -Buyer $key -Conversation $freshList -Lines @($freshList.Lines) -SentMatches $freshMatches -NowUtc (Get-ReplyClockUtc)
-                            Write-Log ("INTERVENTION-SYNC-SEND-TIME $($key) ok=$($freshSync.SyncOk) pause=$($freshSync.HumanPauseActive) hold=$($freshSync.UnknownHoldActive) newHuman=$(@($freshSync.NewHumanEvents).Count) newUnknown=$(@($freshSync.NewUnknownEvents).Count) reason=$($freshSync.Reason)")
-                            if (-not $freshSync.SyncOk) { $stale = 'intervention-sync-failed' }
-                            elseif ($freshSync.HumanPauseActive) { $stale = 'human-pause-active' }
-                            elseif ($freshSync.UnknownHoldActive) { $stale = 'source-unknown-hold' }
-                        }
-                    } catch {
-                        Write-Log "HUMAN-PAUSE-CHECK-ERR $($key): $($_.Exception.Message)"
-                        # [2026-10-05 spec §2.2 第 7 条] 暂停/等待状态读取或保存失败不得默认为可发送。
-                        $stale = 'human-pause-check-failed'
-                    }
-                }
+
                 if (-not $stale) {
                     # [2026-10-05 spec §5 第 3/5 条] 账本在生成期间损坏 ⇒ 本轮不发送。
                     $ledgerNow = Test-RepliedStateUsable $ctx.state
@@ -1879,11 +1692,12 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     }
                 }
                 if ($stale) {
+                    if ($stale -match 'reread|order-unverified|no-actionable-buyer') { $null=New-PendingReplyHumanTask -Buyer $key -Reason $stale }
                     Write-Log "STALE-DRAFT-DISCARD $($key): $stale - the draft built from the older snapshot is discarded; the conversation is re-decided on the next read"
                     Stop-LlmRound
                     return
                 }
-                Write-Log "PAGE-LOCK-REACQUIRED phase=send convo=$($key) verified=identity+input+human+pause+hold+ledger"
+                Write-Log "PAGE-LOCK-REACQUIRED phase=send convo=$($key) verified=pending+identity+input+ledger"
                 $sendRuntime = New-ReplyRuntimeContext -SellerProfile $script:sellerProfile -NowUtc (Get-ReplyClockUtc)
                 # 最终复核读的是**本轮已经落盘任务**的回读证据（不是生成前的旧状态）。
                 # [F4 §6.1 第 4 条] 发送前用**同一个** TaskId + 规范化类型 + 供应商身份重新回读落盘任务：
@@ -1956,9 +1770,49 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     return
                 }
 
+                # ===== [2026-10-07 spec §4-7/§4-3，复核 R2/R3] 会话级不重发 + 发送前持久化尝试 =====
+                #   只要该会话还有未确认（pending_confirmation）、持久化未完成（persistence_pending）
+                #   或歧义（delivery_ambiguous）的尝试，本轮就不发送 —— **与去重键无关**：
+                #   买家再发一条新消息（新触发）也不能自动放行一条未对账的旧发送。
+                $sendAttemptId = ''
+                $sendAttemptBefore = @()
+                if (Get-Command Test-SendAttemptBlocksResend -ErrorAction SilentlyContinue) {
+                    $resendBlock = $null
+                    try { $resendBlock = Test-SendAttemptBlocksResend -Buyer $key -TriggerRef $newKey -ConvoKey $key }
+                    catch { $null=New-PendingReplyHumanTask -Buyer $key -Reason ('send-history-unreadable:'+ $_.Exception.Message); return }
+                    if ($resendBlock -and $resendBlock.Blocked) {
+                        Write-Log "SEND-ATTEMPT-BLOCKS-RESEND $($key): unconfirmed attempt(s) [$(@($resendBlock.Reasons) -join ',')] - the conversation is not sent to again until they are reconciled (trigger=$newKey sameTrigger=$(@($resendBlock.SameTrigger).Count))"
+                        $null=New-PendingReplyHumanTask -Buyer $key -Reason ('delivery-unresolved:'+(@($resendBlock.Reasons) -join ','))
+                        return
+                    }
+                }
+                # [spec §4-3] 先持久化唯一 AttemptId、目标会话、完整正文/哈希、发送前快照证明与阶段，
+                #   再执行输入/点击。落盘失败 ⇒ **不执行发送**（不冒"发了但没有任何本地证据"的风险）。
+                if (Get-Command New-PersistedSendAttempt -ErrorAction SilentlyContinue) {
+                    $attRes = $null
+                    try {
+                        if (Get-Command Get-ConversationEventIndex -ErrorAction SilentlyContinue) {
+                            $sendAttemptBefore = @(Get-ConversationEventIndex @($freshList.Lines))
+                        }
+                        $attRes = New-PersistedSendAttempt -Buyer $key -Text $reply -DedupKey $newKey -TriggerRef $newKey -TriggerIdentity $newestBuyer.StableId -ConvoKey $key -BeforeEvents $sendAttemptBefore
+                    } catch {
+                        Write-Log "SEND-ATTEMPT-PERSIST-ERR $($key): $($_.Exception.Message)"
+                        $attRes = [pscustomobject]@{ Ok = $false; AttemptId = ''; Error = $_.Exception.Message }
+                    }
+                    if (-not $attRes -or -not $attRes.Ok) {
+                        $why = 'unknown'
+                        if ($attRes) { $why = [string]$attRes.Error }
+                        Write-Log "SEND-ATTEMPT-NOT-PERSISTED $($key): $why - send is NOT executed (spec 4-3)"
+                        $null=New-PendingReplyHumanTask -Buyer $key -Reason ('send-attempt-not-persisted:'+$why)
+                        return
+                    }
+                    $sendAttemptId = [string]$attRes.AttemptId
+                    Write-Log "SEND-ATTEMPT-PERSISTED $($key) attempt=$sendAttemptId dedupKey=$newKey beforeEvents=$(@($sendAttemptBefore).Count)"
+                }
                 # [2026-10-05 spec §5-3/§5-4] 结构化发送结果：SENT_OK = 页面动作 + 会话内新我方消息双证据；
                 #   UNKNOWN = 页面动作完成但核对不到 ⇒ **先对账再决定是否重试**，绝不直接按失败补发。
-                $sendRes = Send-OneTalkMessageEx -buyer $key -text $reply
+                # The adapter binds and persists its actual baseline before marking dispatching.
+                $sendRes = Send-OneTalkMessageEx -buyer $key -text $reply -AlreadyOpen -AttemptId $sendAttemptId
                 $sendStatus = [string]$sendRes.Status
                 $sendRaw = [string]$sendRes.Raw
                 Write-Log "ROUND-SEND $($key) chars=$($reply.Length) elapsed=$(Get-LlmRoundElapsedSec)s status=$sendStatus evidence=[$($sendRes.ConfirmEvidence)]"
@@ -1979,6 +1833,54 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                 if($sendStatus -eq 'SENT_OK' -and -not(Test-ConfirmedOutboundReceipt $sendRes.Receipt $key $reply)){
                     $sendStatus='UNKNOWN';$sendRaw+=' | INVALID_CONFIRMED_RECEIPT';Write-Log "SEND-RECEIPT-INVALID $($key): no ledger advancement"
                 }
+                # ===== [2026-10-07 spec §3.3/§4-4/§4-7，复核 R1] 尝试级确认 + 登记真实送达状态 =====
+                #   **生产调用点**：用发送适配器返回的同口径前后快照（共享真实事件抽取 + 共享身份构造）
+                #   做"唯一新增事件 + 完整正文 + 会话身份"的尝试级确认；收据有效 ⇒ receipt_verified；
+                #   页面动作完成但核对不到 ⇒ pending_confirmation；其余 ⇒ delivery_ambiguous。
+                $attemptConfirm = $null
+                if ($sendAttemptId -and (Get-Command Confirm-SendAttemptFromSnapshots -ErrorAction SilentlyContinue)) {
+                    $beforeSnap = @()
+                    $afterSnap = @()
+                    if ($sendRes.PSObject.Properties.Name -contains 'BeforeSnapshot' -and $sendRes.BeforeSnapshot) { $beforeSnap = @($sendRes.BeforeSnapshot) }
+                    if ($sendRes.PSObject.Properties.Name -contains 'AfterSnapshot' -and $sendRes.AfterSnapshot) { $afterSnap = @($sendRes.AfterSnapshot) }
+                    if (@($beforeSnap).Count -gt 0 -and @($afterSnap).Count -gt 0) {
+                        try {
+                            $attemptConfirm = Confirm-SendAttemptFromSnapshots -AttemptId $sendAttemptId -Buyer $key -Text $reply -BeforeEvents $beforeSnap -AfterEvents $afterSnap -ConvoKey $key
+                        } catch { $attemptConfirm = $null; Write-Log "SEND-ATTEMPT-CONFIRM-ERR $($key): $($_.Exception.Message)" }
+                        if ($attemptConfirm) {
+                            Write-Log "SEND-ATTEMPT-CONFIRM $($key) attempt=$sendAttemptId confirmed=$($attemptConfirm.Confirmed) state=$($attemptConfirm.DeliveryState) newEvents=$($attemptConfirm.NewEventCount) ambiguity=[$(@($attemptConfirm.Ambiguity) -join ',')] err=$($attemptConfirm.Error)"
+                        }
+                    } else {
+                        Write-Log "SEND-ATTEMPT-CONFIRM-SKIPPED $($key) attempt=${sendAttemptId} : the send adapter returned no same-caliber snapshots"
+                    }
+                }
+                # 尝试级确认拿到了有效收据而页面核对只给出 UNKNOWN 时，以**收据**为准（送达已被证明）。
+                if ($attemptConfirm -and $attemptConfirm.Confirmed -and $sendStatus -ne 'SENT_OK') {
+                    $sendStatus = 'SENT_OK'
+                    $sendRes | Add-Member -NotePropertyName Receipt -NotePropertyValue $attemptConfirm.Receipt -Force
+                    $sendRaw = ($sendRaw + ' | ATTEMPT_RECEIPT_CONFIRMED')
+                    Write-Log "SEND-RECEIPT-RECOVERED $($key) attempt=$sendAttemptId receipt=$($attemptConfirm.Receipt.ReceiptId) type=$($attemptConfirm.Receipt.ConfirmationType)"
+                }
+                $sendNotAttempted = ($sendRes.PSObject.Properties.Name -contains 'NotAttempted' -and [bool]$sendRes.NotAttempted)
+                if ($sendNotAttempted) {
+                    Write-Log "SEND-ABORTED-BEFORE-INPUT $($key) attempt=$sendAttemptId reason=$($sendRes.Detail)"
+                }
+                if ($sendAttemptId -and -not $sendNotAttempted -and (Get-Command Set-SendAttemptReceipt -ErrorAction SilentlyContinue)) {
+                    try {
+                        [void](Set-SendAttemptStage -AttemptId $sendAttemptId -Stage ('page:' + $sendStatus) -Detail ([string]$sendRes.ConfirmEvidence))
+                        if ($sendStatus -eq 'SENT_OK') {
+                            [void](Set-SendAttemptReceipt -AttemptId $sendAttemptId -Receipt $sendRes.Receipt -DeliveryState 'receipt_verified')
+                        } elseif (Test-PageConfirmedSendResult ([string]$sendRaw)) {
+                            [void](Set-SendAttemptReceipt -AttemptId $sendAttemptId -Receipt $null -DeliveryState 'pending_confirmation')
+                            $ambDetail = 'page actions completed but no unique new event could be proven'
+                            if ($attemptConfirm -and $attemptConfirm.Error) { $ambDetail = $ambDetail + ' (' + [string]$attemptConfirm.Error + ')' }
+                            $invP = New-MonitorInvestigation -Buyer $key -Kind 'receipt_pending' -AttemptId $sendAttemptId -EventRefQuality 'attempt' -EvidenceRefs @('page-action-ok', ('raw:' + [string]$sendRaw)) -Detail $ambDetail
+                            Write-Log "SEND-PENDING-CONFIRMATION $($key) attempt=$sendAttemptId - this conversation will not be re-sent until it is reconciled; investigation=$($invP.Id)"
+                        } else {
+                            [void](Set-SendAttemptStage -AttemptId $sendAttemptId -Stage ('failed:' + $sendStatus) -DeliveryState 'delivery_ambiguous' -Detail ([string]$sendRaw))
+                        }
+                    } catch { Write-Log "SEND-ATTEMPT-STAGE-ERR $($key): $($_.Exception.Message)" }
+                }
                 # 仅发送成功才记录去重；发送失败（ABORT/未发出/对账后仍未知）不记录，
                 # 否则会话会永久卡在待回复板块且永不重试
                 if ($sendStatus -eq 'SENT_OK') {
@@ -1987,9 +1889,34 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     $ctx.lastSendAt[$skey] = $sentAt
                     # [2026-10-05 spec §2.2] 记录已确认发送：之后判定"这条 [ME] 是不是我们发的"就有
                     #   本系统自己的证据，不再依赖 @@TS 这种时间字段。
-                    try { [void](Add-SentRecord -Buyer $key -Text $reply -SentAt $sentAt.ToString('o') -Source 'monitor' -Receipt $sendRes.Receipt) } catch { Write-Log "SENT-RECORD-WRITE-FAIL $($key): $($_.Exception.Message)" }
-                    # [FIX-DUP 2026-09-25] 写新格式去重键（归一化原文 hash + 买家消息条数）
-                    Set-StateHash $ctx $skey $newKey
+                    # [2026-10-07 spec §4-5/§4-6] 跨文件不是一次原子提交：用持久提交阶段 + 可恢复对账处理
+                    #   部分成功。sent_records 写入失败或返回 false ⇒ 保留已送达证明与待持久化状态、
+                    #   暂停该会话新增发送并生成调查；**绝不**因落盘失败再次发送已送达正文。
+                    $ledgerWriter = {
+                        Set-StateHash $ctx $skey $newKey
+                        $writtenNow = ''
+                        if ($ctx.state -and $ctx.state.replied) {
+                            if ($ctx.state.replied -is [System.Collections.IDictionary]) { $writtenNow = [string]$ctx.state.replied[$skey] }
+                            elseif ($ctx.state.replied.PSObject.Properties.Name -contains $skey) { $writtenNow = [string]$ctx.state.replied.$skey }
+                        }
+                        return ($writtenNow -eq $newKey)
+                    }.GetNewClosure()
+                    $sentRecordWriter = {
+                        return [bool](Add-SentRecord -Buyer $key -Text $reply -SentAt $sentAt.ToString('o') -Source 'monitor' -Receipt $sendRes.Receipt)
+                    }.GetNewClosure()
+                    $persisted = $null
+                    if ($sendAttemptId -and (Get-Command Complete-SendAttemptPersistence -ErrorAction SilentlyContinue)) {
+                        try { $persisted = Complete-SendAttemptPersistence -AttemptId $sendAttemptId -SentRecordWriter $sentRecordWriter -LedgerWriter $ledgerWriter -Detail 'SENT_OK' } catch { $persisted = $null; Write-Log "SEND-PERSIST-ERR $($key): $($_.Exception.Message)" }
+                    }
+                    if (-not $persisted) {
+                        # 旧路径（没有持久化尝试）逐字保留原行为。
+                        try { [void](Add-SentRecord -Buyer $key -Text $reply -SentAt $sentAt.ToString('o') -Source 'monitor' -Receipt $sendRes.Receipt) } catch { Write-Log "SENT-RECORD-WRITE-FAIL $($key): $($_.Exception.Message)" }
+                        Set-StateHash $ctx $skey $newKey
+                    } elseif (-not $persisted.Ok) {
+                        Write-Log "SEND-PERSISTENCE-PENDING $($key) attempt=$sendAttemptId sentRecord=$($persisted.SentRecord) ledger=$($persisted.Ledger) err=$($persisted.Error) investigation=$($persisted.InvestigationId) - delivered proof kept; no resend of this reply"
+                    } else {
+                        Write-Log "SEND-PERSISTENCE-OK $($key) attempt=$sendAttemptId alreadyDone=$($persisted.AlreadyDone)"
+                    }
                     # [2026-10-05 spec §3.2 第 1/2/7 条] 任务已经在**生成之前**由编排层幂等创建/更新
                     #   （Get-TaskContextForConvo），发送成功只负责如实记录通知结果：
                     #     通知失败 ⇒ 任务保留（pending_human/awaiting_contact），措辞不得声称人工已收到；
@@ -2010,12 +1937,8 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                         }
                     } catch { Write-Log "HUMAN-TASK-ERR $($key): $($_.Exception.Message)" }
                     Remove-PendingRetry $key          # [Phase3] 发送成功即出补发表
-                    # Successful send anchors both the minute gate and the independent read cache.
-                    # New messages can be discovered during that cache; old messages still dedup.
-                    $ctx.skipCooldown[$key] = @{ time = $sentAt; until = $sentAt.AddMinutes($script:replyPostSendCooldownMin); reason = 'SENT_OK'; nextVerifyAt = $sentAt.AddSeconds(20); preview = $item.preview; pkey = (Get-NormalizedMsgText $item.preview); buyers = $buyerCount; count = 1 }
                     # [FIX-DUP-GUARD 2026-09-27] 真发出去了 ⇒ 重复回复的连挂计数归零(该计数语义是"连续")。
                     if ($ctx.ContainsKey('dupGuardHolds') -and $ctx.dupGuardHolds) { $ctx.dupGuardHolds.Remove($skey) }
-                    Write-Log "POST-SEND-COOLDOWN $($key) $($script:replyPostSendCooldownMin)min (config key reply_post_send_cooldown_min)"
                     # [SPEC §4.3-G4 2026-09-27 / SPEC-待回复列表 §2 行3-4] 记录成功发送时刻
                     #   —— 上方已赋值，秒级下限与分钟门禁共用这一个数据面。
                     # B2 报价提醒:[F7 §8.1 第 6 条] 前置门必须**直接消费统一结果**（Ready），
@@ -2065,7 +1988,9 @@ function Invoke-ConvoItem($ctx, $item, [int]$CycleNo = 2) {
                     $ctx.openCooldown[$key] = Get-Date
                     # [Phase3] 发送失败 ⇒ 入持久化补发表(会话可能就此离开待回复列表 ⇒ 否则永不重试)。
                     #   不去重 state(沿用既有正确设计, 见上方 L957-958 注释: 写了会永久卡死且永不重试)。
-                    Add-PendingRetry $key ([string]$sendRaw)
+                    # [2026-10-06] 页面侧发送动作已完成但收据自证失败时，把当时的去重键一起入表：
+                    #   会话随后离开待回复列表即可作为"已送达"的对账证据（见 NOT_IN_LIST 分支）。
+                    Add-PendingRetry $key ([string]$sendRaw) $newKey (Test-PageConfirmedSendResult ([string]$sendRaw))
                 }
             } else {
                 Write-Log "SKIP $($key): empty reply generated"
@@ -2142,8 +2067,20 @@ function Invoke-ScanRound($ctx) {
                         Remove-PendingRetry $bkey
                     }
                     elseif ($rres -eq 'NOT_IN_LIST') {
-                        # 会话已不在待回复列表 ⇒ 无法安全补发(可能已被人工处理或买家已撤回)
-                        Add-PendingRetry $bkey 'NOT_IN_LIST (conversation no longer in pending list)'
+                        # [2026-10-06] 对账闭环：页面侧发送动作已完成（记在补发项里）+ 会话已离开待回复列表
+                        #   ⇒ 当作已送达：推进账本并关闭补发项（不重发、不伪造收据）。
+                        #   仅有 NOT_IN_LIST（被人工接走 / 买家撤回）不足以推进账本。
+                        $rkey = [string]$itR.key
+                        if (Test-ReconciledDeliveryEvidence ([string]$itR.reason) ([bool]$itR.pageConfirmed) ([string]$itR.dedupKey)) {
+                            if (Complete-ReconciledDelivery $ctx (Get-StateKey $rkey) ([string]$itR.dedupKey) 'page-send-ok+pending-list-cleared') {
+                                Remove-PendingRetry $rkey
+                            } else {
+                                Add-PendingRetry $rkey 'NOT_IN_LIST (ledger write failed; keep reconciling)'
+                            }
+                        } else {
+                            # 会话已不在待回复列表 ⇒ 无法安全补发(可能已被人工处理或买家已撤回)
+                            Add-PendingRetry $rkey 'NOT_IN_LIST (conversation no longer in pending list)'
+                        }
                     } else {
                         # 'PROCESSED': Invoke-ConvoItem 未抛异常且未发送成功(命中 dedup/冷却/打开失败等);
                         # 仍按失败再排期, 由 tries 上限兜住(自然收敛, 见 spec §8-2 R3)
@@ -2154,6 +2091,29 @@ function Invoke-ScanRound($ctx) {
                 }
             }
         } catch { Write-Log ("RETRY-LOOP-ERR: " + $_.Exception.Message) }
+
+        # ===== [2026-10-07 spec §6] 事件级调查的独立提醒与保留 =====
+        #   提醒独立于"买家回复是否成功"分支：本次扫描轮即使全部会话被门禁阻断（页面阻断、
+        #   来源不明、待确认发送），到期调查仍然会被提醒一次。通道失败不改写通知状态、不释放闸门。
+        try {
+            $invSweep = @(Invoke-MonitorInvestigationSweep -Max 3)
+            foreach ($sr in $invSweep) {
+                $sid = ''
+                if ($sr.Record) { $sid = [string]$sr.Record.id }
+                Write-Log ("INVESTIGATION-NOTIFY id=" + $sid + " result=" + [string]$sr.Result + " sent=" + [string]$sr.Sent + " err=" + [string]$sr.Error)
+            }
+            if ($invSweep.Count -gt 0) { [void](Invoke-MonitorInvestigationRetention) }
+        } catch { Write-Log ("INVESTIGATION-SWEEP-LOOP-ERR: " + $_.Exception.Message) }
+
+        # ===== [2026-10-07 spec §4-6，复核 R4] 待持久化发送的生产恢复（与提醒同级、独立于回复成功） =====
+        #   收据已证明送达、只是 sent_records 或账本没写成功的尝试，在这里用**真实写入器**重试并回读；
+        #   失败保持 persistence_pending（该会话继续被会话级闸门挡住），绝不因落盘失败再次发送。
+        try {
+            $recovered = Invoke-MonitorSendAttemptRecovery -Max 3
+            foreach ($rr in @($recovered.Results)) {
+                Write-Log ("SEND-ATTEMPT-RECOVERY attempt=" + [string]$rr.AttemptId + " ok=" + [string]$rr.Ok + " sentRecord=" + [string]$rr.SentRecord + " ledger=" + [string]$rr.Ledger + " err=" + [string]$rr.Error)
+            }
+        } catch { Write-Log ("SEND-ATTEMPT-RECOVERY-LOOP-ERR: " + $_.Exception.Message) }
     try {
         # 待回复板块 = 待办队列：板块里出现的每个会话都需要处理，回复后自动从板块消失。
         $snapRaw = Get-Snapshot
@@ -2231,8 +2191,6 @@ function Invoke-ScanRound($ctx) {
             Update-PendingSeen $ctx $snap
             # (c) G3 冷启动: monitor 启动后的第 1 个 scan cycle 只观察不发送(允许写快照/日志/推提醒)。
             $script:scanCycleNo++
-            $observeOnly = ($script:scanCycleNo -le 1)
-            if ($observeOnly) { Write-Log "COLD-START observe-only cycle=$($script:scanCycleNo)" }
             # [2026-10-05 spec §6.2] 页面锁只覆盖"页面读取"这一段：列表与页面健康都已取完，
             #   进入逐会话处理前先放锁。每个会话自己在读消息时再取锁，生成期间**不持锁**，
             #   发送前重新取锁并复核（见 Invoke-ConvoItem）。这样模型/附件耗时不再占用页面锁。
@@ -2246,7 +2204,14 @@ function Invoke-ScanRound($ctx) {
                     break
                 }
                 $script:roundHalt = $false
-                Invoke-ConvoItem $ctx $item $script:scanCycleNo
+                try {
+                    Invoke-ConvoItem $ctx $item $script:scanCycleNo
+                } catch {
+                    Write-Log "CONVO-ERROR $($item.name): $($_.Exception.Message)"
+                    $null=New-PendingReplyHumanTask -Buyer $item.name -Reason ('conversation-error:'+$_.Exception.Message)
+                } finally {
+                    Release-AppLock 'onetalk-write' | Out-Null
+                }
             }
         }
         Write-Log "Scan cycle done"
@@ -2393,11 +2358,7 @@ function Initialize-MonitorRuntime {
     } catch { }
     Invoke-LayoutMigration
     Write-Log "=== Monitor started (PID $PID, auto-reply engine built-in) ==="
-    # [SPEC-待回复列表 2026-09-27 §0.1] 两个新配置键的实际生效值 —— 必须留痕, 否则"配置改了没生效"无从判断。
-    Write-Log ("REPLY-RATE-CONFIG min_gap_min={0} post_send_cooldown_min={1} required_seen_rounds={2}" -f $script:replyMinGapMin, $script:replyPostSendCooldownMin, $script:requiredSeenRounds)
-    if ($script:cooldownRaisedToGap) {
-        Write-Log ("COOLDOWN-RAISED: reply_post_send_cooldown_min was below reply_min_gap_min; raised to {0}m (SPEC §0.1: 冷却不得小于最小间隔)" -f $script:replyPostSendCooldownMin)
-    }
+    Write-Log 'REPLY-POLICY pending-list-authoritative; no source wait, minute cooldown, new-message floor or extra confirmation rounds; duplicate/delivery safeguards active'
     Cleanup-LegacyQueues
     Cleanup-StaleState
     $script:emptyStreak = 0

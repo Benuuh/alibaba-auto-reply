@@ -1,0 +1,855 @@
+TEST-LAYER=Offline files=57 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder=29360 processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== alert_dedup.tests.ps1 ===
+CHILD-CONTEXT test=alert_dedup.tests.ps1 pid=25744 nonce=5c8f352d1eaf47f086cbfe6b6b559879 verified=True contexts=2 exit=0
+  == alert_dedup tests (table-driven) ==
+    dedup source = C:\path\to\alibaba-auto-reply\scripts\lib\alert_dedup.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== cargo_facts.tests.ps1 ===
+CHILD-CONTEXT test=cargo_facts.tests.ps1 pid=31280 nonce=c2575125bc974d5b9226ac9c9235ef9c verified=True contexts=2 exit=1
+  == cargo_facts tests ==
+    FAIL: C23-human-confirmation-count | got: [] | want: [12]
+    FAIL: C23-human-confirmation-source | got: [unknown] | want: [human]
+    FAIL: C24-hand-typed-me-line-is-human-evidence | got: [] | want: [200]
+  
+  RESULT: pass=156 fail=3
+  FAILED CASES: C23-human-confirmation-count, C23-human-confirmation-source, C24-hand-typed-me-line-is-human-evidence
+  
+  
+=== contact_redline.tests.ps1 ===
+CHILD-CONTEXT test=contact_redline.tests.ps1 pid=19772 nonce=80918d545ca14cfaab8ee446f9befa0e verified=True contexts=2 exit=0
+  == contact_redline tests ==
+  
+  RESULT: pass=57 fail=0
+  ALL PASS
+  
+  
+=== dedup_order.tests.ps1 ===
+CHILD-CONTEXT test=dedup_order.tests.ps1 pid=4604 nonce=026fa562a58242fdb864c29ed0a47f53 verified=True contexts=2 exit=0
+  == dedup_order tests ==
+    锚点已退出判定: 2 种顺序 × 3 种账本 key = 6 种组合, 结论全部 = True|IN_PENDING_LIST
+    防哑巴: 会话在待回复列表里(连续 2 轮) ⇒ 必回, 与账本条数是否增长无关
+  RESULT: pass=50 fail=0
+  ALL PASS
+  
+  
+=== dimension_guidance.tests.ps1 ===
+CHILD-CONTEXT test=dimension_guidance.tests.ps1 pid=31156 nonce=211f12ca7f4249858871f29cf2edad1d verified=True contexts=2 exit=0
+  == dimension_guidance tests ==
+  RESULT: pass=44 fail=0
+  ALL PASS
+  
+  
+=== docs_consistency.tests.ps1 ===
+CHILD-CONTEXT test=docs_consistency.tests.ps1 pid=38736 nonce=f807a9b14b96434c8ef6ebbf6aa7a481 verified=True contexts=2 exit=0
+  == docs_consistency tests ==
+    ok   health_check.ps1 能派生出检查项
+    ok   README_部署说明.md 有检查项声明行
+    ok   检查项【数量】一致
+    ok   检查项【名单】无遗漏
+    ok   检查项【名单】无多余
+    ok   config.json.example 存在
+    ok   config.json.example 是合法 JSON
+    ok   模板键集 ⊇ 现役键集
+    ok   config.json.example 含 reply_min_gap_min = 5
+    ok   config.json 含 reply_min_gap_min = 5
+    ok   config.json.example 含 reply_post_send_cooldown_min = 5
+    ok   config.json 含 reply_post_send_cooldown_min = 5
+    ok   发送后冷却 ≥ 最小间隔（§0.1 硬要求）
+    ok   README.md 未写死测试数字
+    ok   README_部署说明.md 未写死测试数字
+    ok   docs\KNOWN_EXCEPTIONS.md 未写死测试数字
+    ok   SKILL.md 未写死测试数字
+  RESULT: pass=17 fail=0
+  ALL PASS
+  
+  
+=== gonghai_chrome_isolation.tests.ps1 ===
+CHILD-CONTEXT test=gonghai_chrome_isolation.tests.ps1 pid=30320 nonce=d143d16c7f4e42509ac32ae488eb5059 verified=True contexts=2 exit=0
+  == gonghai_chrome_isolation tests ==
+  
+  RESULT: pass=124 fail=0
+  ALL PASS
+  
+  
+=== goods_engine.tests.ps1 ===
+CHILD-CONTEXT test=goods_engine.tests.ps1 pid=34824 nonce=36fcbccc51924f0383925ab930f489ae verified=True contexts=2 exit=0
+  == goods_engine tests ==
+  
+  RESULT: pass=27 fail=0
+  ALL PASS
+  
+  
+=== heartbeat.tests.ps1 ===
+CHILD-CONTEXT test=heartbeat.tests.ps1 pid=9716 nonce=307fbcfd17794722af5be89d94458409 verified=True contexts=2 exit=0
+  == heartbeat tests (table-driven) ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== log_maintenance.tests.ps1 ===
+CHILD-CONTEXT test=log_maintenance.tests.ps1 pid=36456 nonce=f7701b324b5b4db4b97328c94384931a verified=True contexts=2 exit=0
+  == log_maintenance tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== message_order.tests.ps1 ===
+CHILD-CONTEXT test=message_order.tests.ps1 pid=33760 nonce=9487384e1db943f785f1bf7ef7b93aad verified=True contexts=2 exit=0
+  RESULT: pass=35 fail=0
+  ALL PASS
+  
+  
+=== msg_source.tests.ps1 ===
+CHILD-CONTEXT test=msg_source.tests.ps1 pid=35952 nonce=e7e5a0940537435e96f398b02eda563a verified=True contexts=2 exit=0
+  == msg_source tests ==
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== no_reply_write.tests.ps1 ===
+CHILD-CONTEXT test=no_reply_write.tests.ps1 pid=36812 nonce=0dde4ba9184c43da8e1458ab9234cf19 verified=True contexts=2 exit=0
+  == no_reply_write tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_write_47cc36f71e0f47d0995da6f811c7b012\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=36 fail=0
+  ALL PASS
+  
+  
+=== no_reply.tests.ps1 ===
+CHILD-CONTEXT test=no_reply.tests.ps1 pid=15528 nonce=12af430d9a6747ba845ff40167806428 verified=True contexts=2 exit=0
+  == no_reply tests ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\no_reply_tests_ac8d1a2067ae422dbc843ec82bebc5bb\manual_override.json 不存在,按空名单处理
+  
+  RESULT: pass=29 fail=0
+  ALL PASS
+  
+  
+=== review_fixes.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes.tests.ps1 pid=4476 nonce=60415fe6472e46a6a275ec46a922d982 verified=True contexts=2 exit=0
+  == review_fixes tests (pure layer) ==
+    A1 done
+    A4 done
+    A6 done
+    T1/T2 done
+    ledger states done
+  
+  RESULT: pass=123 fail=0
+  ALL PASS
+  
+  
+=== second_fix_contact.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_contact.tests.ps1 pid=29300 nonce=c67f67a381ef4ceea497e7fb68aad3ee verified=True contexts=3 exit=0
+  == second_fix contact tests (F1) ==
+  
+  RESULT: pass=64 fail=0
+  ALL PASS
+  
+  
+=== second_fix_policy.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_policy.tests.ps1 pid=17564 nonce=b9d066f4c8d844baae5060fff051222e verified=True contexts=2 exit=0
+  == second_fix policy tests (F5 / F6 / F8) ==
+  
+  RESULT: pass=94 fail=0
+  ALL PASS
+  
+  
+=== page_heal_throttle.tests.ps1 ===
+CHILD-CONTEXT test=page_heal_throttle.tests.ps1 pid=25056 nonce=7aa0c3e77e594eef9ad4466b3040b6ad verified=True contexts=2 exit=0
+  == page_heal_throttle tests ==
+  RESULT: pass=15 fail=0
+  ALL PASS
+  
+  
+=== page_health_verdict.tests.ps1 ===
+CHILD-CONTEXT test=page_health_verdict.tests.ps1 pid=22320 nonce=7f1a433fa55049f8a6a126a18c58e15d verified=True contexts=2 exit=0
+  == page_health_verdict tests (table-driven) ==
+    verdict source = C:\path\to\alibaba-auto-reply\scripts\lib\cdp.ps1
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== reply_chain.tests.ps1 ===
+CHILD-CONTEXT test=reply_chain.tests.ps1 pid=37072 nonce=f2f24b5949674927b6b34b024e2f1c4c verified=True contexts=2 exit=0
+  == reply_chain tests ==
+  RESULT: pass=156 fail=0
+  ALL PASS
+  
+  
+=== reply_engine.tests.ps1 ===
+CHILD-CONTEXT test=reply_engine.tests.ps1 pid=34576 nonce=7ad4829dd8954c049d557587952e7bb1 verified=True contexts=2 exit=0
+  == reply_engine tests ==
+  RESULT: pass=75 fail=0
+  ALL PASS
+  
+  
+=== reply_gate_dupskip.tests.ps1 ===
+CHILD-CONTEXT test=reply_gate_dupskip.tests.ps1 pid=21180 nonce=345c47df8db64ae4833d7be0285c9668 verified=True contexts=2 exit=0
+  == reply_gate_dupskip tests ==
+  
+  RESULT: pass=42 fail=0
+  ALL PASS
+  
+  
+=== report_push.tests.ps1 ===
+CHILD-CONTEXT test=report_push.tests.ps1 pid=4332 nonce=4776861cd9a54f25b3c82023720004af verified=True contexts=2 exit=0
+  == report_push tests ==
+  
+    RESULT: pass=33 fail=0
+    ALL PASS
+  
+  
+=== rule_registry.tests.ps1 ===
+CHILD-CONTEXT test=rule_registry.tests.ps1 pid=22692 nonce=32863811208d477a95a3f5bf58c3d008 verified=True contexts=2 exit=0
+  == rule_registry tests ==
+  
+  RESULT: pass=14 fail=0
+  ALL PASS
+  
+  
+=== send_result.tests.ps1 ===
+CHILD-CONTEXT test=send_result.tests.ps1 pid=22156 nonce=7b89d0ed52a048269b7bda826df7e916 verified=True contexts=2 exit=0
+  == send_result tests ==
+  
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== should_reply_v2.tests.ps1 ===
+CHILD-CONTEXT test=should_reply_v2.tests.ps1 pid=7860 nonce=c3effec61cf845ef9bb0befca477e43e verified=True contexts=2 exit=0
+  == should_reply_v2 tests ==
+    §2 判定表: 5 行(行 2 两种形态)逐行断言, Reason 逐字
+    §4.1 裁决: 方案甲(保守) —— 账本不可读 ⇒ 判据行 1 fail-closed, 且整轮门禁 P6 保持
+  
+  RESULT: pass=90 fail=0
+  ALL PASS
+  
+  
+=== suggestions.tests.ps1 ===
+CHILD-CONTEXT test=suggestions.tests.ps1 pid=15324 nonce=eeb5b9c1dd9646a3b6f4b4fca5d7518f verified=True contexts=2 exit=0
+  == suggestions tests ==
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== third_fix_clarify.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_clarify.tests.ps1 pid=29008 nonce=7b41aee01a2c449c9801d7df16c3c146 verified=True contexts=2 exit=0
+  == third_fix clarification tests (R7) ==
+  
+  RESULT: pass=24 fail=0
+  ALL PASS
+  
+  
+=== third_fix_contact_fields.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_contact_fields.tests.ps1 pid=35192 nonce=e62f83a1b5f24eab915aaca2afa6eaaf verified=True contexts=2 exit=0
+  == third_fix contact/field tests (R1 / R4) ==
+  
+  RESULT: pass=42 fail=0
+  ALL PASS
+  
+  
+=== third_fix_g1_guard.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_g1_guard.tests.ps1 pid=18024 nonce=556e5efbea704797bc55fb9544d041ba verified=True contexts=2 exit=0
+  == third_fix G1 production-path guard tests ==
+  
+  RESULT: pass=34 fail=0
+  ALL PASS
+  
+  
+=== third_fix_time_binding.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_time_binding.tests.ps1 pid=31172 nonce=df0f3c9a639647bb81e191bddb7c34e5 verified=True contexts=2 exit=0
+  == third_fix time binding tests (R6) ==
+  
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== vision.tests.ps1 ===
+CHILD-CONTEXT test=vision.tests.ps1 pid=38568 nonce=ff53eede68154ebb9f7fed14d606f6b2 verified=True contexts=2 exit=0
+  == vision tests ==
+  
+    RESULT: pass=43 fail=0
+    ALL PASS
+  
+  
+=== amazon_destination.tests.ps1 ===
+CHILD-CONTEXT test=amazon_destination.tests.ps1 pid=35964 nonce=4ecbfcf1a69642fab3bba8444a1d2744 verified=True contexts=3 exit=1
+  PASS B1 quote destination fact
+  PASS B1 no address ask
+  PASS B1 goods to quote candidate
+  PASS B1 warehouse is not postal address
+  PASS B1 model context distinguishes warehouse and street
+  PASS B1 source evidence is buyer original
+  PASS B3 unavailable model real generation fallback
+  PASS B2 real model chain bounded rewrite then compliant fallback
+  PASS B2 deterministic address request [Please send the delivery address.]
+  PASS B2 deterministic address request [What is the zip code?]
+  PASS B2 deterministic address request [Could you confirm the warehouse code?]
+  PASS B2 deterministic address request [I need the destination city and state.]
+  PASS B2 deterministic address request [Delivery address is required.]
+  PASS B2 deterministic address request [Please confirm Amazon FTW1.]
+  PASS B2 deterministic address request [Should I quote to FTW1?]
+  PASS B2 acknowledgment allowed
+  PASS B2 excessive caller rewrite budget still bounded to one
+  PASS B2 price prohibition retained
+  PASS B4 positive expression [DDP to amazon: ftw1.]
+  PASS B4 positive expression [deliver to FBA warehouse FTW1]
+  PASS B4 positive expression [亚马逊 FTW1 仓]
+  PASS B4 positive expression [送到亚马逊：ftw1]
+  PASS B4 positive expression [Amazon LGB8]
+  PASS B4 decoded original over translation
+  PASS B5 buyer Amazon context bare answer
+  PASS B5 bot question provides context only
+  PASS B6 unsupported source [Our model is FTW1]
+  PASS B6 unsupported source [SKU FTW1]
+  PASS B6 unsupported source [order number FTW1]
+  PASS B6 unsupported source [https://example.invalid/Amazon/FTW1]
+  PASS B6 unsupported source [Amazon FTW1.pdf]
+  PASS B6 unsupported source [FTW1]
+  PASS B6 robot repetition not buyer evidence
+  PASS B6 goods also ignores bot destination
+  FAIL B6 explicit owner confirmation has human source
+  PASS B6 bot cannot forge owner confirmation
+  PASS B7 exact code question [Deliver to Amazon warehouse]
+  PASS B7 exact code question [FBA]
+  PASS B7 exact code question [DDP to Amazon X123456]
+  PASS B8 non receiving location [not FTW1]
+  PASS B8 non receiving location [we used FTW1 before]
+  PASS B8 non receiving location [pickup from Amazon FTW1]
+  PASS B8 non receiving location [Our model is FTW1]
+  PASS B8 trusted explicit revocation drops warehouse
+  PASS B8 trusted negation drops selected warehouse
+  PASS B8 unrelated text retains destination
+  PASS B9 trusted switch updates current warehouse
+  PASS B9 context current quote destination updated
+  PASS B9 goods current destination updated
+  PASS B10 ambiguous Amazon FTW1 or TEST2
+  PASS B10 ambiguous goods not complete
+  PASS B10 ambiguous Amazon FTW1/Amazon TEST2
+  PASS B10 ambiguous goods not complete
+  PASS B10 ambiguous Amazon FTW1/Delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  PASS B10 ambiguous Amazon FTW1 or delivery address: 246 Fiction Road, Sample City 99999
+  PASS B10 ambiguous goods not complete
+  PASS B10 associated same message address retained
+  PASS B10 known plus unsupported alternative remains ambiguous
+  PASS B11 required cargo missing [53 x 41 x 32 cm, Amazon FTW1]
+  PASS B11 required cargo missing [216 kg, Amazon FTW1]
+  PASS B12 ordinary postal address usable
+  PASS B12 ordinary missing destination still asks address
+  PASS B12 address ownership clarification retained
+  PASS B12 explicit switch to private address
+  PASS B13 actual goods quote reminder success
+  PASS B13 same content suppressed
+  PASS B13 failed changed notification not success
+  PASS B13 changed destination hash permits reminder
+  PASS B14 manual takeover excluded without notification
+  PASS B14 system card cannot provide destination or generate
+  PASS B14 legacy conflict cannot use DOM to switch
+  PASS B14 legacy single declaration conservatively useful for goods
+  PASS B15 split messages keep complete facts
+  PASS B15 chasing quote requires human fact and no invented rate
+  PASS B16 report label uses warehouse without false postal claim
+  PASS B16 real quotable metric uses same destination status
+  PASS B16 real report table displays current quote destination
+  PASS B17 fallback [attachment_parse_failed] no repeated destination
+  PASS B17 fallback [dimension_missing] no repeated destination
+  RESULT pass=79 fail=1
+  
+  
+=== atomic_state.tests.ps1 ===
+CHILD-CONTEXT test=atomic_state.tests.ps1 pid=29952 nonce=0188185e2bd54417b9b9c583f3b059b3 verified=True contexts=3 exit=0
+  == atomic_state tests ==
+  
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+=== daemon_launch.tests.ps1 ===
+CHILD-CONTEXT test=daemon_launch.tests.ps1 pid=27312 nonce=aa1ccb00b943492b8addaf46024cef43 verified=True contexts=2 exit=0
+  == daemon_launch tests ==
+  RESULT: pass=10 fail=0
+  ALL PASS
+  
+  
+=== env_block.tests.ps1 ===
+CHILD-CONTEXT test=env_block.tests.ps1 pid=28496 nonce=b1e6a2c17deb4b368d070e719dc42154 verified=True contexts=2 exit=0
+  == env_block tests ==
+    NOTE: parent process has no case-insensitive duplicate env keys, skipping the folding assertions (environment-dependent, not a regression)
+  RESULT: pass=11 fail=0
+  ALL PASS
+  
+  
+=== human_pause.tests.ps1 ===
+CHILD-CONTEXT test=human_pause.tests.ps1 pid=36516 nonce=b5f13f37cfed44bcbad4f4f9b26c438e verified=True contexts=3 exit=1
+  == human_pause tests ==
+    FAIL: P1-reason-started got=[no-trusted-human-reply] want=[started]
+    FAIL: P1-until-is-reply-plus-5min until=
+    FAIL: P1-active-inside-window 
+    FAIL: P1-remaining-seconds got=[0] want=[60]
+    FAIL: P2-same-identity-not-extended got=[no-trusted-human-reply] want=[unchanged-same-message]
+    FAIL: P2-until-unchanged until=
+    FAIL: P3-extended-by-new-reply got=[no-trusted-human-reply] want=[extended]
+    FAIL: P3-until-is-new-reply-plus-5min until=
+    FAIL: P4-older-reply-does-not-change got=[no-trusted-human-reply] want=[unchanged-older-message]
+    FAIL: P4-until-still-t3-plus-5 
+    FAIL: P5-store-file-exists C:\Users\<local-user>\AppData\Local\Temp\aar-pause-11d22d55ab0246f39b74cc5b58cd89f4\human_pause.json
+    FAIL: P5-until-survives-reload untilUtc=
+    FAIL: P5-identity-survives-reload got=[] want=[me|mt:1791201780000|h:3f15a574f42f6c5cb259c2127dcf1a59f334b672]
+    FAIL: P6-expired-reason got=[no-pause] want=[expired]
+    FAIL: P7-plain-me-is-human got=[0] want=[1]
+    FAIL: P7-explicit-sender-marker-wins got=[0] want=[1]
+    FAIL: P7-gate-skips-human-last got=[unknown-me-tail] want=[human-last]
+    FAIL: P8-record-line-is-bot got=[project] want=[bot]
+    FAIL: P8-gate-sends-when-our-message-proven got=[SKIP] want=[SEND]
+    FAIL: P8-gate-reason-bot got=[unknown-me-tail] want=[bot-last]
+    FAIL: P8-bot-line-is-a-confirmed-send got=[project] want=[bot]
+    FAIL: P9-human-line-starts-pause 
+    FAIL: P9-pause-entry-exists 
+    FAIL: P9-until-is-absolute-reply-time-plus-5 
+    FAIL: F3a-until-is-reply-time-plus-5-not-scan-time until=
+    FAIL: F3a-active-at-1204 
+    FAIL: F3b-until-is-still-1205 
+    FAIL: F3b-rescan-keeps-until 
+    FAIL: F3d-new-human-reply-extends-to-1208 
+    FAIL: F3e-second-identical-text-is-a-new-event got=[no-trusted-human-reply] want=[extended]
+    FAIL: F3e-until-is-second-reply-plus-5 
+    FAIL: F3f-no-time-uses-first-observation got=[no-trusted-human-reply] want=[started]
+    FAIL: F3f-first-observation-window 
+    FAIL: F3f-rescan-keeps-first-observation got=[no-trusted-human-reply] want=[unchanged-same-message]
+    FAIL: F3f-until-unchanged-after-rescan 
+    FAIL: F3f-time-source-is-observation got=[] want=[none]
+    FAIL: F3g-future-time-anomaly-recorded anomalies=0
+    FAIL: F3g-future-time-marked got=[] want=[anomalous-future]
+    FAIL: F3h-read-failure-is-not-silently-ok reason=no-trusted-human-reply
+    FAIL: F3i-until-is-pure-utc 
+    FAIL: F3i-until-equals-reply-plus-5-utc 
+    FAIL: F3i-persisted-clock-basis 
+  
+  RESULT: pass=32 fail=42
+  FAILED CASES: P1-reason-started, P1-until-is-reply-plus-5min, P1-active-inside-window, P1-remaining-seconds, P2-same-identity-not-extended, P2-until-unchanged, P3-extended-by-new-reply, P3-until-is-new-reply-plus-5min, P4-older-reply-does-not-change, P4-until-still-t3-plus-5, P5-store-file-exists, P5-until-survives-reload, P5-identity-survives-reload, P6-expired-reason, P7-plain-me-is-human, P7-explicit-sender-marker-wins, P7-gate-skips-human-last, P8-record-line-is-bot, P8-gate-sends-when-our-message-proven, P8-gate-reason-bot, P8-bot-line-is-a-confirmed-send, P9-human-line-starts-pause, P9-pause-entry-exists, P9-until-is-absolute-reply-time-plus-5, F3a-until-is-reply-time-plus-5-not-scan-time, F3a-active-at-1204, F3b-until-is-still-1205, F3b-rescan-keeps-until, F3d-new-human-reply-extends-to-1208, F3e-second-identical-text-is-a-new-event, F3e-until-is-second-reply-plus-5, F3f-no-time-uses-first-observation, F3f-first-observation-window, F3f-rescan-keeps-first-observation, F3f-until-unchanged-after-rescan, F3f-time-source-is-observation, F3g-future-time-anomaly-recorded, F3g-future-time-marked, F3h-read-failure-is-not-silently-ok, F3i-until-is-pure-utc, F3i-until-equals-reply-plus-5-utc, F3i-persisted-clock-basis
+  
+  
+=== human_tasks.tests.ps1 ===
+CHILD-CONTEXT test=human_tasks.tests.ps1 pid=23376 nonce=e98313bb627b406690071c8d8ab9fd37 verified=True contexts=3 exit=0
+  == human_tasks tests ==
+  
+  RESULT: pass=49 fail=0
+  ALL PASS
+  
+  
+=== isolation.tests.ps1 ===
+CHILD-CONTEXT test=isolation.tests.ps1 pid=29660 nonce=d8d2e05fc0754dd8bbf022cfc8713be1 verified=True contexts=2 exit=0
+  == isolation tests (spec §6.3) ==
+    ok   I01a explicit ConfigPath is honoured
+    ok   I01b code root follows the explicit config
+    ok   I01c runtime root defaults to the code root
+    ok   I01d not isolated without an explicit runtime root
+    ok   I02a runtime paths resolve inside the explicit RuntimeRoot
+    ok   I02b code paths still come from the config
+    ok   I02c isolated flag is on
+    ok   I03 unmarked isolated runtime fails closed
+    ok   I04a marker exists after New-AarIsolationRoot
+    ok   I04b Test-AarIsolatedRuntime is true with marker
+    ok   I04c production path list is non-empty
+    ok   I04d writing a production path is refused
+    ok   I05a writing inside the isolated root is allowed
+    ok   I05b -WithinRuntimeRoot refuses an outside path
+    ok   I10 isolation root inside a production path is refused
+    ok   I08 Invoke-CdpEval is refused while isolated
+    ok   I09 Send-OneTalkMessage is refused while isolated
+    ok   I11a isolated writes create no production file
+    ok   I11b the isolated files really were written
+    ok   I12a importing the modules has no runtime error
+    ok   I12b import does not create the runtime root
+    ok   I07 unmarked runtime root is not "isolated"
+    ok   I07b a marker with isolated=false does not count
+    ok   I06a default resolution is production (not isolated)
+    ok   I06b the guard is a no-op in production mode
+  RESULT: pass=25 fail=0
+  ALL PASS
+  
+  
+=== lock_scope.tests.ps1 ===
+CHILD-CONTEXT test=lock_scope.tests.ps1 pid=7148 nonce=16fd5639d5894a1abf339c5dba456100 verified=True contexts=3 exit=1
+  == lock_scope tests ==
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : The term 'Get-MonitorSourceGate' is not recognized as the name of a cmdlet,
+   function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the
+   path is correct and try again.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== lock.tests.ps1 ===
+CHILD-CONTEXT test=lock.tests.ps1 pid=29760 nonce=833a33c583be414d94828eaf5c588757 verified=True contexts=3 exit=0
+  == lock tests ==
+  
+  RESULT: pass=22 fail=0
+  ALL PASS
+  
+  
+=== new_message_cooldown.tests.ps1 ===
+CHILD-CONTEXT test=new_message_cooldown.tests.ps1 pid=34568 nonce=87dd7c1660c84342942779e9acdfabed verified=True contexts=2 exit=1
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : The term 'Get-MonitorSourceGate' is not recognized as the name of a cmdlet,
+   function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the
+   path is correct and try again.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== reception_facts.tests.ps1 ===
+CHILD-CONTEXT test=reception_facts.tests.ps1 pid=30444 nonce=94ea0d73010f40c893d043f51bcbca90 verified=True contexts=2 exit=1
+  == reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : The term 'Get-MonitorSourceGate' is not recognized as the name of a cmdlet,
+   function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the
+   path is correct and try again.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== review_fixes_entry.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes_entry.tests.ps1 pid=38176 nonce=5bc184cdb3c548b288477f9efad36ba1 verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+    FAIL: E-A2a-pause-recorded 
+    FAIL: E-A2a-pause-active reason=no-pause
+    FAIL: E-A2a-pause-until-is-reply-plus-5 got=[] want=[10/05/2026 04:05:00]
+    FAIL: E-A2a-skip-logged 
+    FAIL: E-A2b-after-expiry-gate-allows-send got=[0] want=[1]
+    FAIL: E-A2c-first-window until=
+    FAIL: E-A2c-new-human-reply-extends got=[] want=[10/05/2026 04:08:00]
+    FAIL: E-A2e-stale-logged PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+    FAIL: E-A2f-new-unknown-creates-hold PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+    FAIL: E-A2f-hold-is-five-minutes got=[] want=[10/05/2026 04:05:02]
+    FAIL: E-A2f-hold-still-active 
+    FAIL: E-A3a-task-exists got=[0] want=[1]
+    FAIL: E-A3a-task-kind got=[] want=[supplier_verification]
+    FAIL: E-A3a-task-status-pending-human got=[] want=[pending_human]
+    FAIL: E-A3a-real-contact-not-placeholder got=[] want=[supplier@example.invalid]
+    FAIL: E-A3a-contact-source-recorded 
+    FAIL: E-A3a-supplier-key-from-contact 
+    FAIL: E-A3a-trigger-message-kept 
+    FAIL: E-A3a-facts-snapshot-kept 
+    FAIL: E-A3a-send-happened got=[0] want=[1]
+    FAIL: E-A3b-awaiting-contact-created got=[] want=[awaiting_contact]
+    FAIL: E-A3b-single-task-after-contact got=[0] want=[1]
+    FAIL: E-A3b-status-advanced got=[] want=[pending_human]
+    FAIL: E-A3b-contact-stored got=[] want=[supplier@example.invalid]
+    FAIL: E-A3c-store-failure-logged 
+    FAIL: E-A3d-task-kept-after-notify-failure got=[0] want=[1]
+    FAIL: E-A3d-notification-attempted got=[0] want=[1]
+    FAIL: E-A3e-failed-send-keeps-task got=[0] want=[1]
+    FAIL: E-A3e-unknown-send-keeps-task 
+    FAIL: E-A3f-repeat-scan-no-duplicate-task got=[0] want=[1]
+    FAIL: E-A3f-other-supplier-is-separate got=[1] want=[2]
+    FAIL: E-A3f-other-supplier-different-key 
+    FAIL: E-A4a-send-happened got=[0] want=[1]
+    FAIL: E-A4b-send-happened got=[0] want=[1]
+    FAIL: E-A4b-one-quote-reminder got=[0] want=[1]
+    FAIL: E-A4b-reminder-names-destination 
+    FAIL: E-A4b-reminder-triggered-after-sent-ok 
+    FAIL: E-A4b-send-happened-3 got=[0] want=[1]
+    FAIL: E-A5b-scan-processes-with-valid-empty-ledger got=[0] want=[1]
+    FAIL: E-A5b-valid-empty-ledger-allows-send got=[0] want=[1]
+    FAIL: E-A5b-ledger-written writes=0
+    FAIL: E-A5c-ledger-unusable-at-send-logged 
+    FAIL: E-A5d-restored-ledger-allows-send got=[0] want=[1]
+    FAIL: E-A5d-restored-state-hash-written writes=0
+    FAIL: E-T1-send-happened got=[0] want=[1]
+    FAIL: E-T1-answers-the-named-place 
+    FAIL: E-T1-unknown-place-send-happened got=[0] want=[1]
+    FAIL: E-T1-unknown-place-clarifies-only 
+    FAIL: E-T1-ledger-advanced-only-after-send writes=0
+    FAIL: E-T2a-send-happened got=[0] want=[1]
+    FAIL: E-T2a-china-clock-at-send-stub 
+    FAIL: E-T2b-seller-zone-at-send-stub 
+  
+    FAIL: E-T2c-multi-message-send-happened got=[0] want=[1]
+    FAIL: E-T2c-multi-message-keeps-china 
+    FAIL: E-F2a-baseline-unknown-creates-hold PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=1 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+    FAIL: E-F2a-hold-persisted PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=4 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+    FAIL: E-F2a-hold-anchored-on-message-time 
+    FAIL: E-F2a-hold-anchor-source got=[] want=[message-time]
+    FAIL: E-F2a-skip-logged PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=4 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+    FAIL: E-F2c-identical-text-new-time-is-a-new-event 
+    FAIL: E-F2f-mid-generation-unknown-discards-draft PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+    FAIL: E-F4a-task-exists-before-generation got=[-1] want=[1]
+    FAIL: E-F4a-single-task got=[0] want=[1]
+    FAIL: E-F4a-task-kind-is-canonical got=[] want=[supplier_verification]
+    FAIL: E-F4a-task-status-pending-human got=[] want=[pending_human]
+    FAIL: E-F4a-real-contact-stored got=[] want=[supplier@example.invalid]
+    FAIL: E-F4a-supplier-identity-is-the-contact got=[] want=[email:supplier@example.invalid]
+    FAIL: E-F4a-model-received-todo-persisted 
+    FAIL: E-F4a-model-received-kind 
+    FAIL: E-F4a-model-received-supplier-identity 
+    FAIL: E-F4a-send-happened got=[0] want=[1]
+    FAIL: E-F4a-direct-verification-plan-sent 
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : Cannot bind argument to parameter 'TaskId' because it is an empty string.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== second_fix_summary.tests.ps1 ===
+CHILD-CONTEXT test=second_fix_summary.tests.ps1 pid=9260 nonce=b0e9fdaf02d94b8aa60e005d95c54b06 verified=True contexts=3 exit=0
+  == second_fix summary tests (actual summarize.ps1 subprocess, isolated runtime root) ==
+  ISOLATED-ROOT: C:\Users\<local-user>\AppData\Local\Temp\aar-secondfix-summary-1e4bcac6704642f883b62ae2dbbae7a2
+  
+  RESULT pass=95 fail=0
+  ALL PASS
+  
+  
+=== send_page_param.tests.ps1 ===
+CHILD-CONTEXT test=send_page_param.tests.ps1 pid=31936 nonce=daeef0652a3c488f9fc874ed56b72df9 verified=True contexts=2 exit=0
+  == send_page_param tests ==
+    child output lines = 16
+    child2 output lines = 15
+  
+  RESULT: pass=39 fail=0
+  ALL PASS
+  
+  
+=== third_fix_pause_source.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_pause_source.tests.ps1 pid=34144 nonce=4f18f8c88cd24d9099a28238c7f09a67 verified=True contexts=3 exit=1
+  == third_fix pause source tests (R5) ==
+    FAIL: S03-only-the-unmatched-line-is-human got=[0] want=[1]
+    FAIL: S03-human-event-uses-its-own-index got=[0] want=[2]
+    FAIL: S04-pause-from-human sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+    FAIL: S05-pause-active sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+    FAIL: S05-absolute-deadline-is-reply-plus-5 got=[] want=[10/05/2026 04:05:00]
+    FAIL: S05-unknown-hold-active sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+    FAIL: S05-human-pause-identity-is-the-human-line got=[] want=[me|mt:1791172800000|h:a2155381f6b5d04acc23b8afaf803c7b9d2154c8]
+    FAIL: S06-no-reliable-time-creates-bounded-pause 
+    FAIL: S06-no-reliable-time-anchored-on-first-seen got=[] want=[10/05/2026 04:05:00]
+    FAIL: S06-anomalous-future-is-bounded 
+    FAIL: S06-future-does-not-extend-beyond-now-plus-5 got=[] want=[10/05/2026 04:05:00]
+    FAIL: S06-future-anomaly-reported 
+    FAIL: S07-misclassified-pause-exists sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+    FAIL: S07-correction-reported 
+    FAIL: S07-real-human-pause-survives sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+    FAIL: S07-real-human-identity-kept got=[] want=[me|mt:1791172860000|h:2101711d742e13a5556a8f0b07e979f002246351]
+    FAIL: S07-recomputed-from-real-human-only got=[] want=[10/05/2026 04:06:00]
+  
+  RESULT: pass=19 fail=17
+  FAILED CASES: S03-only-the-unmatched-line-is-human, S03-human-event-uses-its-own-index, S04-pause-from-human, S05-pause-active, S05-absolute-deadline-is-reply-plus-5, S05-unknown-hold-active, S05-human-pause-identity-is-the-human-line, S06-no-reliable-time-creates-bounded-pause, S06-no-reliable-time-anchored-on-first-seen, S06-anomalous-future-is-bounded, S06-future-does-not-extend-beyond-now-plus-5, S06-future-anomaly-reported, S07-misclassified-pause-exists, S07-correction-reported, S07-real-human-pause-survives, S07-real-human-identity-kept, S07-recomputed-from-real-human-only
+  
+  
+=== third_fix_tasks_evidence.tests.ps1 ===
+CHILD-CONTEXT test=third_fix_tasks_evidence.tests.ps1 pid=11588 nonce=a7107fdc93e14aa299d84670bb3e9106 verified=True contexts=3 exit=0
+  == third_fix task/evidence tests (R2 / R3) ==
+  
+  RESULT: pass=61 fail=0
+  ALL PASS
+  
+  
+=== closure_s1.tests.ps1 ===
+CHILD-CONTEXT test=closure_s1.tests.ps1 pid=19012 nonce=fa0671d8072a4cb0b02f0182e5d5a764 verified=True contexts=3 exit=0
+  PASS D01
+  PASS D02
+  PASS D02-phone-flow
+  PASS D03
+  PASS D04
+  PASS D04-truncated-contact
+  PASS D05
+  PASS D06
+  PASS D07
+  PASS D08
+  PASS D09
+  PASS D10
+  PASS D11
+  PASS D12
+  PASS D12-full-email
+  PASS D13
+  PASS D14
+  PASS D15
+  PASS D16
+  RESULT closure_s1 pass=19 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s1-21264c84371f4d7b899323fb43b656dc
+  
+  
+=== closure_s2.tests.ps1 ===
+CHILD-CONTEXT test=closure_s2.tests.ps1 pid=24376 nonce=c60b5f3655e8464c9f9891bcd2419c87 verified=True contexts=2 exit=0
+  PASS P01
+  PASS P02
+  PASS P03
+  PASS P04
+  PASS P05
+  PASS P06
+  PASS P07
+  PASS P08
+  PASS P09
+  PASS P10
+  PASS P11
+  RESULT closure_s2 pass=11 fail=0
+  
+  
+=== closure_s3.tests.ps1 ===
+CHILD-CONTEXT test=closure_s3.tests.ps1 pid=19048 nonce=4fa388a7e97745cfa77cfdebfc73ad0f verified=True contexts=3 exit=1
+  FAIL H01 assertion failed
+  PASS H02
+  PASS H03
+  PASS H04
+  PASS H05
+  PASS H06
+  PASS H07
+  PASS H08
+  RESULT closure_s3 pass=7 fail=1 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-s3-2c87ba218c024baf82be9dbbe78345e4
+  
+  
+=== closure_s4.tests.ps1 ===
+CHILD-CONTEXT test=closure_s4.tests.ps1 pid=14584 nonce=d756be47877f4a2e8140f9897c361c05 verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  PASS T01
+  PASS T02
+  PASS T02-appointment-source
+  PASS T03
+  PASS T04
+  PASS T05
+  PASS T06
+  FAIL T07 actual monitor send positive
+  FAIL T08 controlled valid reply must reach actual send stub
+  RESULT closure_s4 pass=7 fail=2 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-87d2fcd1fb4b45f0a7a22ea363011e0f
+  
+  
+=== closure_g1.tests.ps1 ===
+CHILD-CONTEXT test=closure_g1.tests.ps1 pid=37040 nonce=1778ce78ee734973bb7cbc0671ef0da8 verified=True contexts=6 exit=0
+  PASS G01
+  PASS G02
+  PASS G03
+  PASS G01-root-tamper
+  PASS G02-config-marker-root
+  EXIT-PROPAGATION pid=24300 exit=3 verified=True LogicTests=PASS ProductionPathAudit=UNRESOLVED Overall=BLOCKED-UNRESOLVED
+  PASS G03-child-exit3
+  RESULT closure_g1 pass=6 fail=0 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-g1-b03355f17ac44c15b667889856efbbfd
+  
+  
+=== closure_s5.tests.ps1 ===
+CHILD-CONTEXT test=closure_s5.tests.ps1 pid=32712 nonce=85f5a0445edc47d8975d9a3d84cf340c verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-a8767db2e9b74978990b1d1e667efa18\data\manual_override.json 不存在,按空名单处理
+  FAIL P03-program-source-send  | PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False | INTERVENTION-SYNC Virtual Buyer ok=False pause=False hold=False newHuman=0 newUnknown=0 anomalies=0 legacyAdopted=False reason=sync-error: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. | HUMAN-PAUSE-ERR Virtual Buyer: The term 'Get-MessageSourceActiveConfirmed' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again. - treating the intervention state as active (fail-closed for this round) | INTERVENTION-SYNC-FAIL Virtual Buyer: intervention state could not be read/saved - no send this round (fail-closed)
+  FAIL D04-awaiting-conditional-send assertion failed
+  FAIL X01 actual unable-to-provide entry creates persisted task
+  FAIL X02 next round legal send after correction
+  PASS X03
+  FAIL X04 controlled positive must send
+  FAIL X05 assertion failed
+  FAIL X05-invalid-success-claim status without valid event receipt cannot advance ledger
+  FAIL X05-reconciled-positive successful real reconciliation publishes receipt and ledger
+  RESULT closure_s5 pass=1 fail=8 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-a8767db2e9b74978990b1d1e667efa18
+  
+  
+=== closure_edges.tests.ps1 ===
+CHILD-CONTEXT test=closure_edges.tests.ps1 pid=17404 nonce=5821f2896f1d403ea64949b818d65c12 verified=True contexts=4 exit=1
+  PASS D06-buyer-negative
+  PASS P03-corresponding-source
+  FAIL H08-legacy-no-anchor assertion failed
+  CONCURRENT-CHILD pid=17248 nonce=8ef679c9374f4cb7bf1211cfb9e4ca7a verified=True exit=0
+  CONCURRENT-CHILD pid=31856 nonce=5217234cf9304bd995a4eb7ae64e1ccc verified=True exit=0
+  PASS D10-concurrent
+  RESULT closure_edges pass=3 fail=1 root=C:\Users\<local-user>\AppData\Local\Temp\aar-closure-edges-059240d732e648b9b6c1dbc103c11c41
+  
+  
+=== independent_review_20261006.tests.ps1 ===
+CHILD-CONTEXT test=independent_review_20261006.tests.ps1 pid=35572 nonce=7f4ce8a0013b47c184bfcad0ddc77495 verified=True contexts=2 exit=1
+  == independent review 20261006 regression (R01-R10) ==
+    ok   probe-present aar_closure_s1_independent_assertions_20261006.ps1
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_distinct_new_batch_cannot_reuse_prior_flow_or_quote
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_product_each_item_weight_cannot_satisfy_packed_weight
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: POS_explicit_outer_carton_weight_remains_ready
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_current_buyer_conflict_prevents_verified_completion
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_explicit_added_verification_item_is_preserved_and_gates_completion
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_valid_pallet_confirmation_keeps_unit_and_generates_legal_reply
+    ok   assertion-present aar_closure_s1_independent_assertions_20261006.ps1 :: NEG_waiting_note_does_not_authorize_supplier_reply_claim
+    ok   probe-present aar-review-closure-source-formal-20261006.ps1
+    ok   assertion-present aar-review-closure-source-formal-20261006.ps1 :: C1-remaining-collision-must-still-hold
+    ok   assertion-present aar-review-closure-source-formal-20261006.ps1 :: C2-invalid-stored-deadline-fails-closed
+    ok   assertion-present aar-review-closure-source-formal-20261006.ps1 :: C3-unattested-current-root-change-cannot-pass
+    ok   probe-present aar_closure_s2_monitor_20261006.ps1
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: legal-weight-clarification-preserved
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: legal-supplier-clarification-preserved
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: ordinary-business-body-still-sends
+    ok   assertion-present aar_closure_s2_monitor_20261006.ps1 :: unknown-business-body-controlled-fallback
+    ok   probe-present aar_closure_independent_pallet_monitor_20261006.ps1
+    ok   assertion-present aar_closure_independent_pallet_monitor_20261006.ps1 :: confirmation-preserved
+    ok   assertion-present aar_closure_independent_pallet_monitor_20261006.ps1 :: foreach($packageUnit in @(
+    ok   probe-present aar_closure_independent_c05_20261006.ps1
+    ok   assertion-present aar_closure_independent_c05_20261006.ps1 :: missing-evidence-must-block-
+    ok   assertion-present aar_closure_independent_c05_20261006.ps1 :: ordinary-contact-explanation-positive
+    ok   assertion-present aar_closure_independent_c05_20261006.ps1 :: generic-contact-redline-negative
+    ok   probe-present aar_closure_independent_time_20261006.ps1
+    ok   probe-reports-all-pass aar_closure_s1_independent_assertions_20261006.ps1
+  
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : You cannot call a method on a null-valued expression.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+  
+=== send_reconcile_closure.tests.ps1 ===
+CHILD-CONTEXT test=send_reconcile_closure.tests.ps1 pid=14052 nonce=96f48fc237a14a49a2b03c64139b1d3c verified=True contexts=3 exit=0
+  == send reconcile closure tests ==
+    ok   P1-real-production-reason-is-page-confirmed
+    ok   P2-abort-is-not-page-confirmed
+    ok   P3-cdp-error-is-not-page-confirmed
+    ok   P4-clicked-but-not-sent-is-not-confirmed
+    ok   P5-empty-is-not-confirmed
+    ok   E1-full-evidence-pass
+    ok   E2-no-dedup-key-blocked
+    ok   E3-not-page-confirmed-blocked
+    ok   E4-reason-not-page-confirmed-blocked
+    ok   T1-evidence-persisted
+    ok   T2-reason-updated
+    ok   T3-evidence-preserved-on-requeue
+    ok   T4-tries-incremented-once-per-requeue
+    ok   T5-repeated-requeue-keeps-evidence
+    ok   L1-ledger-advanced
+    ok   L2-ledger-value-is-the-send-time-key
+    ok   L3-no-fabricated-receipt
+    ok   L4-no-op-without-key
+    ok   L5-unwritten-ledger-is-not-success
+    ok   L6-failure-logged
+    ok   W1-not-in-list-branch-uses-evidence
+    ok   W2-not-in-list-branch-advances-ledger
+    ok   W3-failure-site-records-evidence
+  RESULT: pass=23 fail=0
+  ALL PASS
+  
+  
+
+TEST-SUMMARY: layer=Offline files=57 failedFiles=13 pass=2146 fail=75
+LogicTests=FAIL files=57 failedFiles=13 pass=2146 fail=75
+  failed files: cargo_facts.tests.ps1, amazon_destination.tests.ps1, human_pause.tests.ps1, lock_scope.tests.ps1, new_message_cooldown.tests.ps1, reception_facts.tests.ps1, review_fixes_entry.tests.ps1, third_fix_pause_source.tests.ps1, closure_s3.tests.ps1, closure_s4.tests.ps1, closure_s5.tests.ps1, closure_edges.tests.ps1, independent_review_20261006.tests.ps1
+IsolationChecks=PASS checked=57 issues=0
+ProductionPathAudit=UNRESOLVED changes=1 writerRunning=False reason=production changes have unknown provenance; source is NOT proven (process existence or absence is not write attribution)
+  attribution-clues(before): {"capturedAtUtc":"2026-10-06T17:20:04.0302120Z","lockHolderPid":"29360","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","16700","17296","18248","19400","22024","22084","22276","23852","24792","24848","26448","28392","28816","30040","36668","37164","37512","37676"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-06T17:24:12.6012237Z","lockHolderPid":"29360","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11020","11388","12468","12932","16700","17296","18248","19400","22024","22084","22276","24792","24848","26448","28392","28816","30040","36668","37164","37512","37676"],"chromeProfilePath":""}
+  PRODUCTION-CHANGE-DETAILS (path | change | kind | before -> after):
+    C:\path\to\alibaba-auto-reply\scripts\monitor.ps1 | changed | file-content | FILE|193984|2026-10-06T17:19:57.1819490Z|sha256:865aabab7a1cbeb50c35c3f90213b583f7357ca11f57b8c4bd8424415dca6255 -> FILE|194049|2026-10-06T17:23:50.5507133Z|sha256:76846aadc48b78120cfa4355d2abb4e28dd55ae771eba7b1de0b98aefbf31710
+  NOTE: concurrent changes with no independent write-provenance evidence are UNRESOLVED; a running writer is a clue, not proof.
+    unresolved(concurrent, source unproven): {"Path":"C:\\path\\to\\alibaba-auto-reply\\scripts\\monitor.ps1","Change":"changed","Kind":"file-content","Before":"FILE|193984|2026-10-06T17:19:57.1819490Z|sha256:865aabab7a1cbeb50c35c3f90213b583f7357ca11f57b8c4bd8424415dca6255","After":"FILE|194049|2026-10-06T17:23:50.5507133Z|sha256:76846aadc48b78120cfa4355d2abb4e28dd55ae771eba7b1de0b98aefbf31710"}
+Overall=FAIL exitCode=1

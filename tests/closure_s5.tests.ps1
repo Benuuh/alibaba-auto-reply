@@ -11,7 +11,8 @@ Invoke-Expression ($h.Substring(0,$cut).Replace('$repo = Split-Path $here -Paren
 $script:pass=0;$script:fail=0;$ts=1791172800000L
 function Assert($ok,$why='assertion failed'){if(-not $ok){throw $why}}
 function Case($id,[scriptblock]$body){try{& $body;$script:pass++;Write-Output "PASS $id"}catch{$script:fail++;Write-Output "FAIL $id $($_.Exception.Message)"}}
-function Send-OneTalkMessageEx {param($buyer,$text,$Page,[switch]$AlreadyOpen,[switch]$SkipConfirmation)
+function Send-OneTalkMessageEx {param($buyer,$text,$Page,[switch]$AlreadyOpen,[switch]$SkipConfirmation,[string]$AttemptId='')
+    if ($script:readGuardFailure) { $script:lastGuardAttempt=$AttemptId; return [pscustomobject]@{Status='FAILED';Raw='ABORT_READ_GUARD';Detail='MESSAGES_NOT_READY';Confirmed=$false;Receipt=$null;NotAttempted=$true} }
     $script:sends++;$script:sentText=$text;$before=@();$after=@([pscustomobject]@{MessageId=('send-'+$script:sends);MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$text;IsMine=$true})
     $receipt=New-ConfirmedOutboundReceipt -Buyer $buyer -Text $text -Before $before -After $after; if($script:invalidReceipt){$receipt.Valid=$false}
     [pscustomobject]@{Status=$script:sendResult;Confirmed=($script:sendResult -eq 'SENT_OK');Receipt=$receipt;BeforeSnapshot=$before;Detail='fixture IO';Raw=$script:sendResult}
@@ -53,7 +54,7 @@ if($mutation -eq 'correction'){Assert ($script:sentText -match '15 kg' -and $scr
 if($mutation -in @('supplier','flow')){Assert ($script:sentText -notmatch 'supplier confirmed') 'old flow confirmations not reused'}
 };$script:mutation=''}
 Case X03 {foreach($mutation in @('human','unknown')){Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00';$ctx=Reset (BLine 'I need a shipping quote.' $ts);$script:mutation=$mutation;$script:modelReply='Happy to help with this.';Invoke-ConvoItem $ctx $item|Out-Null;Assert ($script:sends -eq 0) ('intervention '+$mutation);Assert ($script:ledgerWrites -eq 0)};$script:mutation=''}
-Case X04 {foreach($bad in @('Could you send the name and email?','Our rate is 100 USD.','The supplier confirmed 99 kg.','At this moment it is half past midnight in China.')){Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00';$ctx=Reset (BLine 'I need a shipping quote.' $ts);$script:modelReply=$bad;Invoke-ConvoItem $ctx $item|Out-Null;Assert ($script:sends -eq 1) 'controlled positive must send';Assert ($script:modelCalls -le 2) 'whole turn one rewrite';Assert (-not $script:sentText.Contains($bad))}}
+Case X04 {foreach($bad in @('Could you send the name and email?','Our rate is 100 USD.','The supplier confirmed 99 kg.','At this moment it is half past midnight in China.')){Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00';$ctx=Reset (BLine 'I need a shipping quote.' $ts);$script:modelReply=$bad;Invoke-ConvoItem $ctx $item|Out-Null;Assert ($script:sends -eq 1) 'controlled positive must send';Assert ($script:modelCalls -le 2) 'whole turn one rewrite';Assert (-not $script:sentText.Contains($bad)) ('bad body survived: '+$bad+' actual: '+$script:sentText)}}
 Case X05 {foreach($status in @('SENT_OK','FAILED','UNKNOWN')){Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00';$ctx=Reset (BLine 'I cannot get packing dimensions. Can your team check?' $ts);$script:sendResult=$status;$script:modelReply='Happy to help with this.';Invoke-ConvoItem $ctx $item|Out-Null;Assert ($script:sends -eq 1);Assert ($script:ledgerWrites -eq $(if($status -eq 'SENT_OK'){1}else{0})) ('ledger only confirmed '+$status);Assert (@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly).Count -ge 1) 'failure preserves task'}}
 Case X05-invalid-success-claim {Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00';$ctx=Reset (BLine 'I cannot provide the packing dimensions.' $ts);$script:modelReply='Happy to help with this.';$script:invalidReceipt=$true;try{Invoke-ConvoItem $ctx $item|Out-Null;Assert ($script:sends -eq 1 -and $script:ledgerWrites -eq 0) 'status without valid event receipt cannot advance ledger';Assert (@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly).Count -ge 1)}finally{$script:invalidReceipt=$false}}
 # Reconciliation uses the real receipt producer and real monitor function, with only snapshot IO injected.
@@ -61,7 +62,20 @@ $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'script
 $fn=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Resolve-UnknownSendResult'},$true);Invoke-Expression $fn.Extent.Text
 $sendAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts/lib/send.ps1'),[ref]$null,[ref]$null)
 $fn=$sendAst.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Confirm-OneTalkOutboundMessage'},$true);Invoke-Expression $fn.Extent.Text
-function Get-OutboundSnapshot {return @([pscustomobject]@{MessageId='reconciled-event';MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$script:sentText;IsMine=$true})}
+function Get-OutboundSnapshot {param([string]$Buyer = '') return @([pscustomobject]@{MessageId='reconciled-event';MessageTime='2026-10-05T04:00:00Z';TimePrecision='second';Text=$script:sentText;IsMine=$true})}
 try {Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00';$ctx=Reset (BLine 'I cannot get packing dimensions. Can your team check?' $ts);$script:sendResult='UNKNOWN';$script:modelReply='Happy to help with this.';Invoke-ConvoItem $ctx $item|Out-Null;Assert ($script:sends -eq 1 -and $script:ledgerWrites -eq 1) 'successful real reconciliation publishes receipt and ledger';Write-Output 'PASS X05-reconciled-positive'}catch{$script:fail++;Write-Output "FAIL X05-reconciled-positive $($_.Exception.Message)"}
+. (Join-Path $repo 'scripts/lib/send_attempts.ps1')
+Case X06-read-guard-preserves-not-attempted {
+    Clear-PauseState;Clear-TaskState;Set-FixNow '2026-10-05T12:00:00'
+    $ctx=Reset (BLine 'I cannot provide the packing dimensions.' $ts)
+    $script:modelReply='Happy to help with this.';$script:readGuardFailure=$true
+    try {
+        Invoke-ConvoItem $ctx $item|Out-Null
+        $attempt=Get-SendAttempt $script:lastGuardAttempt
+        Assert ($attempt -and $attempt.stage -eq 'persisted' -and $attempt.deliveryState -eq 'not_attempted') 'read failure must not be recorded as an attempted send'
+        Assert (-not (Test-SendAttemptSideEffectPossible $attempt)) 'read failure has no send side effect'
+        Assert ($script:ledgerWrites -eq 0 -and $script:sends -eq 0) 'read failure cannot send or advance ledger'
+    } finally {$script:readGuardFailure=$false}
+}
 Write-Output "RESULT closure_s5 pass=$script:pass fail=$script:fail root=$isoRoot"
 if($script:fail){exit 1}

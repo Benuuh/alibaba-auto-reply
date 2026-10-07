@@ -6,6 +6,20 @@ $repo = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'scripts/lib/goods.ps1')
 . (Join-Path $repo 'scripts/lib/quote.ps1')
 . (Join-Path $repo 'scripts/lib/reply_metrics.ps1')
+# [2026-10-07 spec §3.2 第 3 条] 无发送者证据的 [ME] 行现在是 unknown，不再外推为人工。
+#   本套夹具用逐条已验证的发送者字段提供人工来源证据（字段在 @@META 载荷里，正文无法伪造）。
+. (Join-Path $repo 'scripts/lib/msg_events.ps1')
+[void](Set-MessageSourceContext -Rules (New-MessageSourceRuleSet -VerifiedFields ([pscustomobject]@{ 'sender=owner' = 'human' }) -Provenance 'fixture-verified-owner-field'))
+$scripts = Join-Path $repo 'scripts'
+function New-OwnerMeta([string]$text, [long]$ts) {
+    return (ConvertTo-MessageMetaMarker ([pscustomobject]@{
+        v = 'msgevent-2026-10-07.1'; t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        dir = 'out'; dirsrc = 'layout'; mid = ''; ts = $ts; tprec = 'second'; st = 'message'
+        src = @(); f = @('sender=owner'); at = '2026-10-05T00:00:00Z'; idq = 'composite'
+    }))
+}
+function OwnerLine([string]$text, [long]$ts) { return ('[ME] ' + $text + ' @@MT:' + $ts + ' ' + (New-OwnerMeta $text $ts)) }
+
 $script:pass = 0; $script:fail = 0
 function Check([string]$name, [bool]$ok) {
     if ($ok) { $script:pass++; Write-Output "PASS $name" }
@@ -69,7 +83,7 @@ try {
     Check 'B6 robot repetition not buyer evidence' (-not (Get-QuoteDestination $botConv).QuoteUsable)
     Save-Snapshot $botConv
     Check 'B6 goods also ignores bot destination' (-not (Get-GoodsDataStatus 'Virtual Destination Buyer' $taskDir).addr)
-    $human = ConvertTo-MessageList '[ME] Confirmed buyer destination: Amazon FTW1 @@MT:1791000000000'
+    $human = ConvertTo-MessageList (OwnerLine 'Confirmed buyer destination: Amazon FTW1' 1791000000000)
     $humanDest = Get-QuoteDestination $human
     Check 'B6 explicit owner confirmation has human source' ($humanDest.QuoteUsable -and $humanDest.Source -eq 'human' -and $humanDest.Evidence[0].Source -eq 'human')
     $bot = ConvertTo-MessageList '[ME] Confirmed buyer destination: Amazon FTW1 @@MT:1791000000000 @@TS:1791000000000'

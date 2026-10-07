@@ -1,6 +1,6 @@
 # 部署与运维
 
-更新：2026-10-06。本文对应 **0.1.1** 版本的 PowerShell、Chrome CDP、程序回复计划、统一事实与任务存储和 dsh-im 通知出口。总体功能见 [README](README.md)，更新与验证见 [发布记录](docs/verification/release_0.1.1.md)，现场运行状态见 [当前状态](docs/当前状态.md)。
+更新：2026-10-08。本文对应 **0.1.2** 版本的 PowerShell、Chrome CDP、程序回复计划、统一事实与任务存储和 dsh-im 通知出口。总体功能见 [README](README.md)，更新与验证见 [发布记录](docs/verification/release_0.1.2.md)，现场运行状态见 [当前状态](docs/当前状态.md)。
 
 0.0.2 统一可信新消息的冷却门禁，并支持将明确的 Amazon/FBA 收货仓代码用于报价准备。代码推送与打标签不自动重新加载运行进程；上线时按既有授权协调任务和进程，保留配置、账本及人工接管名单。真实模型、页面发送和通知投递须单独验收。
 
@@ -56,7 +56,7 @@ Get-SkillPath "profile"
 |---|---|
 | `scripts_dir` | 可执行脚本、回复配置；`state.json`、`state.json.bak`、`monitor.pid`、`watchdog.pid` 等部分本机状态仍在这里 |
 | `logs_dir` | monitor/watchdog/health 日志、授权负缓存和守护冷却状态 |
-| `data_dir` | 消息快照、买家档案、人工接管名单、重试表、建议记录等 |
+| `data_dir` | 消息快照、买家档案、人工接管名单、重试表、建议记录、`sent_records.json`、`investigations.json`、`send_attempts.json` 等 |
 | `reports_dir` | 摘要、质量分析与周报 |
 | `backups_dir` | 代码快照 |
 | `chrome_profile` | OneTalk 独立登录态 |
@@ -82,11 +82,36 @@ Get-SkillPath "profile"
 
 ### 人工任务、收据与运行根（0.1.1）
 
-通过 Get-SkillPath 'tasks' / 'pause' / 'sent_records' / 'state' 核对实际位置。显式 RuntimeRoot、AAR_RUNTIME_ROOT 或配置 runtime_root 可覆盖运行态；离线根必须有隔离标记。本机生产配置与运行态不得用模板覆盖。任务、暂停、收据和账本需一起备份，损坏存储不得通过删除或清空来绕过发送保护。
+通过 Get-SkillPath 'tasks' / 'pause' / 'sent_records' / 'investigations' / 'send_attempts' / 'state' 核对实际位置。显式 RuntimeRoot、AAR_RUNTIME_ROOT 或配置 runtime_root 可覆盖运行态；离线根必须有隔离标记。本机生产配置与运行态不得用模板覆盖。任务、暂停、收据和账本需一起备份，损坏存储不得通过删除或清空来绕过发送保护。
 
 人工任务 API 在 lib/human_tasks.ps1 与 task_contracts.ps1：Get-HumanTaskList 读取；Set-HumanTaskOwnerAccepted 记录认领；Add-HumanTaskActionRecord 记录实际行动与供应商原始回复、ConfirmedFields（字段值/单位/范围/来源）；Set-HumanTaskStatus 请求完成。填写真实执行记录后再修改状态，resolved 会核验原始核实项、当前同流事实及冲突；不能用状态标签代替行动证据，也不能跨货物流引用旧确认。
 
-发送确认使用前后快照中唯一新增事件和完整正文；人工与 unknown 等待按可信事件锚点重算。迁移和排障先只读核对来源、FlowRef 与依赖，不伪造收据、确认值或通知结果。真实联系供应商与通知到达仍需要人工执行和单独验收。
+发送确认使用前后快照中唯一新增事件和完整正文；人工与 unknown 等待按可信事件锚点重算。**来源标签在取得来源真值对照前不参与判定**（`config.json` 的 `source_rules` 段默认不存在 ⇒ 没有已验证标签/字段，无证据的我方消息一律 `unknown`）。
+
+发送前后快照与 monitor 的会话读取使用**同一份**浏览器侧抽取脚本（`lib/msg_extract_js.ps1`）：真实消息边界、方向依据、平台 MessageId 与结构噪声规则只有一处实现；flow 卡与身份不确定的真实气泡都保留在快照里，由收据判定拒绝，而不是被过滤掉。发送前分两步落盘：先写唯一发送尝试（AttemptId、目标会话、**完整正文**、发送前快照证明与可恢复基线），再写"即将输入/点击"的 `dispatching` 阶段并回读核验——两步任一步失败都**不发送**。因此进程在点击前后中断时，磁盘上只有两种状态：`persisted/not_attempted`（可证明没有产生外部副作用）或 `dispatching` 及更晚（必须先对账）。收据有效但 `sent_records` 或账本写入失败时进入 `persistence_pending` 并生成调查，**不重发已送达正文**。
+
+**会话级不重发**：同一会话只要还有 `pending_confirmation` / `persistence_pending` / `delivery_ambiguous` 的尝试，本轮就不发送——去重键（触发）不同也不构成放行理由；只有对账结论（收据确认送达，或可靠未送达证据）才解除。每轮扫描会对这类尝试做同口径重读对账，并用真实写入器重试未完成的持久化并回读。
+
+迁移和排障先只读核对来源、FlowRef 与依赖，不伪造收据、确认值或通知结果。真实联系供应商与通知到达仍需要人工执行和单独验收。
+
+来源与送达调查的操作入口（只操作运行数据根，不发客户消息）：
+
+~~~powershell
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action list
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action list -ActiveOnly -Buyer "Buyer Name"
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action detail -Id <调查号>
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action claim -Id <调查号> -Operator "ops"
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action confirm-source -Id <调查号> -Class platform -Evidence "page:sender field read on the page at 2026-10-07 10:00" -Operator "ops"
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action confirm-delivery -Id <调查号> -DeliveryState receipt_verified -ReceiptId <收据号> -Evidence "receipt:read back from the same conversation"
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action confirm-delivery -Id <调查号> -DeliveryState not_delivered_verified -Evidence "page:NOT_SENT reported by the send adapter"
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action retry-notify -Id <调查号> [-DryRun]
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action audit -Id <调查号>
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action attempts [-Buyer "Buyer Name"]
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action recover [-Buyer "Buyer Name"] [-Max 5]
+powershell -ExecutionPolicy Bypass -NoProfile -File scripts\investigate.ps1 -Action retention -Days 30 [-DryRun]
+~~~
+
+证据必须是**有出处的结构化文本** `<source>:<detail>`：来源类可用 `page / api / field / receipt / sent-record / operator-observation`，未送达类必须来自直接观察发送动作的 `page / adapter / send-result / dispatch`，`detail` 至少 8 个字符。只改状态、填写"已处理"或给出来源猜测都不能关闭调查：来源类必须提交真实出处 + **确切事件身份**（`id:` / `cmp|` / `ambiguous:`），收据类必须能在尝试存储或 `sent_records` 里找到**真实收据对象**（收据号必须与该尝试的实际收据一致，并且正文哈希匹配），完成后要**回读**尝试状态与账本；`receipt_persistence_failed` 的关闭会用真实写入器补齐 `sent_records` 与账本，写不成功就保持调查未关闭（可重试，幂等）。人工确认来源只授权**确切事件**的来源更正（先落盘更正、再关闭调查），不制造机器人发送收据，也不解除其他人工暂停。`retry-notify` 是**唯一**的重发路径（一次投递尝试之后周期扫描不再自动重发，响应不明单独记为 `unknown`），走既有 dsh-im 出口，离线/隔离上下文直接拒绝。`-Action list` 的输出含买家名，分享前脱敏。
 
 ### 凭据与模型
 
@@ -221,7 +246,8 @@ powershell -ExecutionPolicy Bypass -NoProfile -File scripts\status.ps1
 | 页面不可用 | 查 `PAGE-DOWN`、`PAGE-HEAL`、`CDP`；分清浏览器可达与页面业务可用 |
 | 会话身份不一致 | `ABORT_WRONG_CONVO` 会中止该轮后续发送，应查页面切换与并发操作 |
 | 模型或内容检查失败 | 查 `REPLY-GEN` 的来源、场景、重写与 violations，及 `SEND-GATE` 日志 |
-| 企业微信未收到 | 查 dsh-im 配置、宿主和 `SENT_OK`；HTTP 探活不替代实际投递 |
+| 企业微信未收到 | 查 dsh-im 配置、宿主和 `SENT_OK`；HTTP 探活不替代实际投递。调查提醒的真实状态用 `investigate.ps1 -Action detail` 的 `notifications` 记录核对 |
+| 会话长时间不回复 | 查 `HUMAN-SOURCE-UNKNOWN` / `SOURCE-CONFLICT` / `SEND-ATTEMPT-BLOCKS-RESEND` / `SEND-PERSISTENCE-PENDING`，并用 `investigate.ps1 -Action list -ActiveOnly` 看是否有待处理调查；不要靠重启或删库"恢复发送" |
 | Accio 授权失败 | 重新登录 Accio；负缓存期间回退 CDP，不需要反复重启 Chrome |
 | 守护频繁重启 | 查 watchdog 日志、`watchdog_cooldown.json` 和日志新鲜度配置 |
 

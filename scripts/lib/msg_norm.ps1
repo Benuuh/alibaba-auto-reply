@@ -71,6 +71,8 @@ function Get-MsgPlainText([string]$line) {
     $t = $line -replace '^\[(BUYER|ME)\]\s*', ''
     $t = $t -replace '@@IMG:[^\s]*', ''
     $t = $t -replace '@@FILE:[^\s]*', ''
+    # [2026-10-07 spec §3.1] @@META 是逐条来源元数据载体（行尾 base64 JSON），永远不是正文。
+    $t = $t -replace '@@META:[A-Za-z0-9\+/=_-]+', ''
     $t = $t -replace '@@(?:TS|MT|MID|SRC|CARD):[^\s]*', ''
     $t = $t -replace '@@OT:[A-Za-z0-9\+/=]+', ''
     $t = $t -replace '系统自动发送|自动接待发送', ''
@@ -106,11 +108,24 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
     $rawOrig = Get-MsgOriginalText $line -KeepUiNoise
     $orig = ($rawOrig -replace '系统自动发送|自动接待发送', '').Trim()
 
-    # @@TS accompanies robot-sent messages (see lib\msg_source.ps1 header). An [ME] line without
-    # it was typed by the owner. Same rule as the single authority in lib\msg_source.ps1.
+    # [2026-10-07 spec §3.2 第 3 条] 来源判定**唯一**委托 lib\msg_source.ps1 -> lib\msg_events.ps1：
+    #   "有时间就是 bot"的旁路被移除，无证据的 [ME] 行既不是 bot 也不是人工。
+    #   这里保留 Source 的词汇（buyer/bot/human/unknown）供既有回复上下文消费者使用：
+    #     project / platform（我方、非人工）=> 'bot'；human => 'human'；其余 => 'unknown'。
+    #   共享判定库不可用时（单独加载本文件的单元测试）退回旧形态；生产加载链永远走共享判定。
     $source = $role
+    $sourceClass = $role
+    $sourceEvidence = 'buyer-role-marker'
     if ($role -eq 'me') {
-        if ($line -match '@@TS') { $source = 'bot' } else { $source = 'human' }
+        $sourceEvidence = 'legacy-no-shared-classifier'
+        if (Get-Command Get-MessageSourceClass -ErrorAction SilentlyContinue) {
+            $cls = Get-MessageSourceClass -line $line
+            $sourceClass = [string]$cls.Class
+            $sourceEvidence = [string]$cls.Evidence
+            if ($sourceClass -eq 'human') { $source = 'human' }
+            elseif ($sourceClass -eq 'project' -or $sourceClass -eq 'platform' -or $sourceClass -eq 'bot') { $source = 'bot' }
+            else { $source = 'unknown' }
+        } elseif ($line -match '@@TS') { $source = 'bot' } else { $source = 'unknown' }
     }
 
     $imgUrls = @()
@@ -162,7 +177,10 @@ function ConvertFrom-MsgRawLine([string]$line, [int]$DomIndex) {
         DomIndex      = $DomIndex
         Seq           = 0              # assigned after ordering (1 = oldest)
         Role          = $role          # 'buyer' | 'me'
-        Source        = $source        # 'buyer' | 'bot' | 'human'
+        Source        = $source        # 'buyer' | 'bot' | 'human' | 'unknown'（回复上下文角色口径）
+        # [spec §3.2] 权威四态来源与证据引用（发送闸门/暂停/调查只用这一组）。
+        SourceClass   = $sourceClass
+        SourceEvidence = $sourceEvidence
         Text          = $plain
         Orig          = $orig
         NormText      = $normText
@@ -231,13 +249,15 @@ function Resolve-MessageDirection([object[]]$Messages) {
 #             (anti-interjection gate, ledger selector, promised-field scan) keep working against
 #             one single direction and no data can be lost by reconstruction.
 #   .LatestBuyer / .LastBuyer = the newest buyer only when direction is verified and it is not
-#             a system card; otherwise null, with ReplyBlockReason. BuyerCount retains cards
+#             a system card; otherwise null, with ReplyBlockReason. LedgerBuyerCount retains cards
 #             for compatibility with the existing HASH|count ledger.
 #   .Anomaly = $true when order is unverified; production must block, never guess a latest message.
 function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
     $rawLines = @()
     if (-not [string]::IsNullOrWhiteSpace($Raw)) { $rawLines = @([regex]::Split($Raw, "\r?\n")) }
     $parsed = New-Object System.Collections.ArrayList
+    $ledgerBuyerCount = 0
+    $directionUnverified = $false
     $skipped = New-Object System.Collections.ArrayList
     for ($i = 0; $i -lt $rawLines.Count; $i++) {
         $ln = $rawLines[$i]
@@ -253,12 +273,26 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
             [void]$skipped.Add(@{ Index = $i; Reason = 'empty-and-no-attachment'; Text = '' })
             continue
         }
+        # Preserve the historical HASH|count ledger denominator while excluding proven
+        # structural noise from ordering, facts, latest-buyer selection and model context.
+        if ($msg.Role -eq 'buyer') { $ledgerBuyerCount++ }
+        $meta = $null
+        if (Get-Command Get-MessageMetaMarker -ErrorAction SilentlyContinue) { $meta = Get-MessageMetaMarker $ln }
+        if ($meta -and $meta.v -eq 'msgevent-2026-10-07.1' -and $meta.st -in @('flow','summary','noise')) {
+            [void]$skipped.Add(@{Index=$i;Reason=('structure-'+$meta.st);Text=''})
+            continue
+        }
+        # Unknown sender is allowed for pending; unknown message direction is a read failure.
+        if ($meta -and $meta.v -eq 'msgevent-2026-10-07.1' -and ($meta.dir -notin @('in','out') -or $meta.dirsrc -in @('missing','conflict'))) {
+            $directionUnverified = $true
+        }
         # NOTE: there is deliberately NO text-length filter here. Short acknowledgements such as
         # "ok", "si" and "no" are real message events (spec 4.1) and must reach the decision layer.
         [void]$parsed.Add($msg)
     }
 
     $order = Resolve-MessageDirection $parsed.ToArray()
+    if ($directionUnverified) { $order.Confident = $false; $order.Reason = 'message-direction-unverified' }
     $list = @($parsed.ToArray())
     if (-not $order.Ascending) { [array]::Reverse($list) }
 
@@ -276,10 +310,7 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
         foreach ($message in $group.Group) { $message.IdConfident = $false }
     }
 
-    $platformId=[regex]::Match($line,'@@MID:([^\s]+)')
-    if($platformId.Success){$stableId=$role+'|id:'+$platformId.Groups[1].Value;$idConfident=$true}
     return [pscustomobject]@{
-        PlatformMessageId=$platformId.Groups[1].Value
         Schema        = $script:MsgSchemaVersion
         ConvoName     = $ConvoName
         Messages      = $list
@@ -289,6 +320,7 @@ function ConvertTo-MessageList([string]$Raw, [string]$ConvoName = '') {
         LatestBuyer   = $latest
         LastBuyer     = $latest
         BuyerCount    = $buyers.Count
+        LedgerBuyerCount = $ledgerBuyerCount
         Skipped       = @($skipped.ToArray())
         ReplyBlockReason = $blockReason
         # Unverified order is a reportable condition, not something to paper over (spec 4.1).

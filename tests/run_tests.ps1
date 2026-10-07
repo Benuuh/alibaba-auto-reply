@@ -29,6 +29,7 @@
 param(
     [ValidateSet('Offline', 'Pure', 'Isolated', 'Live', 'All')][string]$Layer = 'Offline',
     [string]$LogFile = '',
+    [string[]]$TestFile = @(),
     [switch]$KeepTemp
 )
 $ErrorActionPreference = 'Stop'
@@ -64,6 +65,10 @@ switch ($Layer) {
 }
 
 $enforceProductionGuard = ($Layer -ne 'Live')
+if ($TestFile.Count) {
+    foreach ($name in $TestFile) { if ($selected -notcontains $name) { throw ('TestFile is not in selected layer: ' + $name) } }
+    $selected = @($selected | Where-Object { $TestFile -contains $_ })
+}
 Emit ('TEST-LAYER=' + $Layer + ' files=' + $selected.Count + ' productionGuard=' + $enforceProductionGuard)
 Emit ('PRODUCTION-PATHS: ' + ((Get-AarProductionPaths) -join ' ; '))
 

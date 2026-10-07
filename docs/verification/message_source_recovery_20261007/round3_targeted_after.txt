@@ -1,0 +1,59 @@
+第三轮（复核 R8-R10）定向回归 —— 修复后复跑。所有子进程都在显式临时隔离根内经 tests\run_child.ps1 运行。
+
+=== send_attempt_receipt.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-14994a904d324c44aba6c1d867484f85) ===
+  RESULT: pass=112 fail=0
+  ALL PASS
+EXIT=0
+=== send_attempt_restart.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-64116d9ed6c74f259bf5ded75b1eed49) ===
+  RESULT: pass=53 fail=0
+  ALL PASS
+EXIT=0
+=== msg_source_three_class.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-6a33564baffe44949f5d41d563986e83) ===
+  RESULT: pass=51 fail=0
+  ALL PASS
+EXIT=0
+=== review_fixes_entry.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-0aa5636bea9b4915a292565c5c573af8) ===
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  RESULT: pass=201 fail=0
+  ALL PASS
+EXIT=0
+
+TARGETED-SUMMARY files=4 failedFiles=0 pass=417 fail=0

@@ -1,4 +1,4 @@
-﻿{
+{
   "version": "2026-10-05.1",
   "note": "生效规则清单（spec §6.1）。每条规则记录：RuleId、适用阶段、实际消费函数、需要的证据、规则版本、验收样例，以及 Status（wired=已在生产代码路径上消费；partial=部分消费；not_wired=配置里存在但当前没有生产消费方，不得声称已生效）。本清单由 tests\\rule_registry.tests.ps1 校验。",
   "stages": [
@@ -325,25 +325,25 @@
       "Status": "wired"
     },
     {
-      "RuleId": "R-HUMAN-PAUSE-5MIN",
-      "Stage": "human",
-      "Consumer": "Start-HumanPause",
-      "ConsumerFile": "scripts/lib/human_pause.ps1",
+      "RuleId": "R-PENDING-LIST-AUTHORITY",
+      "Stage": "decision",
+      "Consumer": "Test-ShouldReply",
+      "ConsumerFile": "scripts/reply_engine.ps1",
       "Codes": [],
-      "Evidence": "stable event identity (role + normalized text + reliable per-message time) and an ABSOLUTE UTC deadline = the reply instant + 5 minutes; rescans, position changes, window truncation and restarts never re-base it and never extend it",
-      "Version": "2026-10-05.3",
-      "Sample": "human_pause.tests.ps1#F3a-until-is-reply-time-plus-5-not-scan-time",
+      "Evidence": "monitor passes PendingListAuthoritative: current pending membership requires processing; duplicate confirmed trigger receipts and historical ledger prevent the same answer being sent again. No five-minute source/time waits, twenty-second new-message floor, two-round wait or cold-start observe-only delay. Not pending never auto-sends. Legacy pause functions remain callable for compatibility but are not monitor reply gates.",
+      "Version": "2026-10-07.pending.1",
+      "Sample": "pending_reply_policy.tests.ps1, new_message_cooldown.tests.ps1",
       "Status": "wired"
     },
     {
       "RuleId": "R-HUMAN-SOURCE-EVIDENCE",
       "Stage": "human",
-      "Consumer": "Get-MessageSourceClass",
-      "ConsumerFile": "scripts/lib/msg_source.ps1",
+      "Consumer": "Resolve-MessageSourceClass",
+      "ConsumerFile": "scripts/lib/msg_events.ps1",
       "Codes": [],
-      "Evidence": "explicit sender marker, confirmed send record, or absence of any bot marker; unknown never counts as human",
-      "Version": "2026-10-05.1",
-      "Sample": "human_pause.tests.ps1#P7",
+      "Evidence": "entry chain Get-MessageSource -> Get-MessageSourceClass -> Get-MessageSourceClassForLine -> Resolve-MessageSourceClass; the legacy entry and the real consumers (lib/human_style.ps1 Get-HumanMessages, lib/reply_metrics.ps1 Get-SnapshotLineSources) delegate to the same classifier instead of re-deriving a source. Direction comes from the VERIFIED layout structure first (item-right => out, item-left => in, dirsrc=layout); a visible display name and a translation marker are observations only (name-field / translation-marker) and never rewrite an explicit direction. Both structures at once is recorded as dirsrc=conflict and no structure at all as dirsrc=missing: such an event keeps dir=unknown, has no usable identity, and is neither a buyer request nor outbound proof (only legacy lines WITHOUT per-message metadata fall back to the role marker). A real attachment bubble stays a real event even when it has no rich text node. verified human sender field in the per-message @@META payload, or an operator confirmation bound to the exact event; a valid receipt classifies the event as project and never as human. Inline @@SRC text in the body, timestamps, and the absence of a bot marker are NOT human evidence; unknown never counts as human or as our own message",
+      "Version": "2026-10-07.3",
+      "Sample": "human_pause.tests.ps1#P7, msg_source_three_class.tests.ps1#A05-A06, msg_source_three_class.tests.ps1#extractor-explicit-right-*, msg_source_three_class.tests.ps1#direction-conflict-*, msg_source.tests.ps1#R7-*, msg_source_consumers.tests.ps1#R7-*, send_attempt_receipt.tests.ps1#R9-*, send_attempt_receipt.tests.ps1#R10-*",
       "Status": "wired"
     },
     {

@@ -128,7 +128,7 @@ function Get-ReplyRequestSegments([string]$Text) {
             [void]$out.Add([pscustomobject]@{ Start = $idx; End = $m.Index; Text = $segText.Trim(); Boundary = $boundary })
         }
         $b = 'conj'
-        if ($m.Value -match '[.!?;]') { $b = 'sentence' }
+        if ($m.Value -match '[.!?;]' -or ($m.Index -gt 0 -and $t[$m.Index - 1] -match '[.!?;]')) { $b = 'sentence' }
         elseif ($m.Value -match ',') { $b = 'comma' }
         $boundary = $b
         $idx = $m.Index + $m.Length

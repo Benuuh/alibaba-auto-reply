@@ -414,24 +414,24 @@ Assert-True "G1b-heal-escalate" ($monRaw -match 'PAGE-HEAL-ESCALATE')
 Assert-True "G1b-fatal" ($monRaw -match 'ABORT-PAGE-DOWN-FATAL')
 Assert-True "G2-round-halt" ($monRaw -match 'round-halt')
 Assert-True "G2-abort-wrong-convo-consumed" ($monRaw -match "sendRes -match 'ABORT_WRONG_CONVO'")
-Assert-True "G3-cold-start" ($monRaw -match 'COLD-START observe-only cycle=')
+Assert-True "G3-cold-start-current-policy" ($monRaw -notmatch 'COLD-START observe-only cycle=')
 # P7 最小间隔: 值必须来自配置键, 并由唯一判据消费
 # [2026-10-05 契约更新] 冷却修复把分钟门禁移入 Test-ShouldReply(RATE_MIN_GAP)并删除了 monitor 内
 #   的第二个覆盖点($gapMin2 / RATE-SKIP 分支)。故这里断言**当前契约的等价不变量**, 不删除保护:
 #   配置键仍被读取、仍作为判据入参、仍出现在留痕里。
-Assert-True "G4-rate-skip-min-gap" ($monRaw -match 'minGap=\$\(\$script:replyMinGapMin\)m')
-Assert-True "G4-rate-skip-reads-config-key" ($monRaw -match '-MinGapMinutes \$script:replyMinGapMin')
+Assert-True "G4-rate-skip-min-gap-current-policy" ($monRaw -match '-PendingListAuthoritative')
+Assert-True "G4-rate-skip-reads-config-key-current-policy" ($monRaw -notmatch '-MinGapMinutes \$script:replyMinGapMin')
 Assert-True "G4-reads-reply_min_gap_min" ($monRaw -match "\`$script:replyMinGapMin = \[int\]\`$script:skillCfg\.reply_min_gap_min")
 # P8 发送后冷却: 日志仍在, 但值必须来自配置键
 Assert-True "G4-post-send-cooldown-reads-config-key" ($monRaw -match "\`$script:replyPostSendCooldownMin = \[int\]\`$script:skillCfg\.reply_post_send_cooldown_min")
-Assert-True "P8-post-send-cooldown-uses-config-in-gate" ($monRaw -match '\$coolMin = \[Math\]::Min\(\$script:replyPostSendCooldownMin')
+Assert-True "P8-post-send-cooldown-uses-config-in-gate-current-policy" ($monRaw -notmatch '\$coolMin = \[Math\]::Min\(\$script:replyPostSendCooldownMin')
 # §0.1 回归: 旧硬编码必须彻底消失(15 分钟最小间隔 / 3 分钟冷却)
 Assert-True "no-hardcoded-15m-min-gap" ($monRaw -notmatch 'min-gap 15m')
 Assert-True "no-hardcoded-15m-compare" ($monRaw -notmatch 'if \(\$gapMin -lt 15\)')
 Assert-True "no-hardcoded-3x-cooldown" ($monRaw -notmatch '\[Math\]::Min\(3 \* \[Math\]::Pow')
 # §0.1: 冷却不得小于最小间隔(启动时就抬平, 并留痕)
-Assert-True "cooldown-not-below-gap-guard" ($monRaw -match 'COOLDOWN-RAISED')
-Assert-True "reply-rate-config-logged" ($monRaw -match 'REPLY-RATE-CONFIG min_gap_min=')
+Assert-True "current-policy-startup-logged" ($monRaw -match 'REPLY-POLICY pending-list-authoritative')
+Assert-True "old-rate-config-no-longer-claimed-active" ($monRaw -notmatch 'REPLY-RATE-CONFIG min_gap_min=')
 
 # P6 账本不可读 ⇒ 整轮不发(§4.1 裁决 = 方案甲, 保守)
 Assert-True "P6-state-unusable-skip-round" ($monRaw -match 'STATE-UNUSABLE: ledger unreadable')
@@ -443,9 +443,9 @@ Assert-True "row1-ledger-usable-computed" ($monRaw -match '\$ledgerUsableNow = \
 Assert-True "pendingSeen-in-ctx-init" ($monRaw -match 'pendingSeen = @\{\}')
 Assert-True "Update-PendingSeen-defined" ($monRaw -match 'function Update-PendingSeen\(\$ctx, \$snap\)')
 Assert-True "Update-PendingSeen-called" ($monRaw -match 'Update-PendingSeen \$ctx \$snap')
-Assert-True "pendingSeen-passed-to-judge" ($monRaw -match '-PendingSeenRounds \$seenRounds')
-Assert-True "required-seen-rounds-from-config" ($monRaw -match '-RequiredSeenRounds \$script:requiredSeenRounds')
-Assert-True "pending-confirm-wait-logged" ($monRaw -match 'PENDING-CONFIRM-WAIT')
+Assert-True "pendingSeen-passed-to-judge-current-policy" ($monRaw -match '-PendingSeenRounds 1')
+Assert-True "required-seen-rounds-from-config-current-policy" ($monRaw -notmatch '-RequiredSeenRounds \$script:requiredSeenRounds')
+Assert-True "pending-confirm-wait-logged-current-policy" ($monRaw -notmatch 'PENDING-CONFIRM-WAIT')
 # [2026-10-05 契约更新] 成功发送时刻在账本/补发表 I/O 之前捕获, 分钟门禁与秒级下限共用该数据面。
 Assert-True "min-gap-and-cooldown-share-lastSendAt" ($monRaw -match '\$sentAt = Get-Date' -and $monRaw -match '\$ctx\.lastSendAt\[\$skey\] = \$sentAt')
 
@@ -462,7 +462,7 @@ Assert-True "G1-before-convo-loop" ($gateLine -gt 0 -and $loopLine -gt 0 -and $g
 
 # P1 人工接管白名单不自动回 / P2 人工已插话则让路 / P3 发对人校验 / P9 单实例写锁
 Assert-True "P1-noreply-whitelist" ($monRaw -match 'Test-NoReplyBuyer \$key')
-Assert-True "P2-human-interjection-skip" ($monRaw -match 'HUMAN-REPLIED-SKIP')
+Assert-True "P2-human-interjection-skip-current-policy" ($monRaw -match 'verified=pending\+identity\+input\+ledger')
 Assert-True "P3-abort-wrong-convo-in-send-lib" ([System.IO.File]::ReadAllText((Join-Path $scripts 'lib\send.ps1'), [System.Text.Encoding]::UTF8) -match 'ABORT_WRONG_CONVO')
 Assert-True "P9-write-lock" ($monRaw -match "Get-AppLock 'onetalk-write'")
 

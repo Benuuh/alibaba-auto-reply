@@ -1,0 +1,373 @@
+{
+    "generatedAtUtc":  "2026-10-07T01:31:34.2577459Z",
+    "layer":  "Offline",
+    "selectedFiles":  [
+                          "new_message_cooldown.tests.ps1",
+                          "reception_facts.tests.ps1",
+                          "pending_reply_policy.tests.ps1",
+                          "review_fixes_entry.tests.ps1",
+                          "closure_s5.tests.ps1"
+                      ],
+    "logicTests":  "FAIL",
+    "isolationChecks":  "PASS",
+    "productionPathAudit":  "PASS",
+    "overall":  "FAIL",
+    "exitCode":  1,
+    "writerOutputRoots":  [
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\data",
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\logs",
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\reports",
+                              "C:\\path\\to\\alibaba-auto-reply-runtime\\backups"
+                          ],
+    "writer":  {
+                   "Running":  false,
+                   "LockHolder":  "",
+                   "Processes":  [
+
+                                 ]
+               },
+    "attributionCluesBefore":  {
+                                   "capturedAtUtc":  "2026-10-07T01:28:31.2372985Z",
+                                   "lockHolderPid":  "",
+                                   "monitorWatchdog":  [
+
+                                                       ],
+                                   "chromeProcesses":  [
+                                                           "4172",
+                                                           "4212",
+                                                           "4468",
+                                                           "6772",
+                                                           "11388",
+                                                           "12468",
+                                                           "12932",
+                                                           "17296",
+                                                           "18248",
+                                                           "19400",
+                                                           "21928",
+                                                           "22024",
+                                                           "22084",
+                                                           "22276",
+                                                           "23016",
+                                                           "24792",
+                                                           "26344",
+                                                           "26448",
+                                                           "28816",
+                                                           "30040",
+                                                           "31292",
+                                                           "32096",
+                                                           "36668",
+                                                           "37164",
+                                                           "37512",
+                                                           "37676",
+                                                           "37720"
+                                                       ],
+                                   "chromeProfilePath":  ""
+                               },
+    "attributionCluesAfter":  {
+                                  "capturedAtUtc":  "2026-10-07T01:31:34.0129650Z",
+                                  "lockHolderPid":  "",
+                                  "monitorWatchdog":  [
+
+                                                      ],
+                                  "chromeProcesses":  [
+                                                          "4172",
+                                                          "4212",
+                                                          "4468",
+                                                          "6772",
+                                                          "11388",
+                                                          "12468",
+                                                          "12932",
+                                                          "17296",
+                                                          "18248",
+                                                          "19400",
+                                                          "21928",
+                                                          "22024",
+                                                          "22084",
+                                                          "22276",
+                                                          "23016",
+                                                          "24792",
+                                                          "26344",
+                                                          "26448",
+                                                          "28816",
+                                                          "30040",
+                                                          "31292",
+                                                          "32096",
+                                                          "36668",
+                                                          "37164",
+                                                          "37512",
+                                                          "37676",
+                                                          "37720"
+                                                      ],
+                                  "chromeProfilePath":  ""
+                              },
+    "changes":  [
+
+                ],
+    "perFileDiffs":  {
+                         "pending_reply_policy.tests.ps1":  [
+
+                                                            ],
+                         "new_message_cooldown.tests.ps1":  [
+
+                                                            ],
+                         "closure_s5.tests.ps1":  [
+
+                                                  ],
+                         "review_fixes_entry.tests.ps1":  [
+
+                                                          ],
+                         "reception_facts.tests.ps1":  [
+
+                                                       ]
+                     },
+    "childContexts":  {
+                          "pending_reply_policy.tests.ps1":  {
+                                                                 "ChildPID":  16048,
+                                                                 "Nonce":  "76da8da3e35749ac8b7dfa3b64eebd8b",
+                                                                 "Test":  "pending_reply_policy.tests.ps1",
+                                                                 "Proof":  {
+                                                                               "PID":  16048,
+                                                                               "Nonce":  "76da8da3e35749ac8b7dfa3b64eebd8b",
+                                                                               "Test":  "pending_reply_policy.tests.ps1",
+                                                                               "Contexts":  [
+                                                                                                {
+                                                                                                    "PID":  16048,
+                                                                                                    "Nonce":  "76da8da3e35749ac8b7dfa3b64eebd8b",
+                                                                                                    "Test":  "pending_reply_policy.tests.ps1",
+                                                                                                    "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-6d5c96b4c46440dcbbe110ae45547843",
+                                                                                                    "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-6d5c96b4c46440dcbbe110ae45547843\\.aar-isolation.json",
+                                                                                                    "MarkerSHA256":  "D4F01D56BEA86D52DE06EF3A1D9F1D1293EF6F271C5FE2A235F7466F83A3B715",
+                                                                                                    "AtUtc":  "2026-10-07T01:29:31.8269918Z",
+                                                                                                    "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxNjA0OCwNCiAgICAibm9uY2UiOiAgIjc2ZGE4ZGEzZTM1NzQ5YWM4YjdkZmEzYjY0ZWViZDhiIiwNCiAgICAidGVzdCI6ICAicGVuZGluZ19yZXBseV9wb2xpY3kudGVzdHMucHMxIiwNCiAgICAiY3JlYXRlZCI6ICAiMjAyNi0xMC0wN1QwOToyOTozMS44MDc2Njk4KzA4OjAwIiwNCiAgICAicHJvZHVjdGlvbl9yb290IjogICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAicHJvZHVjdGlvbl9wYXRocyI6ICBbDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxtb25pdG9yLnBpZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxyZW1pbmRfc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxjcmVkZW50aWFscy5tZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsbG1fY29uZmlnLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxjaHJvbWUtcHJvZmlsZSINCiAgICAgICAgICAgICAgICAgICAgICAgICBdDQp9"
+                                                                                                },
+                                                                                                {
+                                                                                                    "PID":  16048,
+                                                                                                    "Nonce":  "76da8da3e35749ac8b7dfa3b64eebd8b",
+                                                                                                    "Test":  "pending_reply_policy.tests.ps1",
+                                                                                                    "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-6d5c96b4c46440dcbbe110ae45547843",
+                                                                                                    "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-6d5c96b4c46440dcbbe110ae45547843\\.aar-isolation.json",
+                                                                                                    "MarkerSHA256":  "D4F01D56BEA86D52DE06EF3A1D9F1D1293EF6F271C5FE2A235F7466F83A3B715",
+                                                                                                    "AtUtc":  "2026-10-07T01:29:31.8830933Z",
+                                                                                                    "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxNjA0OCwNCiAgICAibm9uY2UiOiAgIjc2ZGE4ZGEzZTM1NzQ5YWM4YjdkZmEzYjY0ZWViZDhiIiwNCiAgICAidGVzdCI6ICAicGVuZGluZ19yZXBseV9wb2xpY3kudGVzdHMucHMxIiwNCiAgICAiY3JlYXRlZCI6ICAiMjAyNi0xMC0wN1QwOToyOTozMS44MDc2Njk4KzA4OjAwIiwNCiAgICAicHJvZHVjdGlvbl9yb290IjogICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAicHJvZHVjdGlvbl9wYXRocyI6ICBbDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxtb25pdG9yLnBpZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxyZW1pbmRfc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxjcmVkZW50aWFscy5tZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsbG1fY29uZmlnLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxjaHJvbWUtcHJvZmlsZSINCiAgICAgICAgICAgICAgICAgICAgICAgICBdDQp9"
+                                                                                                },
+                                                                                                {
+                                                                                                    "PID":  16048,
+                                                                                                    "Nonce":  "76da8da3e35749ac8b7dfa3b64eebd8b",
+                                                                                                    "Test":  "pending_reply_policy.tests.ps1",
+                                                                                                    "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-0665734392f94659b0a10dc82114a9f1",
+                                                                                                    "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-0665734392f94659b0a10dc82114a9f1\\.aar-isolation.json",
+                                                                                                    "MarkerSHA256":  "3377FF212D5B0B6DF7D432F6F2A9E5DA6921F190E4A74A6974CA5205676B21DA",
+                                                                                                    "AtUtc":  "2026-10-07T01:29:32.0380339Z",
+                                                                                                    "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxNjA0OCwNCiAgICAibm9uY2UiOiAgIjc2ZGE4ZGEzZTM1NzQ5YWM4YjdkZmEzYjY0ZWViZDhiIiwNCiAgICAidGVzdCI6ICAicGVuZGluZ19yZXBseV9wb2xpY3kudGVzdHMucHMxIiwNCiAgICAiY3JlYXRlZCI6ICAiMjAyNi0xMC0wN1QwOToyOTozMi4wMjE3MDg2KzA4OjAwIiwNCiAgICAicHJvZHVjdGlvbl9yb290IjogICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAicHJvZHVjdGlvbl9wYXRocyI6ICBbDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxtb25pdG9yLnBpZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxyZW1pbmRfc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxjcmVkZW50aWFscy5tZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsbG1fY29uZmlnLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxjaHJvbWUtcHJvZmlsZSINCiAgICAgICAgICAgICAgICAgICAgICAgICBdDQp9"
+                                                                                                }
+                                                                                            ],
+                                                                               "Switches":  [
+                                                                                                {
+                                                                                                    "From":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-6d5c96b4c46440dcbbe110ae45547843",
+                                                                                                    "To":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-0665734392f94659b0a10dc82114a9f1",
+                                                                                                    "AtUtc":  "2026-10-07T01:29:32.0104217Z",
+                                                                                                    "Declared":  false,
+                                                                                                    "Reason":  "",
+                                                                                                    "Status":  "verified",
+                                                                                                    "MarkerVerifiedAtUtc":  "2026-10-07T01:29:32.0302132Z"
+                                                                                                }
+                                                                                            ]
+                                                                           },
+                                                                 "Verified":  true,
+                                                                 "Reason":  "child-identity-marker-and-runtime-root-verified",
+                                                                 "ExitCode":  1
+                                                             },
+                          "new_message_cooldown.tests.ps1":  {
+                                                                 "ChildPID":  16052,
+                                                                 "Nonce":  "484de88b07df4cf5ad06944c5cc90b60",
+                                                                 "Test":  "new_message_cooldown.tests.ps1",
+                                                                 "Proof":  {
+                                                                               "PID":  16052,
+                                                                               "Nonce":  "484de88b07df4cf5ad06944c5cc90b60",
+                                                                               "Test":  "new_message_cooldown.tests.ps1",
+                                                                               "Contexts":  [
+                                                                                                {
+                                                                                                    "PID":  16052,
+                                                                                                    "Nonce":  "484de88b07df4cf5ad06944c5cc90b60",
+                                                                                                    "Test":  "new_message_cooldown.tests.ps1",
+                                                                                                    "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-ebedc2d9d04b4f5c95e1ec10124b05f5",
+                                                                                                    "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-ebedc2d9d04b4f5c95e1ec10124b05f5\\.aar-isolation.json",
+                                                                                                    "MarkerSHA256":  "C6CEB27B1F87A5919EBC53C1B2822ABDD8F17C7AF4762BD59D1B463D68F94502",
+                                                                                                    "AtUtc":  "2026-10-07T01:28:40.5081179Z",
+                                                                                                    "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxNjA1MiwNCiAgICAibm9uY2UiOiAgIjQ4NGRlODhiMDdkZjRjZjVhZDA2OTQ0YzVjYzkwYjYwIiwNCiAgICAidGVzdCI6ICAibmV3X21lc3NhZ2VfY29vbGRvd24udGVzdHMucHMxIiwNCiAgICAiY3JlYXRlZCI6ICAiMjAyNi0xMC0wN1QwOToyODo0MC40NzczNjU5KzA4OjAwIiwNCiAgICAicHJvZHVjdGlvbl9yb290IjogICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAicHJvZHVjdGlvbl9wYXRocyI6ICBbDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxtb25pdG9yLnBpZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxyZW1pbmRfc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxjcmVkZW50aWFscy5tZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsbG1fY29uZmlnLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxjaHJvbWUtcHJvZmlsZSINCiAgICAgICAgICAgICAgICAgICAgICAgICBdDQp9"
+                                                                                                },
+                                                                                                {
+                                                                                                    "PID":  16052,
+                                                                                                    "Nonce":  "484de88b07df4cf5ad06944c5cc90b60",
+                                                                                                    "Test":  "new_message_cooldown.tests.ps1",
+                                                                                                    "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-ebedc2d9d04b4f5c95e1ec10124b05f5",
+                                                                                                    "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-ebedc2d9d04b4f5c95e1ec10124b05f5\\.aar-isolation.json",
+                                                                                                    "MarkerSHA256":  "C6CEB27B1F87A5919EBC53C1B2822ABDD8F17C7AF4762BD59D1B463D68F94502",
+                                                                                                    "AtUtc":  "2026-10-07T01:28:40.5666700Z",
+                                                                                                    "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxNjA1MiwNCiAgICAibm9uY2UiOiAgIjQ4NGRlODhiMDdkZjRjZjVhZDA2OTQ0YzVjYzkwYjYwIiwNCiAgICAidGVzdCI6ICAibmV3X21lc3NhZ2VfY29vbGRvd24udGVzdHMucHMxIiwNCiAgICAiY3JlYXRlZCI6ICAiMjAyNi0xMC0wN1QwOToyODo0MC40NzczNjU5KzA4OjAwIiwNCiAgICAicHJvZHVjdGlvbl9yb290IjogICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAicHJvZHVjdGlvbl9wYXRocyI6ICBbDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5IiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxtb25pdG9yLnBpZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxyZW1pbmRfc3RhdGUuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxjcmVkZW50aWFscy5tZCIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxsbG1fY29uZmlnLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGJhY2t1cHMiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxjaHJvbWUtcHJvZmlsZSINCiAgICAgICAgICAgICAgICAgICAgICAgICBdDQp9"
+                                                                                                }
+                                                                                            ],
+                                                                               "Switches":  [
+
+                                                                                            ]
+                                                                           },
+                                                                 "Verified":  true,
+                                                                 "Reason":  "child-identity-marker-and-runtime-root-verified",
+                                                                 "ExitCode":  0
+                                                             },
+                          "closure_s5.tests.ps1":  {
+                                                       "ChildPID":  21992,
+                                                       "Nonce":  "afd9c3b8e1534e6094a60a9e31699db2",
+                                                       "Test":  "closure_s5.tests.ps1",
+                                                       "Proof":  {
+                                                                     "PID":  21992,
+                                                                     "Nonce":  "afd9c3b8e1534e6094a60a9e31699db2",
+                                                                     "Test":  "closure_s5.tests.ps1",
+                                                                     "Contexts":  [
+                                                                                      {
+                                                                                          "PID":  21992,
+                                                                                          "Nonce":  "afd9c3b8e1534e6094a60a9e31699db2",
+                                                                                          "Test":  "closure_s5.tests.ps1",
+                                                                                          "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-5925b0ec96764d6ea724941127fc77e8",
+                                                                                          "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-5925b0ec96764d6ea724941127fc77e8\\.aar-isolation.json",
+                                                                                          "MarkerSHA256":  "BEDA063327D38FE5B8A2A7F96235750BF413AB9342A8E4693EA98D6CB6E63495",
+                                                                                          "AtUtc":  "2026-10-07T01:30:52.1833930Z",
+                                                                                          "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAyMTk5MiwNCiAgICAibm9uY2UiOiAgImFmZDljM2I4ZTE1MzRlNjA5NGE2MGE5ZTMxNjk5ZGIyIiwNCiAgICAidGVzdCI6ICAiY2xvc3VyZV9zNS50ZXN0cy5wczEiLA0KICAgICJjcmVhdGVkIjogICIyMDI2LTEwLTA3VDA5OjMwOjUyLjE2MzE2MzgrMDg6MDAiLA0KICAgICJwcm9kdWN0aW9uX3Jvb3QiOiAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHkiLA0KICAgICJwcm9kdWN0aW9uX3BhdGhzIjogIFsNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHkiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0cyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcYmFja3VwcyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxzdGF0ZS5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXG1vbml0b3IucGlkIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHJlbWluZF9zdGF0ZS5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGNyZWRlbnRpYWxzLm1kIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGxsbV9jb25maWcuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcYmFja3VwcyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGNocm9tZS1wcm9maWxlIg0KICAgICAgICAgICAgICAgICAgICAgICAgIF0NCn0="
+                                                                                      },
+                                                                                      {
+                                                                                          "PID":  21992,
+                                                                                          "Nonce":  "afd9c3b8e1534e6094a60a9e31699db2",
+                                                                                          "Test":  "closure_s5.tests.ps1",
+                                                                                          "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-5925b0ec96764d6ea724941127fc77e8",
+                                                                                          "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-5925b0ec96764d6ea724941127fc77e8\\.aar-isolation.json",
+                                                                                          "MarkerSHA256":  "BEDA063327D38FE5B8A2A7F96235750BF413AB9342A8E4693EA98D6CB6E63495",
+                                                                                          "AtUtc":  "2026-10-07T01:30:52.2409262Z",
+                                                                                          "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAyMTk5MiwNCiAgICAibm9uY2UiOiAgImFmZDljM2I4ZTE1MzRlNjA5NGE2MGE5ZTMxNjk5ZGIyIiwNCiAgICAidGVzdCI6ICAiY2xvc3VyZV9zNS50ZXN0cy5wczEiLA0KICAgICJjcmVhdGVkIjogICIyMDI2LTEwLTA3VDA5OjMwOjUyLjE2MzE2MzgrMDg6MDAiLA0KICAgICJwcm9kdWN0aW9uX3Jvb3QiOiAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHkiLA0KICAgICJwcm9kdWN0aW9uX3BhdGhzIjogIFsNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHkiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0cyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcYmFja3VwcyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxzdGF0ZS5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXG1vbml0b3IucGlkIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHJlbWluZF9zdGF0ZS5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGNyZWRlbnRpYWxzLm1kIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGxsbV9jb25maWcuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcYmFja3VwcyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGNocm9tZS1wcm9maWxlIg0KICAgICAgICAgICAgICAgICAgICAgICAgIF0NCn0="
+                                                                                      },
+                                                                                      {
+                                                                                          "PID":  21992,
+                                                                                          "Nonce":  "afd9c3b8e1534e6094a60a9e31699db2",
+                                                                                          "Test":  "closure_s5.tests.ps1",
+                                                                                          "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-09fbd2b626184d35bb5c1ffeb3eb8186",
+                                                                                          "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-09fbd2b626184d35bb5c1ffeb3eb8186\\.aar-isolation.json",
+                                                                                          "MarkerSHA256":  "6DEDAEF371CE6E4DC479E9C63704E920EDBFF26FE0C8B4480DCCD5FBD0958A42",
+                                                                                          "AtUtc":  "2026-10-07T01:30:52.3468603Z",
+                                                                                          "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAyMTk5MiwNCiAgICAibm9uY2UiOiAgImFmZDljM2I4ZTE1MzRlNjA5NGE2MGE5ZTMxNjk5ZGIyIiwNCiAgICAidGVzdCI6ICAiY2xvc3VyZV9zNS50ZXN0cy5wczEiLA0KICAgICJjcmVhdGVkIjogICIyMDI2LTEwLTA3VDA5OjMwOjUyLjMzMzUzMDcrMDg6MDAiLA0KICAgICJwcm9kdWN0aW9uX3Jvb3QiOiAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHkiLA0KICAgICJwcm9kdWN0aW9uX3BhdGhzIjogIFsNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHkiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0cyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxkYXRhIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcYmFja3VwcyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzXFxzdGF0ZS5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXG1vbml0b3IucGlkIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHJlbWluZF9zdGF0ZS5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGNyZWRlbnRpYWxzLm1kIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGxsbV9jb25maWcuanNvbiIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxsb2dzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcYmFja3VwcyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGNocm9tZS1wcm9maWxlIg0KICAgICAgICAgICAgICAgICAgICAgICAgIF0NCn0="
+                                                                                      }
+                                                                                  ],
+                                                                     "Switches":  [
+                                                                                      {
+                                                                                          "From":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-5925b0ec96764d6ea724941127fc77e8",
+                                                                                          "To":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-09fbd2b626184d35bb5c1ffeb3eb8186",
+                                                                                          "AtUtc":  "2026-10-07T01:30:52.3220145Z",
+                                                                                          "Declared":  false,
+                                                                                          "Reason":  "",
+                                                                                          "Status":  "verified",
+                                                                                          "MarkerVerifiedAtUtc":  "2026-10-07T01:30:52.3423491Z"
+                                                                                      }
+                                                                                  ]
+                                                                 },
+                                                       "Verified":  true,
+                                                       "Reason":  "child-identity-marker-and-runtime-root-verified",
+                                                       "ExitCode":  0
+                                                   },
+                          "review_fixes_entry.tests.ps1":  {
+                                                               "ChildPID":  28240,
+                                                               "Nonce":  "fcb98607fb8249e0a8372ed98cef9806",
+                                                               "Test":  "review_fixes_entry.tests.ps1",
+                                                               "Proof":  {
+                                                                             "PID":  28240,
+                                                                             "Nonce":  "fcb98607fb8249e0a8372ed98cef9806",
+                                                                             "Test":  "review_fixes_entry.tests.ps1",
+                                                                             "Contexts":  [
+                                                                                              {
+                                                                                                  "PID":  28240,
+                                                                                                  "Nonce":  "fcb98607fb8249e0a8372ed98cef9806",
+                                                                                                  "Test":  "review_fixes_entry.tests.ps1",
+                                                                                                  "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-9386c93f6eba479cbeabe0ad148dd5be",
+                                                                                                  "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-9386c93f6eba479cbeabe0ad148dd5be\\.aar-isolation.json",
+                                                                                                  "MarkerSHA256":  "783DBECFC154E700003142503FEEE0EFF834656E0882ECC05266E8F03AC6F35C",
+                                                                                                  "AtUtc":  "2026-10-07T01:29:46.6752622Z",
+                                                                                                  "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAyODI0MCwNCiAgICAibm9uY2UiOiAgImZjYjk4NjA3ZmI4MjQ5ZTBhODM3MmVkOThjZWY5ODA2IiwNCiAgICAidGVzdCI6ICAicmV2aWV3X2ZpeGVzX2VudHJ5LnRlc3RzLnBzMSIsDQogICAgImNyZWF0ZWQiOiAgIjIwMjYtMTAtMDdUMDk6Mjk6NDYuNjU0NjYxOCswODowMCIsDQogICAgInByb2R1Y3Rpb25fcm9vdCI6ICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgInByb2R1Y3Rpb25fcGF0aHMiOiAgWw0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHN0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcbW9uaXRvci5waWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xccmVtaW5kX3N0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcY3JlZGVudGlhbHMubWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbGxtX2NvbmZpZy5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcY2hyb21lLXByb2ZpbGUiDQogICAgICAgICAgICAgICAgICAgICAgICAgXQ0KfQ=="
+                                                                                              },
+                                                                                              {
+                                                                                                  "PID":  28240,
+                                                                                                  "Nonce":  "fcb98607fb8249e0a8372ed98cef9806",
+                                                                                                  "Test":  "review_fixes_entry.tests.ps1",
+                                                                                                  "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-9386c93f6eba479cbeabe0ad148dd5be",
+                                                                                                  "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-9386c93f6eba479cbeabe0ad148dd5be\\.aar-isolation.json",
+                                                                                                  "MarkerSHA256":  "783DBECFC154E700003142503FEEE0EFF834656E0882ECC05266E8F03AC6F35C",
+                                                                                                  "AtUtc":  "2026-10-07T01:29:46.7321080Z",
+                                                                                                  "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAyODI0MCwNCiAgICAibm9uY2UiOiAgImZjYjk4NjA3ZmI4MjQ5ZTBhODM3MmVkOThjZWY5ODA2IiwNCiAgICAidGVzdCI6ICAicmV2aWV3X2ZpeGVzX2VudHJ5LnRlc3RzLnBzMSIsDQogICAgImNyZWF0ZWQiOiAgIjIwMjYtMTAtMDdUMDk6Mjk6NDYuNjU0NjYxOCswODowMCIsDQogICAgInByb2R1Y3Rpb25fcm9vdCI6ICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgInByb2R1Y3Rpb25fcGF0aHMiOiAgWw0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHN0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcbW9uaXRvci5waWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xccmVtaW5kX3N0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcY3JlZGVudGlhbHMubWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbGxtX2NvbmZpZy5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcY2hyb21lLXByb2ZpbGUiDQogICAgICAgICAgICAgICAgICAgICAgICAgXQ0KfQ=="
+                                                                                              },
+                                                                                              {
+                                                                                                  "PID":  28240,
+                                                                                                  "Nonce":  "fcb98607fb8249e0a8372ed98cef9806",
+                                                                                                  "Test":  "review_fixes_entry.tests.ps1",
+                                                                                                  "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-7472ff5ac15c43f8a48dd3c4e1c1c3a8",
+                                                                                                  "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-7472ff5ac15c43f8a48dd3c4e1c1c3a8\\.aar-isolation.json",
+                                                                                                  "MarkerSHA256":  "AB60370F9AD576808C253E75C2952CF77787252C2ACA5ED1286538FA1FD7923F",
+                                                                                                  "AtUtc":  "2026-10-07T01:29:46.9401690Z",
+                                                                                                  "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAyODI0MCwNCiAgICAibm9uY2UiOiAgImZjYjk4NjA3ZmI4MjQ5ZTBhODM3MmVkOThjZWY5ODA2IiwNCiAgICAidGVzdCI6ICAicmV2aWV3X2ZpeGVzX2VudHJ5LnRlc3RzLnBzMSIsDQogICAgImNyZWF0ZWQiOiAgIjIwMjYtMTAtMDdUMDk6Mjk6NDYuOTI4NDI0MiswODowMCIsDQogICAgInByb2R1Y3Rpb25fcm9vdCI6ICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgInByb2R1Y3Rpb25fcGF0aHMiOiAgWw0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHN0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcbW9uaXRvci5waWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xccmVtaW5kX3N0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcY3JlZGVudGlhbHMubWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbGxtX2NvbmZpZy5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcY2hyb21lLXByb2ZpbGUiDQogICAgICAgICAgICAgICAgICAgICAgICAgXQ0KfQ=="
+                                                                                              }
+                                                                                          ],
+                                                                             "Switches":  [
+                                                                                              {
+                                                                                                  "From":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-9386c93f6eba479cbeabe0ad148dd5be",
+                                                                                                  "To":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-reviewfix-7472ff5ac15c43f8a48dd3c4e1c1c3a8",
+                                                                                                  "AtUtc":  "2026-10-07T01:29:46.9146031Z",
+                                                                                                  "Declared":  false,
+                                                                                                  "Reason":  "",
+                                                                                                  "Status":  "verified",
+                                                                                                  "MarkerVerifiedAtUtc":  "2026-10-07T01:29:46.9362265Z"
+                                                                                              }
+                                                                                          ]
+                                                                         },
+                                                               "Verified":  true,
+                                                               "Reason":  "child-identity-marker-and-runtime-root-verified",
+                                                               "ExitCode":  0
+                                                           },
+                          "reception_facts.tests.ps1":  {
+                                                            "ChildPID":  12388,
+                                                            "Nonce":  "d1ea7237aff849849762871033c51f55",
+                                                            "Test":  "reception_facts.tests.ps1",
+                                                            "Proof":  {
+                                                                          "PID":  12388,
+                                                                          "Nonce":  "d1ea7237aff849849762871033c51f55",
+                                                                          "Test":  "reception_facts.tests.ps1",
+                                                                          "Contexts":  [
+                                                                                           {
+                                                                                               "PID":  12388,
+                                                                                               "Nonce":  "d1ea7237aff849849762871033c51f55",
+                                                                                               "Test":  "reception_facts.tests.ps1",
+                                                                                               "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-2f1377deb50f44afbabbbc034fce3593",
+                                                                                               "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-2f1377deb50f44afbabbbc034fce3593\\.aar-isolation.json",
+                                                                                               "MarkerSHA256":  "1DAB854F06D6EB6D2D1232BD7841FD1CF8ECF0A29526A2E1749490CED2C2E3CF",
+                                                                                               "AtUtc":  "2026-10-07T01:29:00.1610387Z",
+                                                                                               "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxMjM4OCwNCiAgICAibm9uY2UiOiAgImQxZWE3MjM3YWZmODQ5ODQ5NzYyODcxMDMzYzUxZjU1IiwNCiAgICAidGVzdCI6ICAicmVjZXB0aW9uX2ZhY3RzLnRlc3RzLnBzMSIsDQogICAgImNyZWF0ZWQiOiAgIjIwMjYtMTAtMDdUMDk6Mjk6MDAuMTQwNDYwMiswODowMCIsDQogICAgInByb2R1Y3Rpb25fcm9vdCI6ICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgInByb2R1Y3Rpb25fcGF0aHMiOiAgWw0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHN0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcbW9uaXRvci5waWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xccmVtaW5kX3N0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcY3JlZGVudGlhbHMubWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbGxtX2NvbmZpZy5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcY2hyb21lLXByb2ZpbGUiDQogICAgICAgICAgICAgICAgICAgICAgICAgXQ0KfQ=="
+                                                                                           },
+                                                                                           {
+                                                                                               "PID":  12388,
+                                                                                               "Nonce":  "d1ea7237aff849849762871033c51f55",
+                                                                                               "Test":  "reception_facts.tests.ps1",
+                                                                                               "RuntimeRoot":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-2f1377deb50f44afbabbbc034fce3593",
+                                                                                               "Marker":  "C:\\Users\\<local-user>\\AppData\\Local\\Temp\\aar-test-2f1377deb50f44afbabbbc034fce3593\\.aar-isolation.json",
+                                                                                               "MarkerSHA256":  "1DAB854F06D6EB6D2D1232BD7841FD1CF8ECF0A29526A2E1749490CED2C2E3CF",
+                                                                                               "AtUtc":  "2026-10-07T01:29:00.2174870Z",
+                                                                                               "MarkerBytes":  "77u/ew0KICAgICJpc29sYXRlZCI6ICB0cnVlLA0KICAgICJjaGlsZFBJRCI6ICAxMjM4OCwNCiAgICAibm9uY2UiOiAgImQxZWE3MjM3YWZmODQ5ODQ5NzYyODcxMDMzYzUxZjU1IiwNCiAgICAidGVzdCI6ICAicmVjZXB0aW9uX2ZhY3RzLnRlc3RzLnBzMSIsDQogICAgImNyZWF0ZWQiOiAgIjIwMjYtMTAtMDdUMDk6Mjk6MDAuMTQwNDYwMiswODowMCIsDQogICAgInByb2R1Y3Rpb25fcm9vdCI6ICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgInByb2R1Y3Rpb25fcGF0aHMiOiAgWw0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxzY3JpcHRzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXGRhdGEiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbG9ncyIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5XFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHlcXHNjcmlwdHNcXHN0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xcbW9uaXRvci5waWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcc2NyaXB0c1xccmVtaW5kX3N0YXRlLmpzb24iLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcY3JlZGVudGlhbHMubWQiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseVxcbGxtX2NvbmZpZy5qc29uIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcZGF0YSIsDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICJEOlxcYWxpYmFiYS1hdXRvLXJlcGx5LXJ1bnRpbWVcXGxvZ3MiLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAiRDpcXGFsaWJhYmEtYXV0by1yZXBseS1ydW50aW1lXFxiYWNrdXBzIiwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIkQ6XFxhbGliYWJhLWF1dG8tcmVwbHktcnVudGltZVxcY2hyb21lLXByb2ZpbGUiDQogICAgICAgICAgICAgICAgICAgICAgICAgXQ0KfQ=="
+                                                                                           }
+                                                                                       ],
+                                                                          "Switches":  [
+
+                                                                                       ]
+                                                                      },
+                                                            "Verified":  true,
+                                                            "Reason":  "child-identity-marker-and-runtime-root-verified",
+                                                            "ExitCode":  0
+                                                        }
+                      },
+    "isolationEvidenceScope":  "Verified child PID, test, nonce, declared runtime roots and marker hashes; real model/CDP/send/notification adapters refuse offline context. This does not prove every direct file IO stayed inside these roots.",
+    "failedFiles":  [
+                        "pending_reply_policy.tests.ps1"
+                    ]
+}

@@ -1,0 +1,856 @@
+TEST-LAYER=Offline files=7 productionGuard=True
+PRODUCTION-PATHS: C:\path\to\alibaba-auto-reply ; C:\path\to\alibaba-auto-reply\scripts ; C:\path\to\alibaba-auto-reply\data ; C:\path\to\alibaba-auto-reply\logs ; C:\path\to\alibaba-auto-reply\backups ; C:\path\to\alibaba-auto-reply\scripts\state.json ; C:\path\to\alibaba-auto-reply\scripts\monitor.pid ; C:\path\to\alibaba-auto-reply\scripts\remind_state.json ; C:\path\to\alibaba-auto-reply\credentials.md ; C:\path\to\alibaba-auto-reply\llm_config.json ; C:\path\to\alibaba-auto-reply-runtime\data ; C:\path\to\alibaba-auto-reply-runtime\logs ; C:\path\to\alibaba-auto-reply-runtime\backups ; C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+PRODUCTION-WRITER: running=False lockHolder= processes=
+PRODUCTION-WRITER-OWNED-PATHS: C:\path\to\alibaba-auto-reply-runtime\chrome-profile
+=== conversation_scope.tests.ps1 ===
+CHILD-CONTEXT test=conversation_scope.tests.ps1 pid=6028 nonce=d278eed0a1cd4fd38264161d8776261e verified=True contexts=2 exit=0
+  PASS conversation_scope DOM regressions=24
+  RESULT conversation_scope: PASS (production DOM scripts + unreadable snapshot guard)
+  
+  
+=== reply_chain.tests.ps1 ===
+CHILD-CONTEXT test=reply_chain.tests.ps1 pid=26204 nonce=e05b9fda00f84d1f9dd8071c723c2dab verified=True contexts=2 exit=0
+  == reply_chain tests ==
+  RESULT: pass=156 fail=0
+  ALL PASS
+  
+  
+=== new_message_cooldown.tests.ps1 ===
+CHILD-CONTEXT test=new_message_cooldown.tests.ps1 pid=30056 nonce=4de8f3d20e744f6ca1643a5816b15361 verified=True contexts=2 exit=1
+  FAIL A1 equal count changed original hash is positive evidence
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  Latest buyer msg: edited latest request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1638 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=553 budget=180s
+  FAIL A2 19.999s blocks before generation
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=586 budget=180s
+  FAIL A2 floor deadline anchored to successful send
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=586 budget=180s
+  FAIL A2 repeated scans do not move deadline
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=586 budget=180s
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=2 ledgerKey=30FDB79391539CDD54E8E425ACCC8DD4|2
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  FAIL A6 verified repeated old-message holds retain third-hold alert
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  Latest buyer msg: old request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  Latest buyer msg: old request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  Latest buyer msg: old request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  FAIL A7 bad key [] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=685 budget=180s
+  FAIL A7 bad key [ABC] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=ABC
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=533 budget=180s
+  FAIL A7 bad key [|1] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=525 budget=180s
+  FAIL A7 bad key [ABC|oops] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=ABC|oops
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=582 budget=180s
+  FAIL A7 bad key [ABC|2147483648] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=ABC|2147483648
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=536 budget=180s
+  FAIL A7 bad key [ABC|1|extra] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=ABC|1|extra
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=675 budget=180s
+  FAIL A7 bad key [ABC|0] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=ABC|0
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=518 budget=180s
+  FAIL A7 bad key [ABC|-1] no exemption or exception
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=ABC|-1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=539 budget=180s
+  FAIL A7 count decrease changed hash no exemption
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|3
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=501 budget=180s
+  FAIL A7 collision marks latest identity untrusted
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=3 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=3 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=3 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=general src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1656 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=542 budget=180s
+  FAIL A7 missing latest time identity keeps ordinary minute gate
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  Latest buyer msg: request without message time
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1652 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=513 budget=180s
+  FAIL A7 unreadable key recheck is not logged as confirmed lift
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=519 budget=180s
+  FAIL A8 POST_SEND_COOLDOWN 299.999s blocked
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=518 budget=180s
+  FAIL A8 POST_SEND_COOLDOWN repeated scan preserves deadline
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=518 budget=180s
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=2 ledgerKey=30FDB79391539CDD54E8E425ACCC8DD4|2
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  FAIL A8 RATE_MIN_GAP 299.999s blocked
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 0min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=535 budget=180s
+  FAIL A8 RATE_MIN_GAP deadline anchored
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 0min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=535 budget=180s
+  FAIL A8 RATE_MIN_GAP repeated scan preserves deadline
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 0min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=535 budget=180s
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=2 ledgerKey=30FDB79391539CDD54E8E425ACCC8DD4|2
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  FAIL A9 real human interjection gate blocks
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=1 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=505 budget=180s
+  FAIL A9 human interjection reached the human-last gate branch
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=1 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=505 budget=180s
+  FAIL A9 explicit human hold not cancelled by periodic scheduler
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=1 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=505 budget=180s
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False
+  Latest buyer msg: later request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=10573B873D2FA5A365D558A45E328E47|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1622 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=484 budget=180s
+  FAIL A9 real ledger usability blocks new message
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=LEDGER_UNUSABLE buyerMsgs=2 ledgerKey=
+  PENDING-REPLY-HOLD Virtual Buyer: LEDGER_UNUSABLE
+  FAIL A9 startup observation blocks all reads/model/send
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=545 budget=180s
+  FAIL A9 insufficient consecutive rounds do not install cooldown
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=526 budget=180s
+  FAIL A10 wait uses fresh latest input at expiry
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=514 budget=180s
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=3 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: newest input 77 kg
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=3 ledgerKey=30FDB79391539CDD54E8E425ACCC8DD4|2
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=3 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1724 violations=[] fallback=business-body-sensitive ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=115 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the carton sizes (L x W x H)? Could you confirm which weight and its packaging scope we should use?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=803 budget=180s
+  FAIL A11 19 second buyer independent no global wait
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=519 budget=180s
+  PROCESS convo from pending-list: Second Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Second Buyer
+  MSG-SCHEMA Second Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Second Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=
+  ROUND-START Second Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR second buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Second Buyer readHoldMs=0
+  REPLY-GEN Second Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Second Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Second Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Second Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Second Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Second Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Second Buyer ms=517 budget=180s
+  FAIL A11 60 second buyer independent no global wait
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=legacy
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=514 budget=180s
+  PROCESS convo from pending-list: Second Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Second Buyer
+  MSG-SCHEMA Second Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Second Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=
+  ROUND-START Second Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR second buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Second Buyer readHoldMs=0
+  REPLY-GEN Second Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Second Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Second Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Second Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Second Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Second Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Second Buyer ms=526 budget=180s
+  FAIL read cache before interval avoids unnecessary generation and read
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=526 budget=180s
+  FAIL read cache exact 20s interval discovers new input
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1639 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=526 budget=180s
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: new request
+  SHOULD-REPLY Virtual Buyer: Reply=False Reason=ALREADY_ANSWERED buyerMsgs=2 ledgerKey=30FDB79391539CDD54E8E425ACCC8DD4|2
+  PENDING-REPLY-HOLD Virtual Buyer: ALREADY_ANSWERED
+  FAIL B14 warehouse destination never overrides real human interjection
+  PROCESS convo from pending-list: Virtual Buyer | unchanged
+  PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer
+  MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=1 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False
+  Latest buyer msg: Amazon FTW1
+  SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey=5F4D0B34776FECB1A130B4972E7DB45F|1
+  ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s
+  HUMAN-TASK-ERR virtual buyer : Production paths must never be resolved
+  LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0
+  REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1909 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc
+  Reply source: FALLBACK
+  PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger
+  ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub]
+  REPLIED to Virtual Buyer: SENT_OK [SENT_OK] 
+  Reply text: Could you share the total weight?
+  POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min)
+  QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor)
+  ROUND-DONE Virtual Buyer ms=537 budget=180s
+  RESULT pass=50 fail=34
+  
+  
+=== reception_facts.tests.ps1 ===
+CHILD-CONTEXT test=reception_facts.tests.ps1 pid=8384 nonce=b9910fd4b8f34d44807894c84d66ff4c verified=True contexts=2 exit=1
+  == reception_facts tests (2026-10-05 spec §8: C01-C22) ==
+    FAIL: C20-human-already-answered-blocks | got:[1] want:[0]
+  RESULT pass=505 fail=1
+  
+  
+=== review_fixes_entry.tests.ps1 ===
+CHILD-CONTEXT test=review_fixes_entry.tests.ps1 pid=39828 nonce=7f811d8762b347d8ac43bdd688a9be51 verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  True
+    FAIL: E-A2a-no-send-when-human-then-buyer got=[1] want=[0]
+    FAIL: E-A2a-pause-recorded 
+    FAIL: E-A2a-pause-active reason=no-pause
+    FAIL: E-A2a-pause-until-is-reply-plus-5 got=[] want=[10/05/2026 04:05:00]
+    FAIL: E-A2a-skip-logged 
+  True
+    FAIL: E-A2b-1249-no-send got=[1] want=[0]
+  True
+  True
+    FAIL: E-A2f-backlog-window-sends-nothing 
+    FAIL: E-A2f-backlog-window-is-a-real-pause 
+  True
+  True
+    FAIL: E-A2c-first-window until=
+  True
+    FAIL: E-A2c-new-human-reply-extends got=[] want=[10/05/2026 04:08:00]
+  True
+  True
+    FAIL: E-A2d-buyer-messages-do-not-send got=[1] want=[0]
+  True
+    FAIL: E-A2e-mid-generation-human-discards-draft got=[1] want=[0]
+    FAIL: E-A2e-stale-logged PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=1 buyers=1 order=single-message confident=True skipped=0 anomaly=False | Latest buyer msg: Can you quote 10 cartons to Hamburg? | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=1 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1544 violations=[] fallback=business-body-sensitive ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | ROUND-SEND Virtual Buyer chars=79 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? Could you share the carton sizes (L x W x H)? | POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min) | QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor) | ROUND-DONE Virtual Buyer ms=1149 budget=180s
+  True
+  True
+    FAIL: E-A2f-new-unknown-creates-hold PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | Latest buyer msg: are you there? | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=3 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1510 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? | POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min) | QUOTE-REMIND-SKIP Virtual Buyer: the unified quote readiness is not Ready (no second readiness judgement in the monitor) | ROUND-DONE Virtual Buyer ms=1045 budget=180s
+    FAIL: E-A2f-hold-is-five-minutes got=[] want=[10/05/2026 04:05:02]
+  True
+    FAIL: E-A2f-buyer-supplement-does-not-send got=[1] want=[0]
+    FAIL: E-A2f-hold-still-active 
+  True
+  True
+  True
+    FAIL: E-A2h-pause-read-failure-blocks-send got=[1] want=[0]
+    FAIL: E-A2h-failure-logged 
+  True
+  True
+  True
+  True
+  True
+    FAIL: E-A3f-repeat-scan-no-duplicate-task got=[2] want=[1]
+    FAIL: E-A3f-other-supplier-is-separate got=[3] want=[2]
+  True
+  True
+  True
+  True
+    FAIL: E-A5b-scan-processes-with-valid-empty-ledger got=[2] want=[1]
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  
+  True
+  True
+    FAIL: E-F2a-baseline-unknown-creates-hold PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=2 buyers=1 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | Latest buyer msg: Can you help with shipping? | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=1 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=2 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=new_inquiry src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1509 violations=[] fallback=business-body-sensitive ask=[weight] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | ROUND-SEND Virtual Buyer chars=33 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? | POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min) | ROUND-DONE Virtual Buyer ms=1178 budget=180s
+    FAIL: E-F2a-baseline-no-send got=[1] want=[0]
+  True
+    FAIL: E-F2a-new-unknown-plus-buyer-does-not-send got=[1] want=[0]
+    FAIL: E-F2a-hold-persisted PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=4 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | Latest buyer msg: 10 cartons to Hamburg | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=4 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1627 violations=[] fallback=business-body-sensitive ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | ROUND-SEND Virtual Buyer chars=79 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? Could you share the carton sizes (L x W x H)? | POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min) | ROUND-DONE Virtual Buyer ms=1319 budget=180s
+    FAIL: E-F2a-hold-anchored-on-message-time 
+    FAIL: E-F2a-hold-anchor-source got=[] want=[message-time]
+    FAIL: E-F2a-skip-logged PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=4 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | Latest buyer msg: 10 cartons to Hamburg | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=4 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1627 violations=[] fallback=business-body-sensitive ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | ROUND-SEND Virtual Buyer chars=79 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? Could you share the carton sizes (L x W x H)? | POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min) | ROUND-DONE Virtual Buyer ms=1319 budget=180s
+  True
+  True
+    FAIL: E-F2c-identical-text-new-time-is-a-new-event 
+    FAIL: E-F2c-no-send got=[1] want=[0]
+  True
+  True
+    FAIL: E-F2f-mid-generation-unknown-discards-draft PROCESS convo from pending-list: Virtual Buyer | unchanged | PAGE-LOCK-ACQUIRED phase=read convo=Virtual Buyer | MSG-SCHEMA Virtual Buyer v=3 msgs=3 buyers=2 order=timestamps-monotonic-ascending confident=True skipped=0 anomaly=False | Latest buyer msg: Can you quote 10 cartons to Hamburg? | SHOULD-REPLY Virtual Buyer: Reply=True Reason=IN_PENDING_LIST buyerMsgs=2 ledgerKey= | ROUND-START Virtual Buyer attach=none imgs=0 ctx=3 budget=180s | HUMAN-TASK-NO-EXACT-REF Virtual Buyer reason=ambiguous-flow candidates=0 ambiguous=False : no related task, no supplier action is authorized | LOCK-RELEASED-FOR-GENERATION Virtual Buyer readHoldMs=0 | REPLY-GEN Virtual Buyer scenario=details_given src=FALLBACK modelCalls=2 rewrites=1 ctxChars=1626 violations=[] fallback=business-body-sensitive ask=[weight,dimension] todo= orderConfident=True subject=unknown facts=[] unresolved=[] clock=injected-utc | Reply source: FALLBACK | PAGE-LOCK-REACQUIRED phase=send convo=Virtual Buyer verified=identity+input+human+pause+hold+ledger | ROUND-SEND Virtual Buyer chars=79 elapsed=0s status=SENT_OK evidence=[stub] | REPLIED to Virtual Buyer: SENT_OK [SENT_OK]  | Reply text: Could you share the total weight? Could you share the carton sizes (L x W x H)? | POST-SEND-COOLDOWN Virtual Buyer 5min (config key reply_post_send_cooldown_min) | ROUND-DONE Virtual Buyer ms=1275 budget=180s
+    FAIL: E-F2f-no-send got=[1] want=[0]
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+  True
+    FAIL: E3-X3-paused-by-real-human-only got=[1] want=[0]
+    FAIL: E3-X3-pause-identity-is-the-human-line 
+    FAIL: E3-X3-absolute-deadline-is-human-plus-5 got=[] want=[10/05/2026 04:05:01]
+  True
+  RESULT: pass=165 fail=36
+  FAILED CASES: E-A2a-no-send-when-human-then-buyer, E-A2a-pause-recorded, E-A2a-pause-active, E-A2a-pause-until-is-reply-plus-5, E-A2a-skip-logged, E-A2b-1249-no-send, E-A2f-backlog-window-sends-nothing, E-A2f-backlog-window-is-a-real-pause, E-A2c-first-window, E-A2c-new-human-reply-extends, E-A2d-buyer-messages-do-not-send, E-A2e-mid-generation-human-discards-draft, E-A2e-stale-logged, E-A2f-new-unknown-creates-hold, E-A2f-hold-is-five-minutes, E-A2f-buyer-supplement-does-not-send, E-A2f-hold-still-active, E-A2h-pause-read-failure-blocks-send, E-A2h-failure-logged, E-A3f-repeat-scan-no-duplicate-task, E-A3f-other-supplier-is-separate, E-A5b-scan-processes-with-valid-empty-ledger, E-F2a-baseline-unknown-creates-hold, E-F2a-baseline-no-send, E-F2a-new-unknown-plus-buyer-does-not-send, E-F2a-hold-persisted, E-F2a-hold-anchored-on-message-time, E-F2a-hold-anchor-source, E-F2a-skip-logged, E-F2c-identical-text-new-time-is-a-new-event, E-F2c-no-send, E-F2f-mid-generation-unknown-discards-draft, E-F2f-no-send, E3-X3-paused-by-real-human-only, E3-X3-pause-identity-is-the-human-line, E3-X3-absolute-deadline-is-human-plus-5
+  
+  
+=== closure_s5.tests.ps1 ===
+CHILD-CONTEXT test=closure_s5.tests.ps1 pid=22028 nonce=d699dffaeac94af794df14a404eb835e verified=True contexts=3 exit=1
+  == review_fixes entry tests (real monitor entry, isolated) ==
+  WARNING: no_reply: 
+  C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-080641a1299a4a9e8e43ff84cfb31b89\data\manual_override.json 不存在,按空名单处理
+  PASS P03-program-source-send
+  PASS D04-awaiting-conditional-send
+  PASS X01
+  PASS X02
+  PASS X03
+  FAIL X04 assertion failed
+  PASS X05
+  PASS X05-invalid-success-claim
+  PASS X05-reconciled-positive
+  PASS X06-read-guard-preserves-not-attempted
+  RESULT closure_s5 pass=8 fail=1 root=C:\Users\<local-user>\AppData\Local\Temp\aar-reviewfix-080641a1299a4a9e8e43ff84cfb31b89
+  
+  
+=== send_attempt_receipt.tests.ps1 ===
+CHILD-CONTEXT test=send_attempt_receipt.tests.ps1 pid=3984 nonce=12c7adb528a647dda64cfa59d6bf53d7 verified=True contexts=2 exit=0
+  RESULT: pass=120 fail=0
+  ALL PASS
+  
+  
+
+TEST-SUMMARY: layer=Offline files=7 failedFiles=4 pass=1004 fail=72
+LogicTests=FAIL files=7 failedFiles=4 pass=1004 fail=72
+  failed files: new_message_cooldown.tests.ps1, reception_facts.tests.ps1, review_fixes_entry.tests.ps1, closure_s5.tests.ps1
+IsolationChecks=PASS checked=7 issues=0
+ProductionPathAudit=PASS changes=0 writerRunning=False reason=no production path changed during this run
+  attribution-clues(before): {"capturedAtUtc":"2026-10-07T01:15:42.1691372Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+  attribution-clues(after): {"capturedAtUtc":"2026-10-07T01:19:55.1700076Z","lockHolderPid":"","monitorWatchdog":[],"chromeProcesses":["4172","4212","4468","6772","11388","12468","12932","17296","18248","19400","21928","22024","22084","22276","23016","24792","26344","26448","28816","30040","31292","32096","36668","37164","37512","37676","37720"],"chromeProfilePath":""}
+Overall=FAIL exitCode=1

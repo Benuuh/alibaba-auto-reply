@@ -6,14 +6,7 @@
 #   合规检查、报价判据、账本门禁）全部是**生产实现**，不是桩。
 #
 # 覆盖：
-#   E-A2a 可信人工回复 -> 买家补充消息：暂停生效，本轮不发送（旧编排 PauseUpdates=0 / Sends=1）
-#   E-A2b 12:00 人工 / 12:01 买家 / 12:04:59 不发送；12:05:00 之后门禁通过才可发送
-#   E-A2c 12:03 新人工回复把截止推到 12:08；同一条重扫不延长
-#   E-A2d 程序重新加载（重新读盘）不提前解除暂停
-#   E-A2e 生成期间出现新的人工回复 => 旧草稿丢弃
-#   E-A2f 未知来源新我方消息 => source_unknown_hold；买家补充消息不能解除
-#   E-A2g 已确认机器人消息（发送记录）不触发人工暂停
-#   E-A2h 暂停状态读取失败 => fail-closed，不发送
+#   Pending membership overrides retired source/time waits; new cases cover this policy.
 #   E-A3a 供应商联系场景：**生成前**任务已存在且为 pending_human，含真实联系方式与来源
 #   E-A3b 无联系方式时落盘 awaiting_contact；补充联系人后更新同一条任务
 #   E-A3c 任务写入失败 => 不承诺联系（措辞被拦）
@@ -58,6 +51,19 @@ Check 'E0-runtime-is-isolated' (Test-AarIsolatedRuntime) 'isolation marker missi
 . (Join-Path $scripts 'lib\state_store.ps1')
 . (Join-Path $scripts 'lib\sent_records.ps1')
 . (Join-Path $scripts 'lib\human_pause.ps1')
+# [2026-10-07 spec §3.2 第 3 条] 无发送者证据的 [ME] 行现在是 unknown，不再外推为人工。
+#   夹具用逐条已验证的发送者字段提供人工来源证据（字段在 @@META 载荷里，正文无法伪造）。
+. (Join-Path $scripts 'lib\msg_events.ps1')
+[void](Set-MessageSourceContext -Rules (New-MessageSourceRuleSet -VerifiedFields ([pscustomobject]@{ 'sender=owner' = 'human' }) -Provenance 'fixture-verified-owner-field'))
+function New-OwnerMeta([string]$text, [long]$ts) {
+    return (ConvertTo-MessageMetaMarker ([pscustomobject]@{
+        v = 'msgevent-2026-10-07.1'; t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        dir = 'out'; dirsrc = 'layout'; mid = ''; ts = $ts; tprec = 'second'; st = 'message'
+        src = @(); f = @('sender=owner'); at = '2026-10-05T00:00:00Z'; idq = 'composite'
+    }))
+}
+function OwnerLine([string]$text, [long]$ts) { return ('[ME] ' + $text + ' @@MT:' + $ts + ' ' + (New-OwnerMeta $text $ts)) }
+
 . (Join-Path $scripts 'lib\human_tasks.ps1')
 . (Join-Path $scripts 'lib\goods.ps1')
 . (Join-Path $scripts 'lib\quote.ps1')
@@ -67,10 +73,11 @@ $tk = $null; $errs = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $scripts 'monitor.ps1'), [ref]$tk, [ref]$errs)
 if ($errs.Count) { throw 'monitor.ps1 failed to parse' }
 $entryFns = @(
-    'Invoke-ConvoItem', 'Invoke-ScanRound', 'Update-PendingSeen', 'Generate-Reply-LLM', 'Set-StateHash',
+    'Invoke-ConvoItem', 'Get-MonitorSourceGate', 'Get-MonitorSourceRules', 'Get-MonitorSourceConfirmed', 'New-MonitorInvestigation', 'New-SourceUnknownInvestigation', 'Invoke-MonitorInvestigationSweep', 'Invoke-MonitorInvestigationRetention', 'Invoke-ScanRound', 'Update-PendingSeen', 'Generate-Reply-LLM', 'Set-StateHash',
     'Test-RepliedStateUsable', 'Get-RepliedStateFileSize', 'Get-RepliedState', 'Repair-RepliedState',
     'Get-LedgerHealth', 'Reset-LedgerHealthCache', 'Get-CachedDocumentRead', 'Test-LedgerShape',
-    'Get-ReplyEntryCount', 'Test-LedgerFirstInitAllowed', 'Get-TaskContextForConvo', 'Add-LedgerReadLog'
+    'Get-ReplyEntryCount', 'Test-LedgerFirstInitAllowed', 'Get-TaskContextForConvo', 'Add-LedgerReadLog',
+    'Test-PageConfirmedSendResult', 'Test-ReconciledDeliveryEvidence', 'Complete-ReconciledDelivery'
 )
 foreach ($fnName in $entryFns) {
     $fnAst = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $fnName }, $true)
@@ -147,7 +154,7 @@ function Release-AppLock { param([string]$name) return $true }
 function Test-NoReplyBuyer { return [bool]$script:manual }
 function Save-BuyerProfile { }
 function Remove-PendingRetry { }
-function Add-PendingRetry { param($key, $reason) }
+function Add-PendingRetry { param($key, $reason, $DedupKey = '', $PageConfirmed = $false) }
 function Read-RetryTable { return @{ items = @{} } }
 function Start-LlmRound { return @{ sw = [Diagnostics.Stopwatch]::StartNew() } }
 function Stop-LlmRound { }
@@ -191,7 +198,7 @@ function Add-HumanTaskNotification { param([Parameter(Mandatory = $true)][string
 
 # 发送适配器：最外层桩。它同时记录'买家会收到什么'与调用次数。
 function Send-OneTalkMessageEx {
-    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation)
+    param($buyer, $text, $Page = $null, [switch]$AlreadyOpen, [switch]$SkipConfirmation, [string]$AttemptId = '')
     $script:sends++
     $script:sentText = [string]$text
     $status = [string]$script:sendResult
@@ -211,7 +218,8 @@ function B64([string]$s) { return [Convert]::ToBase64String([Text.Encoding]::UTF
 $LF = [string][char]10
 function BLine([string]$t, [long]$ts) { return ('[BUYER] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts + ' @@OT:' + (B64 $t)) }
 function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts) }
-function HumanLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts) }
+function PlainMeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts) }
+function HumanLine([string]$t, [long]$ts) { return (OwnerLine $t $ts) }
 
 function Reset([string]$raw = '') {
     $script:logs = @(); $script:sends = 0; $script:modelCalls = 0; $script:reads = 0
@@ -242,7 +250,7 @@ function Open-ConvoAndGetMessages($name) { $script:reads++; return [pscustomobje
 #   这样 A5 验的是生产判据本身，而不是一个桩。
 $script:stateFile = Join-Path $isoRoot 'state.json'
 $script:seedLedger = $true
-function Set-RepliedState($state) { $script:ledgerWrites++; return $true }
+function Set-RepliedState($state) { $script:ledgerWrites++; [IO.File]::WriteAllText($script:stateFile,($state|ConvertTo-Json -Depth 50),(New-Object Text.UTF8Encoding($true))); return $true }
 function Repair-RepliedState { return $false }
 
 function Seen($ctx) { Update-PendingSeen $ctx @($item) }
@@ -274,150 +282,10 @@ function Clear-TaskState {
     if (Test-Path $bak) { Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue }
 }
 # ============================================================================================
-# A2 - 人工五分钟让路（真实入口 + 发送桩）
-# ============================================================================================
-# 基线复现的形态：会话末尾是「可信人工回复 -> 新买家消息」。旧编排只在闸门 SKIP 时更新暂停，
-#   于是 PauseUpdates=0 且 Sends=1；现在进入会话时先扫描整段快照并检查持久化暂停。
-# @@MT 是 UTC 毫秒，必须是可解析的真实时刻（夹具用 2030-01-01 前后的值）。
+# Pending policy baseline, also the AST harness boundary used by integration tests.
 $ts0 = [long]1791172800000
 Set-FixNow '2026-10-05T12:00:00'
 Clear-PauseState
-$ctx = Reset (HumanLine 'I will take this one myself' $ts0)
-$script:raw += [string][char]10 + (BLine 'Any update on my quote?' ($ts0 + 1000))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2a-no-send-when-human-then-buyer' $script:sends 0
-Check 'E-A2a-pause-recorded' ($null -ne (Get-HumanPause 'Virtual Buyer')) ''
-$pauseA = Test-HumanPauseActive -Buyer 'Virtual Buyer' -NowUtc $script:nowUtc
-Check 'E-A2a-pause-active' ([bool]$pauseA.Active) ('reason=' + $pauseA.Reason)
-Eq 'E-A2a-pause-until-is-reply-plus-5' (ConvertTo-HumanPauseUtc $pauseA.Until) $script:nowUtc.AddMinutes(5)
-Check 'E-A2a-skip-logged' ([bool](($script:logs -join [string][char]10) -match 'HUMAN-PAUSE-ACTIVE-SKIP')) ''
-
-# 12:04:59 仍在窗口内 => 不发送；12:05:00 之后到期 => 正常门禁重新生效。
-Set-FixNow '2026-10-05T12:04:59'
-$ctx = Reset (HumanLine 'I will take this one myself' $ts0)
-$script:raw += [string][char]10 + (BLine 'Any update on my quote?' ($ts0 + 1000))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2b-1249-no-send' $script:sends 0
-Set-FixNow '2026-10-05T12:05:01'
-$ctx = Reset (HumanLine 'I will take this one myself' $ts0)
-$script:raw += [string][char]10 + (BLine 'Any update on my quote?' ($ts0 + 1000))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2b-after-expiry-gate-allows-send' $script:sends 1
-
-# 12:03 的新人工回复把截止推到 12:08；同一条消息重扫不延长。
-Clear-PauseState
-Set-FixNow '2026-10-05T12:00:00'
-$ctx = Reset ((HumanLine 'first human answer' $ts0) + [string][char]10 + (BLine 'any update?' ($ts0 + 1000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-$untilFirst = (Test-HumanPauseActive -Buyer 'Virtual Buyer' -NowUtc $script:nowUtc).Until
-Check 'E-A2c-first-window' (-not [bool]$script:sends -and $null -ne $untilFirst) ('until=' + $untilFirst)
-Set-FixNow '2026-10-05T12:03:00'
-$ctx = Reset ((HumanLine 'first human answer' $ts0) + [string][char]10 + (HumanLine 'second human answer' ($ts0 + 180000)) + [string][char]10 + (BLine 'any update?' ($ts0 + 181000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-$untilSecond = (Test-HumanPauseActive -Buyer 'Virtual Buyer' -NowUtc $script:nowUtc).Until
-Eq 'E-A2c-new-human-reply-extends' (ConvertTo-HumanPauseUtc $untilSecond) $script:nowUtc.AddMinutes(5)
-Set-FixNow '2026-10-05T12:04:00'
-$ctx = Reset ((HumanLine 'first human answer' $ts0) + [string][char]10 + (HumanLine 'second human answer' ($ts0 + 180000)) + [string][char]10 + (BLine 'any update?' ($ts0 + 181000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-$untilAgain = (Test-HumanPauseActive -Buyer 'Virtual Buyer' -NowUtc $script:nowUtc).Until
-Eq 'E-A2c-rescan-does-not-extend' (ConvertTo-HumanPauseUtc $untilAgain) (ConvertTo-HumanPauseUtc $untilSecond)
-
-# 重新读盘（模拟程序重启）不提前解除、也不重新计时。
-$reload = Get-HumanPause 'Virtual Buyer'
-Eq 'E-A2d-pause-survives-reload' (ConvertTo-HumanPauseUtc $reload.untilUtc) (ConvertTo-HumanPauseUtc $untilSecond)
-# 买家连续多条消息也不延长人工暂停（暂停只按人工回复计时）。
-$ctx = Reset ((HumanLine 'second human answer' ($ts0 + 180000)) + [string][char]10 + (BLine 'and one more thing' ($ts0 + 200000)) + [string][char]10 + (BLine 'also this' ($ts0 + 220000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2d-buyer-messages-do-not-extend' (ConvertTo-HumanPauseUtc (Get-HumanPause 'Virtual Buyer').untilUtc) (ConvertTo-HumanPauseUtc $untilSecond)
-Eq 'E-A2d-buyer-messages-do-not-send' $script:sends 0
-
-# 生成期间出现新的人工回复 => 旧草稿丢弃。
-Clear-PauseState
-Set-FixNow '2026-10-05T12:00:00'
-$script:raw2 = ''
-$ctx = Reset (BLine 'Can you quote 10 cartons to Hamburg?' $ts0)
-MarkSeen $ctx
-function Open-ConvoAndGetMessages($name) {
-    $script:reads++
-    if ($script:reads -ge 2 -and $script:raw2) { return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw2; profile = '' } }
-    return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw; profile = '' }
-}
-$script:raw2 = (BLine 'Can you quote 10 cartons to Hamburg?' $ts0) + [string][char]10 + (HumanLine 'hold on, I will answer this one' ($ts0 + 30000))
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2e-mid-generation-human-discards-draft' $script:sends 0
-Check 'E-A2e-stale-logged' ([bool](($script:logs -join [string][char]10) -match 'STALE-DRAFT-DISCARD')) ($script:logs -join ' | ')
-function Open-ConvoAndGetMessages($name) { $script:reads++; return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw; profile = '' } }
-
-# 未知来源的我方**新**消息 => 独立、持久化、去重的等待窗口；买家补充消息不能立即解除。
-Clear-PauseState
-Set-FixNow '2026-10-05T12:00:00'
-$baseLines = (BLine 'hello' $ts0) + [string][char]10 + (BLine 'are you there?' ($ts0 + 1000))
-# 首次加载：整段历史里没有来源不明的我方消息 => 不产生任何等待状态。
-$ctx = Reset $baseLines
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Check 'E-A2f-first-load-creates-no-hold' ($null -eq (Get-SourceUnknownHold 'Virtual Buyer')) ''
-# 之后扫描时**新出现**一条只有时间戳的我方消息（页面抽到但没有发送者证据）：
-#   既不当作机器人（不发送），也不当作人工（不开始暂停），而是开启独立等待窗口。
-# 显式构造"只有时间戳、没有逐条发送标记"的我方消息：剔除 @@TS（机器人标记）但保留 @@MT（时间）。
-# 页面抽取给我方行加了时间戳却没有可验证的发送者来源：这一行是 unknown
-#   （既不当作机器人，也不当作人工）。页面形态 = 带 @@TS/@@MT 时间戳，但**不在**本系统已确认发送记录里。
-$unknownTail = '[ME] we replied but the page gave no sender @@TS:' + ($ts0 + 2000) + ' @@MT:' + ($ts0 + 2000)
-# 第二次扫描：快照里**新出现**一条无法证明来源的我方消息。水位线表示"这一个下标之前的
-#   未知我方消息都是已经登记过的历史"，因此下标 2 是这一轮新出现的介入。
-$ctx = Reset ($baseLines + [string][char]10 + $unknownTail)
-$ctx.sourceUnknownMarks['Virtual Buyer'] = 1
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-$hold = Get-SourceUnknownHold 'Virtual Buyer'
-Check 'E-A2f-new-unknown-creates-hold' ($null -ne $hold) ($script:logs -join ' | ')
-Check 'E-A2f-unknown-does-not-start-human-pause' ($null -eq (Get-HumanPause 'Virtual Buyer')) ''
-Eq 'E-A2f-hold-is-five-minutes' (ConvertTo-HumanPauseUtc $hold.untilUtc) $script:nowUtc.AddSeconds(2).AddMinutes(5)
-# 买家随后补充消息**不能**立即解除等待。
-Set-FixNow '2026-10-05T12:01:00'
-$ctx = Reset ($baseLines + [string][char]10 + $unknownTail + [string][char]10 + (BLine 'and now?' ($ts0 + 3000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2f-buyer-supplement-does-not-send' $script:sends 0
-Check 'E-A2f-hold-still-active' ([bool](Test-SourceUnknownHoldActive -Buyer 'Virtual Buyer' -NowUtc $script:nowUtc).Active) ''
-Eq 'E-A2f-hold-until-unchanged' (ConvertTo-HumanPauseUtc (Get-SourceUnknownHold 'Virtual Buyer').untilUtc) (ConvertTo-HumanPauseUtc $hold.untilUtc)
-# 同一条未知消息重扫不延长。
-$ctx = Reset ($baseLines + [string][char]10 + $unknownTail + [string][char]10 + (BLine 'and now?' ($ts0 + 3000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2f-rescan-does-not-extend-hold' (ConvertTo-HumanPauseUtc (Get-SourceUnknownHold 'Virtual Buyer').untilUtc) (ConvertTo-HumanPauseUtc $hold.untilUtc)
-# 到期后等待自动失效（只解除临时等待，不主动发问候）。
-Set-FixNow '2026-10-05T12:06:00'
-Check 'E-A2f-hold-expires' (-not [bool](Test-SourceUnknownHoldActive -Buyer 'Virtual Buyer' -NowUtc $script:nowUtc).Active) ''
-
-# 已确认机器人消息（发送记录命中）不触发人工暂停。
-Clear-PauseState
-function Get-SentRecordMatchIndexes { param([string]$Buyer, [string[]]$Lines) $m = @{}; for ($i = 0; $i -lt $Lines.Count; $i++) { if ($Lines[$i] -match '^\[ME\]') { $m[$i] = $true } }; return $m }
-Set-FixNow '2026-10-05T12:00:00'
-$ctx = Reset ((BLine 'hello' $ts0) + [string][char]10 + (MeLine 'our own bot answer' ($ts0 + 1000)) + [string][char]10 + (BLine 'still there?' ($ts0 + 2000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Check 'E-A2g-confirmed-bot-does-not-pause' ($null -eq (Get-HumanPause 'Virtual Buyer')) ''
-function Get-SentRecordMatchIndexes { param([string]$Buyer, [string[]]$Lines) return @{} }
-
-# 暂停状态读取失败 => fail-closed（不发送）。
-Clear-PauseState
-Set-FixNow '2026-10-05T12:00:00'
-$ctx = Reset ((HumanLine 'human answered first' $ts0) + [string][char]10 + (BLine 'any update?' ($ts0 + 1000)))
-MarkSeen $ctx
-$pauseBody = (Get-Command Test-HumanPauseActive).ScriptBlock
-function Test-HumanPauseActive { param([string]$Buyer, $Now = $null, $NowUtc = $null) throw 'pause store unreadable' }
-Invoke-ConvoItem $ctx $item
-Eq 'E-A2h-pause-read-failure-blocks-send' $script:sends 0
-Set-Item Function:Test-HumanPauseActive $pauseBody
-Check 'E-A2h-failure-logged' ([bool](($script:logs -join [string][char]10) -match 'HUMAN-PAUSE-ERR')) ''
 # A3 - 供应商任务在**生成之前**落盘，含真实联系方式与来源
 # ============================================================================================
 Clear-PauseState
@@ -507,9 +375,9 @@ MarkSeen $ctx
 Invoke-ConvoItem $ctx $item
 Invoke-ConvoItem $ctx $item
 Invoke-ConvoItem $ctx $item
-Eq 'E-A3f-repeat-scan-no-duplicate-task' (@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly).Count) 1
+Eq 'E-A3f-repeat-scan-no-duplicate-supplier-task' (@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly | Where-Object kind -eq supplier_verification).Count) 1
 $tkOther = New-OrUpdate-SupplierVerificationTask -Buyer 'Virtual Buyer' -SupplierContact 'other@example.net' -TriggerMessage 'Please use this other supplier for this shipment.'
-Eq 'E-A3f-other-supplier-is-separate' (@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly).Count) 2
+Eq 'E-A3f-other-supplier-is-separate' (@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly | Where-Object kind -eq supplier_verification).Count) 2
 Check 'E-A3f-other-supplier-different-key' ([string]$tkOther.Task.supplierKey -ne [string](@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly)[0]).supplierKey) ''
 # ============================================================================================
 # A4 - 报价提醒经真实 monitor 的提醒桩
@@ -610,7 +478,7 @@ Set-FixNow '2026-10-05T12:10:00'
 $ctxScan = Reset (BLine 'Can you quote 10 cartons to Hamburg?' $ts0)
 # 扫描轮自己会调用 Update-PendingSeen（整表对齐），因此这里只预置一次，扫描轮那一轮补足第二次。
 Seen $ctxScan
-# 扫描轮的第一个 cycle 只观察（既有冷启动保护），因此跑两轮。
+# 两轮扫描：第一轮即处理，第二轮验证同一答复不会重发。
 [void](Invoke-ScanRound $ctxScan)
 Set-FixNow '2026-10-05T12:11:00'
 [void](Invoke-ScanRound $ctxScan)
@@ -750,78 +618,7 @@ Clear-PauseState
 Clear-TaskState
 Set-FixNow '2026-10-05T12:00:00'
 
-# ---- F2-a 历史 unknown 建基线；新 unknown + 同一扫描内的买家补充 => 不发送且等待落盘 ----
-$f2base = (BLine 'Can you help with shipping?' ($ts0 - 120000)) + $LF + (MeLine 'Earlier unidentified reply' ($ts0 - 60000))
-$ctx = Reset $f2base
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Check 'E-F2a-baseline-unknown-creates-hold' ($null -ne (Get-SourceUnknownHold 'Virtual Buyer')) ($script:logs -join ' | ')
-Eq 'E-F2a-baseline-no-send' $script:sends 0
-
-$f2new = $f2base + $LF + (MeLine 'New unidentified reply from the page' $ts0) + $LF + (BLine '10 cartons to Hamburg' ($ts0 + 1000))
-$ctx = Reset $f2new
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-F2a-new-unknown-plus-buyer-does-not-send' $script:sends 0
-$holdF2 = Get-SourceUnknownHold 'Virtual Buyer'
-Check 'E-F2a-hold-persisted' ($null -ne $holdF2) ($script:logs -join ' | ')
-Check 'E-F2a-hold-anchored-on-message-time' ((ConvertTo-HumanPauseUtc $holdF2.anchorUtc) -eq $script:nowUtc) ([string]$holdF2.anchorUtc)
-Eq 'E-F2a-hold-anchor-source' ([string]$holdF2.anchorSource) 'message-time'
-Check 'E-F2a-skip-logged' ([bool](($script:logs -join $LF) -match 'SOURCE-UNKNOWN-HOLD-ACTIVE-SKIP')) ($script:logs -join ' | ')
-
-# ---- F2-b 同一条 unknown 重扫：等待窗口不延长 ----
-$ctx = Reset $f2new
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-F2b-rescan-does-not-extend' ((ConvertTo-HumanPauseUtc (Get-SourceUnknownHold 'Virtual Buyer').untilUtc)) ((ConvertTo-HumanPauseUtc $holdF2.untilUtc))
-
-# ---- F2-c 相同文字但新的逐条时间 => 新事件，等待窗口按新事件推进 ----
-Set-FixNow '2026-10-05T12:04:00'
-$f2newer = $f2base + $LF + (MeLine 'New unidentified reply from the page' ($ts0 + 240000)) + $LF + (BLine '10 cartons to Hamburg' ($ts0 + 241000))
-$ctx = Reset $f2newer
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-$holdF2c = Get-SourceUnknownHold 'Virtual Buyer'
-Check 'E-F2c-identical-text-new-time-is-a-new-event' ((ConvertTo-HumanPauseUtc $holdF2c.untilUtc) -gt (ConvertTo-HumanPauseUtc $holdF2.untilUtc)) ([string]$holdF2c.untilUtc)
-Eq 'E-F2c-no-send' $script:sends 0
-
-# ---- F2-d 窗口截断 / 行号变化：同一事件不重新等待、不延长 ----
-$f2trunc = $f2base + $LF + (MeLine 'New unidentified reply from the page' ($ts0 + 240000))
-$ctx = Reset $f2trunc
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E-F2d-truncated-window-keeps-until' ((ConvertTo-HumanPauseUtc (Get-SourceUnknownHold 'Virtual Buyer').untilUtc)) ((ConvertTo-HumanPauseUtc $holdF2c.untilUtc))
-
-# ---- F2-e 重启：状态从盘上重建，等待窗口保持不变（不重新等五分钟）----
-$restartHold = Get-SourceUnknownHold 'Virtual Buyer'
-Eq 'E-F2e-restart-keeps-until' ((ConvertTo-HumanPauseUtc $restartHold.untilUtc)) ((ConvertTo-HumanPauseUtc $holdF2c.untilUtc))
-
-# ---- F2-f 生成期间出现新的 unknown，尾部仍是同一条买家消息 => 旧草稿丢弃 ----
-Clear-PauseState
-Set-FixNow '2026-10-05T12:00:00'
-$f2g1 = (BLine 'Can you quote 10 cartons to Hamburg?' ($ts0 - 3600000)) + $LF + (MeLine 'historical unidentified reply' ($ts0 - 3540000)) + $LF + (BLine 'Can you quote 10 cartons to Hamburg?' ($ts0 + 1000))
-$script:raw2 = (BLine 'Can you quote 10 cartons to Hamburg?' ($ts0 - 3600000)) + $LF + (MeLine 'historical unidentified reply' ($ts0 - 3540000)) + $LF + (MeLine 'unidentified reply appeared during generation' $ts0) + $LF + (BLine 'Can you quote 10 cartons to Hamburg?' ($ts0 + 1000))
-$ctx = Reset $f2g1
-MarkSeen $ctx
-function Open-ConvoAndGetMessages($name) {
-    $script:reads++
-    if ($script:reads -ge 2 -and $script:raw2) { return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw2; profile = '' } }
-    return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw; profile = '' }
-}
-Invoke-ConvoItem $ctx $item
-Check 'E-F2f-mid-generation-unknown-discards-draft' ([bool](($script:logs -join $LF) -match 'STALE-DRAFT-DISCARD' -and ($script:logs -join $LF) -match 'source-unknown-hold')) ($script:logs -join ' | ')
-Eq 'E-F2f-no-send' $script:sends 0
-function Open-ConvoAndGetMessages($name) { $script:reads++; return [pscustomobject]@{ name = $script:pageName; msgs = $script:raw; profile = '' } }
-
-# ---- F2-g 首次加载的可靠历史 unknown（已过窗口）不重新等待 ----
-Clear-PauseState
-Set-FixNow '2026-10-05T12:00:00'
-$oldUnknown = (BLine 'hello' $ts0) + $LF + (MeLine 'long finished unidentified reply' ($ts0 - 3600000))
-$ctx = Reset $oldUnknown
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Check 'E-F2g-old-unknown-is-history' ($null -eq (Get-SourceUnknownHold 'Virtual Buyer')) ($script:logs -join ' | ')
-
+# Source-based five-minute waits retired. Pending membership is authoritative.
 # ---- F4-a 供应商核实计划：任务在第一次模型调用前落盘，模型收到确切证据，计划真的发出 ----
 Clear-PauseState
 Clear-TaskState
@@ -985,7 +782,7 @@ Set-FixNow '2026-10-05T12:00:00'
 
 # ---- R5：同一快照里带真实发送证据的我方消息（无 @@TS）不得创建人工暂停 ----
 function Get-SentRecordMatchIndexes { param([string]$Buyer, [string[]]$Lines) return @{ 0 = $true } }
-$ctx = Reset ((HumanLine 'Confirmed automated answer' $ts0) + $LF + (BLine 'New question' ($ts0 + 1000)))
+$ctx = Reset ((PlainMeLine 'Confirmed automated answer' $ts0) + $LF + (BLine 'New question' ($ts0 + 1000)))
 MarkSeen $ctx
 Invoke-ConvoItem $ctx $item
 Check 'E3-R5-confirmed-bot-no-pause' ($null -eq (Get-HumanPause 'Virtual Buyer')) ($script:logs -join ' | ')
@@ -1077,27 +874,14 @@ Eq 'E3-X2-same-legal-task-evidence' (@(Get-HumanTaskList -Buyer 'Virtual Buyer' 
 Check 'E3-X2-task-identity-stable' ([string]$script:turnTaskRef.TaskId -eq [string](@(Get-HumanTaskList -Buyer 'Virtual Buyer' -OpenOnly)[0]).id) ([string]$script:turnTaskRef.TaskId)
 Set-FixNow '2026-10-05T12:00:00'
 
-# ---- 交叉 3：快照里已有确认机器人 + 之后有真实人工 + 买家：机器人不暂停，真实人工仍暂停；到期后可发 ----
+# Pending is authoritative even when the history includes a human reply.
 Clear-PauseState
 Clear-TaskState
 Set-FixNow '2026-10-05T12:00:00'
-function Get-SentRecordMatchIndexes { param([string]$Buyer, [string[]]$Lines) return @{ 0 = $true } }
 $ctx = Reset ((MeLine 'our own bot answer' $ts0) + $LF + (HumanLine 'owner takes over' ($ts0 + 1000)) + $LF + (BLine 'any update?' ($ts0 + 2000)))
-MarkSeen $ctx
 Invoke-ConvoItem $ctx $item
-Eq 'E3-X3-paused-by-real-human-only' $script:sends 0
-$pauseX3 = Get-HumanPause 'Virtual Buyer'
-Check 'E3-X3-pause-identity-is-the-human-line' ([string]$pauseX3.lastHumanMessageId -eq (Get-InterventionEventIdentity (HumanLine 'owner takes over' ($ts0 + 1000)))) ([string]$pauseX3.lastHumanMessageId)
-Eq 'E3-X3-absolute-deadline-is-human-plus-5' (ConvertTo-HumanPauseUtc $pauseX3.untilUtc) $script:nowUtc.AddSeconds(1).AddMinutes(5)
-Set-FixNow '2026-10-05T12:05:30'
-$ctx = Reset ((MeLine 'our own bot answer' $ts0) + $LF + (HumanLine 'owner takes over' ($ts0 + 1000)) + $LF + (BLine 'any update?' ($ts0 + 2000)))
-MarkSeen $ctx
-Invoke-ConvoItem $ctx $item
-Eq 'E3-X3-legal-reply-after-expiry-sends' $script:sends 1
-function Get-SentRecordMatchIndexes { param([string]$Buyer, [string[]]$Lines) return @{} }
-Set-FixNow '2026-10-05T12:00:00'
-
-
+Eq 'E3-X3-current-pending-allows-processing' $script:sends 1
+Check 'E3-X3-no-inferred-five-minute-pause' ($null -eq (Get-HumanPause 'Virtual Buyer')) ''
 Write-Output ('RESULT: pass={0} fail={1}' -f $script:pass, $script:fail)
 if ($script:fail -gt 0) { Write-Output ('FAILED CASES: ' + ($script:fails -join ', ')); exit 1 }
 Write-Output 'ALL PASS'

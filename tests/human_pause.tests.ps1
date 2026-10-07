@@ -38,14 +38,30 @@ $env:AAR_RUNTIME_ROOT = $isoRoot
 . (Join-Path $scripts 'lib\state_store.ps1')
 . (Join-Path $scripts 'lib\msg_source.ps1')
 . (Join-Path $scripts 'lib\sent_records.ps1')
+. (Join-Path $scripts 'lib\msg_events.ps1')
 . (Join-Path $scripts 'lib\human_pause.ps1')
+
+# [2026-10-07 spec §3.2 第 3 条] 无发送者证据的 [ME] 行现在是 unknown，不再外推为人工。
+#   本套夹具用"已验证的人工发送者字段"提供人工来源证据（字段来自逐条 @@META 载荷，正文无法伪造）。
+$fixtureRules = New-MessageSourceRuleSet -VerifiedFields ([pscustomobject]@{ 'sender=owner' = 'human' }) -Provenance 'fixture-verified-owner-field'
+[void](Set-MessageSourceContext -Rules $fixtureRules)
+function New-FixtureMeta([string]$text, [long]$ts, [string[]]$fields = @(), [string[]]$tags = @()) {
+    $meta = [ordered]@{
+        v = 'msgevent-2026-10-07.1'
+        t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        dir = 'out'; dirsrc = 'layout'; mid = ''; ts = $ts; tprec = 'second'
+        st = 'message'; src = $tags; f = $fields; at = '2026-10-05T00:00:00Z'
+        idq = $(if ($ts -gt 0) { 'composite' } else { 'unusable' })
+    }
+    return (ConvertTo-MessageMetaMarker ([pscustomobject]$meta))
+}
 
 $buyer = 'Buyer Pause'
 # 绝对时间口径：夹具的"现在"就是一个 UTC 时刻；消息的 @@MT 是同一口径的 epoch 毫秒。
 $t0 = [datetime]::SpecifyKind([datetime]'2026-10-05T12:00:00', [DateTimeKind]::Utc)
 function TsOf([datetime]$Utc) { return ([System.DateTimeOffset]$Utc).ToUnixTimeMilliseconds() }
-function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts) }
-function BLine([string]$t, [long]$ts) { return ('[BUYER] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts) }
+function MeLine([string]$t, [long]$ts) { return ('[ME] ' + $t + ' @@MT:' + $ts + ' ' + (New-FixtureMeta $t $ts @('sender=owner'))) }
+function BLine([string]$t, [long]$ts) { return ('[BUYER] ' + $t + ' @@TS:' + $ts + ' @@MT:' + $ts + ' ' + (New-FixtureMeta $t $ts)) }
 $ts0 = TsOf $t0
 
 try {
@@ -98,10 +114,16 @@ try {
     $clsTimer = Get-MessageSourceClass $linesTimerOnly[0] $false
     Eq 'P7-timer-only-class' $clsTimer.Class 'unknown'
     Eq 'P7-timer-only-evidence' $clsTimer.Evidence 'timer-marker-only'
+    # [spec §3.2 第 3 条] 无标记、无发送者证据的 [ME] 行**不再**自动认定为人工。
     $linesHuman = @('[ME] I will handle this one myself')
-    Eq 'P7-plain-me-is-human' (@(Get-TrustedHumanReplies -lines $linesHuman).Count) 1
+    Eq 'P7-plain-me-is-not-human-any-more' (@(Get-TrustedHumanReplies -lines $linesHuman).Count) 0
+    Eq 'P7-plain-me-evidence-gap' (Get-MessageSourceClass $linesHuman[0] $false).Evidence 'no-sender-evidence'
+    # 行内 @@SRC 文本不是可信元数据（正文本身就能写出同样的字符串，A06）。
     $linesExplicit = @('[ME] hello @@SRC:human @@MT:100')
-    Eq 'P7-explicit-sender-marker-wins' (@(Get-TrustedHumanReplies -lines $linesExplicit).Count) 1
+    Eq 'P7-inline-marker-not-metadata' (@(Get-TrustedHumanReplies -lines $linesExplicit).Count) 0
+    # 只有逐条 @@META 里经过规则确认的发送者字段才算人工证据。
+    $linesVerified = @(MeLine 'I will handle this one myself' 100)
+    Eq 'P7-verified-owner-field-is-human' (@(Get-TrustedHumanReplies -lines $linesVerified).Count) 1
 
     # unknown 不开始暂停
     $buyerU = 'Buyer Unknown'
@@ -114,8 +136,9 @@ try {
     Eq 'P7-gate-skips-unknown-tail' $gate.Action 'SKIP'
     Eq 'P7-gate-reason' $gate.Reason 'unknown-me-tail'
     Check 'P7-gate-not-counted-as-human' (-not $gate.HasHumanLast)
-    $gateHuman = Get-HumanInterjectionGateEx -lines @('[BUYER] hi', '[ME] answered by hand')
+    $gateHuman = Get-HumanInterjectionGateEx -lines @('[BUYER] hi', (MeLine 'answered by hand' 100))
     Eq 'P7-gate-skips-human-last' $gateHuman.Reason 'human-last'
+    Eq 'P7-gate-unverified-me-tail-is-unknown' ((Get-HumanInterjectionGateEx -lines @('[BUYER] hi', '[ME] answered by hand')).Reason) 'unknown-me-tail'
     $gateBuyer = Get-HumanInterjectionGateEx -lines @('[ME] bot wrote @@TS:1', '[BUYER] new question')
     Eq 'P7-gate-sends-after-buyer' $gateBuyer.Action 'SEND'
 
@@ -130,8 +153,9 @@ try {
     $map = Get-SentRecordMatchIndexes -Buyer $buyerS -Lines $linesSent
     Check 'P8-index-map-marks-record-line' ($map.ContainsKey(0))
     $clsSent = Get-MessageSourceClass $linesSent[0] ([bool]$map.ContainsKey(0))
-    Eq 'P8-record-line-is-bot' $clsSent.Class 'bot'
-    Eq 'P8-record-line-evidence' $clsSent.Evidence 'confirmed-send-record'
+    # [spec §3.2] 我方来源四态：唯一命中同一事件的本项目收据 ⇒ project（旧词 'bot' 已被取代）。
+    Eq 'P8-record-line-is-project' $clsSent.Class 'project'
+    Eq 'P8-record-line-evidence' $clsSent.Evidence 'confirmed-project-event-binding'
     $gateSent = Get-HumanInterjectionGateEx -lines $linesSent -SentMatches $map
     Eq 'P8-gate-sends-when-our-message-proven' $gateSent.Action 'SEND'
     Eq 'P8-gate-reason-bot' $gateSent.Reason 'bot-last'
@@ -147,7 +171,7 @@ try {
     $null = Add-SentRecord -Buyer $buyerBot -Text $botText -Receipt (New-ConfirmedOutboundReceipt -Buyer $buyerBot -Text $botText -Before @() -After @([pscustomobject]@{MessageTime=[string]$ts0;TimePrecision='millisecond';Text=$botText;IsMine=$true}))
     $botLine = '[ME] ' + $botText + ' @@TS:' + $ts0 + ' @@MT:' + $ts0
     $mapBot = Get-SentRecordMatchIndexes -Buyer $buyerBot -Lines @($botLine)
-    Eq 'P8-bot-line-is-a-confirmed-send' ([string](Get-MessageSourceClass $botLine ([bool]$mapBot.ContainsKey(0))).Class) 'bot'
+    Eq 'P8-bot-line-is-a-confirmed-send' ([string](Get-MessageSourceClass $botLine ([bool]$mapBot.ContainsKey(0))).Class) 'project'
     $null = Update-HumanPauseFromLines -Buyer $buyerBot -Lines @($botLine) -SentMatches $mapBot -NowUtc $t0
     Check 'P8-confirmed-bot-does-not-pause' ($null -eq (Get-HumanPause $buyerBot)) ''
 
@@ -211,7 +235,8 @@ try {
 
     # F3-f 没有可靠时间的同一条人工消息：重扫/重启都用同一个首次观察时刻，不延长
     $bF = 'Buyer F3f'
-    $noTime = '[ME] I will answer this one myself'
+    # [spec §3.2] 人工来源由逐条已验证字段提供；本条**没有**可靠逐条时间，走首次观察锚点。
+    $noTime = '[ME] I will answer this one myself ' + (New-FixtureMeta 'I will answer this one myself' 0 @('sender=owner'))
     $rF1 = Update-HumanPauseFromLines -Buyer $bF -Lines @($noTime) -NowUtc $t0
     Eq 'F3f-no-time-uses-first-observation' $rF1.Reason 'started'
     Check 'F3f-first-observation-window' ((ConvertTo-HumanPauseUtc (Get-HumanPause $bF).untilUtc) -eq $t0.AddMinutes(5)) ((Get-HumanPause $bF).untilUtc)

@@ -136,6 +136,13 @@ foreach ($scenario in @('new_inquiry', 'details_given', 'dimension_missing', 'hu
 # 决策层的 AskFields 若只授权供应商，则收货人联系方式询问需要自己的授权（不借供应商授权放行）
 Check 'askfields-are-role-specific' (-not (Test-ContactRedline -Text "Could you provide the consignee's contact?" -Decision $dSupplier).Ok)
 
+# A request verb ends at a sentence boundary; ordinary explanations are not requests.
+$dNatural=[pscustomobject]@{AskFields=@('weight');Facts=$null}
+$natural='Could you share the total weight? Package measurements help estimate shipment volume.'
+Check 'sentence-boundary-does-not-inherit-request-verb' (@(Get-ReplyRequestItems -Text $natural -Decision $dNatural | Where-Object {$_.FieldKey -eq 'dimension'}).Count -eq 0)
+Check 'ordinary-dimensions-explanation-is-allowed' ((Test-ReplyCompliance -Text $natural -Decision $dNatural).Ok)
+Check 'new-sentence-explicit-request-still-blocked' (-not (Test-ReplyCompliance -Text 'Could you share the total weight? Please provide the dimensions.' -Decision $dNatural).Ok)
+
 Write-Output ''
 Write-Output ('RESULT: pass={0} fail={1}' -f $script:pass, $script:fail)
 if ($script:fail -gt 0) { Write-Output ('FAILED CASES: ' + ($script:fails -join ', ')); exit 1 }

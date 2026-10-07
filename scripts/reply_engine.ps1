@@ -247,6 +247,8 @@ function Test-DedupHit([string]$savedKey, [string]$hText, [int]$buyerCount) {
 function Test-ShouldReply {
     [CmdletBinding()]
     param(
+        [switch]$PendingListAuthoritative,
+        [bool]$AlreadyAnswered = $false,
         # ===== 基础门禁与普通消息时间输入 =====
         [bool]$LedgerUsable           = $false,   # 账本可读(整轮已挡, 此处再挡一道)
         [int]$PendingSeenRounds       = 0,        # 该会话连续在待回复列表里出现的轮数
@@ -275,6 +277,13 @@ function Test-ShouldReply {
         [string]$LedgerKey,
         [string]$NormLastBuyerHash
     )
+    # Current pending-list contract. Legacy arguments remain for compatibility callers.
+    if ($PendingListAuthoritative) {
+        if (-not $LedgerUsable) { return [pscustomobject]@{Reply=$false;Reason='LEDGER_UNUSABLE'} }
+        if ($PendingSeenRounds -lt 1) { return [pscustomobject]@{Reply=$false;Reason='NOT_IN_PENDING_LIST'} }
+        if ($AlreadyAnswered) { return [pscustomobject]@{Reply=$false;Reason='ALREADY_ANSWERED'} }
+        return [pscustomobject]@{Reply=$true;Reason='IN_PENDING_LIST'}
+    }
     # §0.1「连续确认轮数 ... 不可再降」的技术兜底: 传 0/1 一律抬回 2。
     #   没有这一行, 一次误配(或未来某个调用点漏传)就会让 §2.1 的瞬态防线静默失效 —— 那正是本次要修的病根。
     if ($RequiredSeenRounds -lt 2) { $RequiredSeenRounds = 2 }
@@ -365,6 +374,33 @@ function Test-ConfirmedNewBuyerMessage {
 #     的 [BUYER] 行数必增、原文 hash 必变 ⇒ 两个条件同时失效 ⇒ 必定放行(不拦)。
 #   证据不足一律返回 $false(**fail-open, 不拦**): 旧格式键(只有 hash)/条数 <1/hash 缺失都算证据不足。
 #     拦错的代价是买家永远等不到回复(Ganesan 形态), 比多发一条更重 —— 故只认"逐字对上"这一种正面证据。
+function New-PendingReplyHumanTask {
+    param([string]$Buyer, [string]$Reason)
+    try {
+        if (-not (Get-Command New-OrUpdate-HumanTask -ErrorAction SilentlyContinue)) { throw 'pending-reply task store unavailable' }
+        $result = New-OrUpdate-HumanTask -Buyer $Buyer -Kind 'pending_reply' -Status 'pending_human' -TriggerMessage $Reason -Note $Reason
+        if (-not $result.StoreOk) { throw 'pending-reply task persistence failed' }
+        return $result
+    } catch {
+        Write-Log "PENDING-HUMAN-TASK-STORE-FAIL ${Buyer}: $($_.Exception.Message)"
+        return [pscustomobject]@{StoreOk=$false;Error=$_.Exception.Message}
+    }
+}
+
+function Get-PendingConversationName([string]$Name) {
+    return (($Name -replace '[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]', '') -replace '\s+', ' ').Trim().ToLowerInvariant()
+}
+
+function Test-PendingBuyerAlreadyAnswered {
+    param($LatestBuyer, [string]$LedgerKey, [int]$BuyerCount, [object[]]$Attempts = @())
+    $identified = @($Attempts | Where-Object { $_.triggerIdentity -and $_.receipt -and $_.receipt.Valid })
+    if ($identified.Count -gt 0 -and $LatestBuyer.IdConfident) {
+        return (@($identified | Where-Object { $_.triggerIdentity -ceq $LatestBuyer.StableId }).Count -gt 0)
+    }
+    # Compatibility for historical ledger entries without a stored trigger identity.
+    return (Test-BuyerMsgAlreadyAnswered -LedgerKey $LedgerKey -BuyerCount $BuyerCount -NormLastBuyerHash (Get-StableHash (Get-NormalizedMsgText $LatestBuyer.Orig)))
+}
+
 function Test-BuyerMsgAlreadyAnswered {
     [CmdletBinding()]
     param(

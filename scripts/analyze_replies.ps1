@@ -102,9 +102,12 @@ foreach ($f in (Get-ChildItem -Path (Get-SkillPath "data") -Filter "msgs_*.txt" 
     $a = Analyze-Snapshot $content
     if (-not $a) { continue }
     # [S8 只加不改] 新增指标:与本轮快照同源计算, 不改动 Analyze-Snapshot 的任何既有分值语义
-    $sp = Get-SoothingPhraseRepeatStats $content
+    # [2026-10-07 spec §3.2 / 复核 R7] 指标必须**带 buyer** 计算：只有这样才能用已确认发送记录
+    #   把"我方真实发出的行"识别为 project；没有 buyer 时历史 [ME] 行保持 unknown（不再默认算我方）。
+    $sp = Get-SoothingPhraseRepeatStats -snapshotContent $content -Buyer $buyer
     $m = @{ soothingRepeats = $sp.Repeats; soothingMax = $sp.MaxSameCount
-            dimGuide = (Test-DimensionGuidanceHit $content) }
+            soothingUnproven = $sp.UnprovenOurLines; soothingPlatform = $sp.PlatformLines
+            dimGuide = (Test-DimensionGuidanceHit -snapshotContent $content -Buyer $buyer) }
     if (-not $perBuyer.ContainsKey($buyer)) { $perBuyer[$buyer] = @() }
     $perBuyer[$buyer] += [pscustomobject]@{ time = $f.LastWriteTime; a = $a; file = $f.Name; m = $m }
     if ($a.neg) { $negCases += [pscustomobject]@{ buyer = $buyer; time = $f.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"); line = $a.neg; me = $a.lastMe; file = $f.Name } }

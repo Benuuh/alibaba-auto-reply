@@ -1,0 +1,55 @@
+=== send_attempt_receipt.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-d057eb807c634161a74cae1f89f6c31e) ===
+  FAIL: R9-image-bubble-without-rich-is-retained
+  FAIL: R9-image-bubble-without-rich-keeps-a-real-body
+  FAIL: R9-our-attachment-bubble-without-rich-is-kept-not-deleted
+  FAIL: R10-explicit-right-beats-the-name-field
+  FAIL: R10-explicit-right-with-a-name-is-not-a-buyer-message
+  FAIL: R10-explicit-right-with-a-name-still-yields-a-receipt
+  FAIL: R10-explicit-right-beats-the-translation-marker
+  FAIL: R10-explicit-right-with-a-translation-is-not-a-buyer-message
+  FAIL: R10-explicit-right-with-a-translation-still-yields-a-receipt
+  FAIL: R10-direction-conflict-is-recorded-not-guessed
+  FAIL: R10-direction-conflict-has-no-usable-identity
+  FAIL: R10-direction-conflict-is-neither-a-buyer-nor-a-project
+  FAIL: R10-direction-conflict-cannot-prove-an-outbound-receipt
+  FAIL: R8-reconciliation-alone-does-not-release-the-conversation
+  FAIL: R8-reconciled-receipt-without-ledgers-stays-active
+  FAIL: R8-reconciliation-reports-persistence-separately
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : The term 'Test-SendAttemptSettled' is not recognized as the name of a cmdle
+  t, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that t
+  he path is correct and try again.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+EXIT=1
+=== send_attempt_restart.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-c0370594ff4e4a9dbf7991cfb0dc1050) ===
+  FAIL: restart-reconciliation-alone-committed-both-writes
+  C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : The term 'Test-SendAttemptSettled' is not recognized as the name of a cmdle
+  t, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that t
+  he path is correct and try again.
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+EXIT=1
+=== msg_source_three_class.tests.ps1 (isolated root C:\Users\<local-user>\AppData\Local\Temp\aar-r3-19e4fb95afe74322a45425d4c1a46b7d) ===
+  AssertionError [ERR_ASSERTION]: every invented row must still produce a line
+  System.Management.Automation.RemoteException
+  3 !== 4
+  System.Management.Automation.RemoteException
+      at C:\path\to\alibaba-auto-reply\tests\message_extract_meta.fixture.js:105:10C:\path\to\alibaba-auto-reply\tests\run_child.ps1 : production extractor metadata matrix failed
+  At C:\path\to\alibaba-auto-reply\tests\run_child.ps1:11 char:49
+  + ... ry { & $TestPath; exit $LASTEXITCODE } catch { Write-Error $_; exit 1 ...
+  +                                                    ~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+      + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run_child.ps1
+   
+EXIT=1
+
+TARGETED-SUMMARY files=3 failedFiles=3 pass=0 fail=0
+FAILED-FILES: send_attempt_receipt.tests.ps1, send_attempt_restart.tests.ps1, msg_source_three_class.tests.ps1

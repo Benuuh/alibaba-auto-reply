@@ -220,7 +220,8 @@ $sanity = Test-ReplyCompliance -Text $compliantRewrite -Rules $null -Decision $d
 Check 'F1-rewrite-stub-is-compliant' ([bool]$sanity.Ok) (Codes $sanity)
 
 $g1 = GenCase @('Please share contact details for delivery updates.', $compliantRewrite)
-Eq 'F1-gen-rewrite-source' $g1.Gen.Source 'FALLBACK'
+Eq 'F1-gen-rewrite-source' $g1.Gen.Source 'LLM_REWRITE'
+Check 'F1-gen-keeps-compliant-natural-rewrite' ($g1.Gen.Text.Contains($compliantRewrite)) $g1.Gen.Text
 Eq 'F1-gen-rewrite-model-calls' $g1.ModelCalls 2
 Eq 'F1-gen-rewrite-count' $g1.Gen.Rewrites 1
 $c1 = Test-ReplyCompliance -Text $g1.Gen.Text -Rules $null -Decision $g1.Decision

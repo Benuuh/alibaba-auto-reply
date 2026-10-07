@@ -269,7 +269,9 @@ function Get-InterventionEvents {
         $SentMatches = $null,
         $NowUtc = $null,
         [switch]$Unknown,
-        [switch]$Bot
+        [switch]$Bot,
+        # 确切事件的人工来源更正（事件身份 -> @{ Class; Evidence }）。由调查 CLI 写入，monitor 按买家读取。
+        $Confirmed = $null
     )
     $out = New-Object System.Collections.ArrayList
     if (-not $Lines) { return @() }
@@ -279,12 +281,38 @@ function Get-InterventionEvents {
         if (-not $line) { continue }
         $sentMatch = $false
         if ($SentMatches -and $SentMatches.ContainsKey($i)) { $sentMatch = [bool]$SentMatches[$i] }
-        $cls = Get-MessageSourceClass $line $sentMatch
+        # [spec §3.2 第 3 条] 旧入口一律委托共享判定；-Confirmed 传入确切事件的人工来源更正。
+        #   更正表按共享判定的**规范事件身份**（id:/cmp|...）存储，本模块自己的身份拼写不同，
+        #   因此这里为同一行补一条别名，让两种拼写都能命中同一条更正。
+        $lineConfirmed = $Confirmed
+        if ($Confirmed -and @($Confirmed.Keys).Count -gt 0) {
+            $hpId = Get-InterventionEventIdentity $line
+            $canonId = ''
+            if (Get-Command ConvertFrom-MessageRawLine -ErrorAction SilentlyContinue) {
+                $evTmp = ConvertFrom-MessageRawLine $line 0
+                if ($evTmp) {
+                    $idTmp = Get-MessageEventIdentity $evTmp
+                    if ($idTmp) { $canonId = [string]$idTmp.Identity }
+                }
+            }
+            if ($hpId -and $canonId -and $hpId -ne $canonId) {
+                $lineConfirmed = @{}
+                foreach ($ck in @($Confirmed.Keys)) { $lineConfirmed[[string]$ck] = $Confirmed[$ck] }
+                if ($lineConfirmed.ContainsKey($hpId) -and -not $lineConfirmed.ContainsKey($canonId)) {
+                    $lineConfirmed[$canonId] = $lineConfirmed[$hpId]
+                }
+            }
+        }
+        $cls = Get-MessageSourceClass -line $line -SentRecordMatch $sentMatch -Confirmed $lineConfirmed
         if ($Bot) {
-            if ($cls.Class -ne 'bot') { continue }
+            if ($cls.Class -ne 'project' -and $cls.Class -ne 'bot') { continue }
         } elseif ($Unknown) {
             if ($cls.Class -ne 'unknown') { continue }
-            if ([string]$cls.Evidence -ne 'timer-marker-only') { continue }
+            # [2026-10-07 spec §3.2 第 3 条] 无标记、无时间的我方消息不再外推为人工 ⇒ 同属"来源不明"，
+            #   必须进入持久等待窗口。否则"尾部之后又来了买家消息"会让保守保护静默消失
+            #   （旧实现只收 timer-marker-only，正好漏掉这一类）。
+            if ([string]$cls.Evidence -eq 'no-role-marker') { continue }
+            if ([string]$cls.Evidence -eq 'empty-line') { continue }
         } else {
             if ($cls.Class -ne 'human') { continue }
         }
@@ -720,7 +748,7 @@ function Update-HumanPauseFromLines {
     }
 }
 
-# 兼容入口（规则登记 R-HUMAN-PAUSE-5MIN 的生产消费方）：直接按『一条可信人工回复事件』
+# 历史兼容入口（当前 monitor 待回复流程不消费五分钟暂停）：直接按『一条可信人工回复事件』
 #   开始/延长暂停。身份由调用方给出（真实平台消息身份，或规范化原文 + 可靠逐条时间构成的身份）。
 #   计时口径与 Update-HumanPauseFromLines 完全一致：until = 该回复的**绝对时刻** + 5 分钟。
 function Start-HumanPause {
@@ -862,10 +890,20 @@ function Sync-ConversationInterventionState {
         $out.NowUtc = $nowUtc
         $useLines = $Lines
         if (($null -eq $useLines -or @($useLines).Count -eq 0) -and $Conversation -and $Conversation.Lines) { $useLines = @($Conversation.Lines) }
-        $humans = @(Get-InterventionEvents -Lines $useLines -SentMatches $SentMatches -NowUtc $nowUtc)
-        $unknowns = @(Get-InterventionEvents -Lines $useLines -SentMatches $SentMatches -NowUtc $nowUtc -Unknown)
+        # [2026-10-07 spec §3.2 第 5 条] 来源更正只作用于确切事件：按买家取出更正表后传入，
+        #   更正一条误判消息不会清除其他有效人工事件。
+        $confirmed = $null
+        if (Get-Command Get-InvestigationSourceCorrections -ErrorAction SilentlyContinue) {
+            try { $confirmed = Get-InvestigationSourceCorrections -Buyer $Buyer } catch { $confirmed = $null }
+        }
+        # 共享判定库未加载时（AST 抽取单函数的测试）不阻断同步：确认表缺省为空。
+        if (-not $confirmed -and (Get-Command Get-MessageSourceActiveConfirmed -ErrorAction SilentlyContinue)) {
+            $confirmed = Get-MessageSourceActiveConfirmed
+        }
+        $humans = @(Get-InterventionEvents -Lines $useLines -SentMatches $SentMatches -NowUtc $nowUtc -Confirmed $confirmed)
+        $unknowns = @(Get-InterventionEvents -Lines $useLines -SentMatches $SentMatches -NowUtc $nowUtc -Unknown -Confirmed $confirmed)
         # 同一份快照、同一套来源判据：已确认机器人事件用于更正历史误判分类（不产生暂停/等待）。
-        $bots = @(Get-InterventionEvents -Lines $useLines -SentMatches $SentMatches -NowUtc $nowUtc -Bot)
+        $bots = @(Get-InterventionEvents -Lines $useLines -SentMatches $SentMatches -NowUtc $nowUtc -Bot -Confirmed $confirmed)
         $sync = Invoke-InterventionEventSync -Buyer $Buyer -HumanEvents $humans -UnknownEvents $unknowns -BotEvents $bots -NowUtc $nowUtc -Minutes $Minutes
         $out.LegacyAdopted = [bool]$sync.LegacyAdopted
         $out.Anomalies = @($sync.Anomalies)
